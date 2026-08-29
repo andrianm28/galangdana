@@ -1212,6 +1212,11 @@ describe("HealthResponseSchema", () => {
   test("rejects a payload missing required fields", () => {
     expect(Value.Check(HealthResponseSchema, { status: "ok" })).toBe(false);
   });
+
+  test("rejects a payload whose timestamp is not a valid date-time", () => {
+    const payload = { status: "ok", service: "api", timestamp: "not-a-date" };
+    expect(Value.Check(HealthResponseSchema, payload)).toBe(false);
+  });
 });
 ```
 
@@ -1222,9 +1227,17 @@ Expected: FAIL — `Cannot find module './health'`.
 
 - [ ] **Step 4: Implement the schema**
 
+TypeBox 0.33.x's `Value.Check` treats any `format` keyword it doesn't recognize as an automatic validation failure — **not** a no-op. Without registering a `"date-time"` format checker, `Value.Check` returns `false` for every payload matching this schema, including genuinely valid ones (verified directly against the installed `@sinclair/typebox@0.33.17`: `Value.Check` on a fully valid payload returns `false` with error `"Unknown format 'date-time'"` when no checker is registered). So Step 1's first test cannot pass without this registration — it is required, not optional. The checker must be a real validator (`Date.parse`-based), not a stub that returns `true` unconditionally, or the third test above (rejecting a malformed timestamp) would wrongly pass.
+
 `packages/contracts/src/health.ts`:
 ```ts
-import { Type, type Static } from "@sinclair/typebox";
+import { FormatRegistry, Type, type Static } from "@sinclair/typebox";
+
+// Required: without a registered "date-time" checker, TypeBox's Value.Check
+// rejects every payload matching a schema that uses format: "date-time",
+// valid or not (see note above). Date.parse returning NaN is JavaScript's
+// standard way to detect an unparseable date string.
+FormatRegistry.Set("date-time", (value) => !Number.isNaN(Date.parse(value)));
 
 export const HealthResponseSchema = Type.Object({
   status: Type.Literal("ok"),
@@ -1238,7 +1251,7 @@ export type HealthResponse = Static<typeof HealthResponseSchema>;
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `cd packages/contracts && bun test`
-Expected: both tests PASS.
+Expected: all 3 tests PASS.
 
 - [ ] **Step 6: Write the barrel export**
 
