@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: galangdana
+          POSTGRES_PASSWORD: galangdana
+          POSTGRES_DB: galangdana
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U galangdana"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Port 5432 here (not 55434) is correct and intentional: this runs in
+      # an isolated GitHub Actions runner with its own services:postgres
+      # container above, bound to the default 5432 with no collision — the
+      # 55434 port only exists to dodge an unrelated container on the shared
+      # dev machine this plan is executed on (see Task 2's port note).
+      DATABASE_URL: postgres://galangdana:galangdana@localhost:5432/galangdana
+      PUBLIC_API_URL: http://localhost:3001
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Run database migrations
+        run: bun run db:migrate
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit tests (packages + api)
+        run: bun run test
+
+      - name: Unit tests (web)
+        run: bun run test:web
+
+      - name: Build web
+        run: bun run --cwd apps/web build
+
+      - name: Start API in background
+        run: bun run --cwd apps/api start &
+
+      - name: Start web preview in background
+        run: bun run --cwd apps/web preview --port 5173 &
+
+      - name: Wait for web server
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5173 > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "web server did not start in time" >&2
+          exit 1
+
+      - name: Link check
+        run: bun run scripts/check-links.ts
+        env:
+          CHECK_LINKS_BASE_URL: http://localhost:5173
