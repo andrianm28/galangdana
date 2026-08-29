@@ -50,3 +50,10 @@ export const LoginBodySchema = Type.Object({
 export const AuthErrorSchema = Type.Object({
   error: Type.String(),
 });
+
+// Shared by any route whose success response is just a bare acknowledgement
+// (no payload beyond "it worked") -- currently /auth/logout and
+// /auth/otp/request.
+export const SimpleSuccessSchema = Type.Object({
+  success: Type.Literal(true),
+});

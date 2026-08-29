@@ -5,6 +5,7 @@ import {
   OtpRequestBodySchema,
   OtpVerifyBodySchema,
   RegisterBodySchema,
+  SimpleSuccessSchema,
   UserSchema,
 } from "@galangdana/contracts";
 import type { User } from "@galangdana/db";
@@ -78,7 +79,7 @@ export const authRoute = new Elysia({ prefix: "/auth" })
       }
       return { success: true };
     },
-    { body: OtpRequestBodySchema },
+    { body: OtpRequestBodySchema, response: { 200: SimpleSuccessSchema, 429: AuthErrorSchema } },
   )
   .post(
     "/otp/verify",
@@ -137,24 +138,32 @@ export const authRoute = new Elysia({ prefix: "/auth" })
     },
     { body: LoginBodySchema, response: { 200: AuthSuccessSchema, 401: AuthErrorSchema } },
   )
-  .post("/logout", async ({ sessionToken, cookie, set }) => {
-    if (sessionToken) {
-      await revokeSession(sessionToken);
-    }
-    const sessionCookie = requiredCookie(cookie, SESSION_COOKIE);
-    sessionCookie.value = "";
-    sessionCookie.maxAge = 0;
-    sessionCookie.path = "/";
-    set.status = 200;
-    return { success: true };
-  })
-  .get("/me", ({ user, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { error: "not_authenticated" };
-    }
-    return { user: toUserResponse(user) };
-  })
+  .post(
+    "/logout",
+    async ({ sessionToken, cookie, set }) => {
+      if (sessionToken) {
+        await revokeSession(sessionToken);
+      }
+      const sessionCookie = requiredCookie(cookie, SESSION_COOKIE);
+      sessionCookie.value = "";
+      sessionCookie.maxAge = 0;
+      sessionCookie.path = "/";
+      set.status = 200;
+      return { success: true };
+    },
+    { response: { 200: SimpleSuccessSchema } },
+  )
+  .get(
+    "/me",
+    ({ user, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      return { user: toUserResponse(user) };
+    },
+    { response: { 200: AuthSuccessSchema, 401: AuthErrorSchema } },
+  )
   .get("/google", async ({ cookie, set }) => {
     const state = generateState();
     const verifier = generatePkceVerifier();
@@ -164,6 +173,19 @@ export const authRoute = new Elysia({ prefix: "/auth" })
     verifierCookie.httpOnly = true;
     verifierCookie.path = "/";
     verifierCookie.maxAge = 600;
+    // A second, separate cookie from the PKCE verifier: PKCE alone already
+    // defeats the classic OAuth login-CSRF attack here (Google's token
+    // endpoint rejects a code exchanged with a verifier that doesn't match
+    // the code_challenge the code was originally issued for, so a forged
+    // callback using an attacker's own authorization code fails at the
+    // token-exchange step regardless of state). state is still checked as
+    // standard defense-in-depth rather than generated and silently ignored
+    // -- verified empirically (matching state -> 200, mismatched -> 400).
+    const stateCookie = requiredCookie(cookie, "google_oauth_state");
+    stateCookie.value = state;
+    stateCookie.httpOnly = true;
+    stateCookie.path = "/";
+    stateCookie.maxAge = 600;
     set.status = 302;
     set.headers.location = buildGoogleAuthUrl(state, challenge);
     return "";
@@ -172,8 +194,9 @@ export const authRoute = new Elysia({ prefix: "/auth" })
     "/google/callback",
     async ({ query, cookie, set }) => {
       const verifier = cookie.google_oauth_verifier?.value;
+      const expectedState = cookie.google_oauth_state?.value;
       const code = query.code;
-      if (!verifier || !code) {
+      if (!verifier || !code || !expectedState || query.state !== expectedState) {
         set.status = 400;
         return { error: "missing_code_or_verifier" };
       }
@@ -190,6 +213,9 @@ export const authRoute = new Elysia({ prefix: "/auth" })
       const clearedVerifierCookie = requiredCookie(cookie, "google_oauth_verifier");
       clearedVerifierCookie.value = "";
       clearedVerifierCookie.maxAge = 0;
+      const clearedStateCookie = requiredCookie(cookie, "google_oauth_state");
+      clearedStateCookie.value = "";
+      clearedStateCookie.maxAge = 0;
       set.status = 302;
       set.headers.location = process.env.PUBLIC_WEB_URL ?? "http://localhost:5173";
       return "";

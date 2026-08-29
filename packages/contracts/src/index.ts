@@ -7,6 +7,7 @@ export {
   OtpRequestBodySchema,
   OtpVerifyBodySchema,
   RegisterBodySchema,
+  SimpleSuccessSchema,
   UserSchema,
 } from "./auth";
 export type { AuthSuccessResponse, UserResponse } from "./auth";

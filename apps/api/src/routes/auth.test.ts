@@ -203,13 +203,29 @@ describe("GET /auth/me without a session", () => {
 });
 
 describe("GET /auth/google", () => {
-  test("redirects to Google's consent screen with a state and PKCE challenge, and sets a verifier cookie", async () => {
+  test("redirects to Google's consent screen with a state and PKCE challenge, and sets verifier + state cookies", async () => {
     const resp = await app.handle(
       new Request("http://localhost/auth/google", { redirect: "manual" }),
     );
     expect(resp.status).toBe(302);
     const location = resp.headers.get("location");
     expect(location).toContain("https://accounts.google.com/o/oauth2/v2/auth");
-    expect(resp.headers.get("set-cookie")).toContain("google_oauth_verifier");
+    const setCookie = resp.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("google_oauth_verifier");
+    expect(setCookie).toContain("google_oauth_state");
+  });
+});
+
+describe("GET /auth/google/callback", () => {
+  test("rejects a callback whose state doesn't match the one issued to this browser", async () => {
+    // A verifier + state cookie pair as GET /auth/google would have set,
+    // but the query string's state deliberately doesn't match -- this is
+    // exactly the shape of a forged/replayed callback URL.
+    const resp = await app.handle(
+      new Request("http://localhost/auth/google/callback?code=some-code&state=wrong-state", {
+        headers: { cookie: "google_oauth_verifier=some-verifier; google_oauth_state=real-state" },
+      }),
+    );
+    expect(resp.status).toBe(400);
   });
 });
