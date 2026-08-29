@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { withApiResponseMapping } from "./response-mapper";
 import { authRoute } from "./routes/auth";
+import { campaignsRoute } from "./routes/campaigns";
 import { healthRoute } from "./routes/health";
 
 // Every response body is run through the BigInt-safe serializer, so no
@@ -9,7 +10,10 @@ import { healthRoute } from "./routes/health";
 // codes, and real Response objects returned directly from handlers -- see
 // response-mapper.ts (shared with response-mapper.test.ts, so the two can
 // never silently drift apart).
-export const app = withApiResponseMapping(new Elysia()).use(healthRoute).use(authRoute);
+export const app = withApiResponseMapping(new Elysia())
+  .use(healthRoute)
+  .use(authRoute)
+  .use(campaignsRoute);
 
 export type App = typeof app;
 

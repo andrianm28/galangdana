@@ -57,6 +57,17 @@ jobs:
       MEILISEARCH_URL: http://localhost:7700
       MEILISEARCH_API_KEY: galangdana-dev-master-key
       PUBLIC_API_URL: http://localhost:3001
+      # apps/api's GET /campaigns (Task 6) signs a real imgproxy URL for
+      # every row server-side via @galangdana/media's buildImgproxyUrl --
+      # pure HMAC signing, no network call, so no imgproxy/MinIO service
+      # container is needed here, but the key/salt must be non-empty or
+      # Web Crypto's importKey throws "Zero-length key is not supported".
+      # Values match .env.example / docker-compose.yml's imgproxy service
+      # defaults exactly, same as the MEILISEARCH_* pair above.
+      IMGPROXY_KEY: 4ac5d314cc578f0216d080c03b2bc517a7e4226af8a4ed6a5617cf94e44c554c
+      IMGPROXY_SALT: 00325181fcb6c7a7ef94ba22eab86f3115ddfaf7178dcba96d19a327c0ab65f1
+      IMGPROXY_BASE_URL: http://localhost:8090
+      MEDIA_SOURCE_BASE_URL: http://localhost:9000/campaign-media
     steps:
       - uses: actions/checkout@v4
 
@@ -72,6 +83,19 @@ jobs:
 
       - name: Run database migrations
         run: bun run db:migrate
+
+      # Task 6's apps/api/src/routes/campaigns.test.ts asserts against the
+      # real seed fixture data (8 campaigns, the "zakat" category, etc.) --
+      # it needs that data to already exist. `bun test`'s file-execution
+      # order is NOT the order these directories are listed in below (it
+      # runs "apps/..." files before "packages/..." files, confirmed by
+      # running the exact command and observing per-file output order), so
+      # packages/db's categories.test.ts calling runSeed() as a side effect
+      # cannot be relied on to have happened yet by the time apps/api's
+      # tests run. An explicit, idempotent (onConflictDoNothing /
+      # find-or-create) seed step here removes that ordering dependency.
+      - name: Seed database
+        run: bun run db:seed
 
       - name: Typecheck
         run: bun run typecheck
