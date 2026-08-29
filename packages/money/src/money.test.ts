@@ -47,8 +47,6 @@ describe("bigIntSafeJSONStringify", () => {
 
   test("round-trips nested bigints inside arrays and objects", () => {
     const payload = { items: [{ amount: 5n }, { amount: 10n }] };
-    expect(bigIntSafeJSONStringify(payload)).toBe(
-      '{"items":[{"amount":"5"},{"amount":"10"}]}',
-    );
+    expect(bigIntSafeJSONStringify(payload)).toBe('{"items":[{"amount":"5"},{"amount":"10"}]}');
   });
 });
