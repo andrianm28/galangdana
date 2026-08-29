@@ -90,6 +90,7 @@
       "name": "@galangdana/ui",
       "version": "0.0.0",
       "dependencies": {
+        "@galangdana/money": "workspace:*",
         "svelte": "^5.2.9",
       },
       "devDependencies": {
