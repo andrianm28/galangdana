@@ -778,7 +778,7 @@ Expected: FAIL — `Cannot find module './otp'`.
 ```ts
 import { db, otpChallenges, users } from "@galangdana/db";
 import type { User } from "@galangdana/db";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { checkOtpRateLimit } from "./rate-limit";
 import { ConsoleSmsProvider, type SmsProvider } from "./sms-provider";
 
@@ -826,21 +826,30 @@ export interface VerifyOtpResult {
 }
 
 export async function verifyOtp(phone: string, code: string): Promise<VerifyOtpResult> {
+  // Must be the LATEST unconsumed challenge, not an arbitrary/oldest one:
+  // a user who taps "resend code" now has two outstanding rows, and without
+  // desc() here an ascending order-by would keep checking the superseded
+  // first code -- which would also increment ITS attempts counter on every
+  // wrong guess with the (correct) new code, eventually locking the user
+  // out with a correct code in hand until the old challenge's TTL expires.
   const [challenge] = await db
     .select()
     .from(otpChallenges)
-    .where(
-      and(
-        eq(otpChallenges.phone, phone),
-        isNull(otpChallenges.consumedAt),
-        gt(otpChallenges.expiresAt, new Date()),
-      ),
-    )
-    .orderBy(otpChallenges.createdAt)
+    .where(and(eq(otpChallenges.phone, phone), isNull(otpChallenges.consumedAt)))
+    .orderBy(desc(otpChallenges.createdAt))
     .limit(1);
 
   if (!challenge) {
     return { success: false, reason: "not_found" };
+  }
+
+  // Checked as a separate step (not folded into the query's WHERE via
+  // gt(expiresAt, now)) specifically so an expired-but-otherwise-matching
+  // challenge returns the precise "expired" reason instead of the less
+  // useful "not_found" -- a caller can tell "there was never a code" apart
+  // from "there was one, but it's stale, request a new one."
+  if (challenge.expiresAt.getTime() <= Date.now()) {
+    return { success: false, reason: "expired" };
   }
 
   if (challenge.attempts >= MAX_VERIFY_ATTEMPTS) {
@@ -849,9 +858,14 @@ export async function verifyOtp(phone: string, code: string): Promise<VerifyOtpR
 
   const isValid = await Bun.password.verify(code, challenge.codeHash);
   if (!isValid) {
+    // Atomic increment at the database level (sql`... + 1`), not
+    // `challenge.attempts + 1` computed from a value read moments earlier
+    // in application code -- two concurrent wrong-code requests reading the
+    // same starting value and both writing "+1" would otherwise silently
+    // lose an increment, letting an attacker exceed MAX_VERIFY_ATTEMPTS.
     await db
       .update(otpChallenges)
-      .set({ attempts: challenge.attempts + 1 })
+      .set({ attempts: sql`${otpChallenges.attempts} + 1` })
       .where(eq(otpChallenges.id, challenge.id));
     return { success: false, reason: "incorrect_code" };
   }
@@ -861,12 +875,20 @@ export async function verifyOtp(phone: string, code: string): Promise<VerifyOtpR
     .set({ consumedAt: new Date() })
     .where(eq(otpChallenges.id, challenge.id));
 
-  const [existing] = await db.select().from(users).where(eq(users.phone, phone));
-  if (existing) {
-    return { success: true, user: existing };
-  }
-
-  const [created] = await db.insert(users).values({ phone }).returning();
+  // Atomic find-or-create via INSERT ... ON CONFLICT, not a separate SELECT
+  // followed by a conditional INSERT: two concurrent successful
+  // verifications for the same brand-new phone number could otherwise both
+  // see "no existing user" and both attempt to insert, and the loser would
+  // throw on the users.phone unique constraint instead of returning the
+  // winner's row. onConflictDoUpdate (a no-op-ish update) makes this one
+  // atomic statement that always returns exactly one row, verified
+  // empirically: two concurrent calls with the same phone return the same
+  // user id.
+  const [created] = await db
+    .insert(users)
+    .values({ phone })
+    .onConflictDoUpdate({ target: users.phone, set: { updatedAt: new Date() } })
+    .returning();
   return { success: true, user: created };
 }
 ```
