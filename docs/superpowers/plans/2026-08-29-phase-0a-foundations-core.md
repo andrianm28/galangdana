@@ -311,7 +311,14 @@ services:
     ports: ["7700:7700"]
     volumes: ["meilidata:/meili_data"]
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:7700/health"]
+      # 127.0.0.1, not localhost: the getmeili/meilisearch image binds
+      # IPv4-only (0.0.0.0:7700), but this container's musl/busybox wget
+      # resolves "localhost" to ::1 first and gets refused there before ever
+      # trying IPv4 — confirmed by exec'ing in and diffing `wget localhost`
+      # (refused) against `wget 127.0.0.1` (succeeds) plus `ss -tlnp` showing
+      # no :::7700 listener. mailpit's healthcheck can keep "localhost" —
+      # its image listens dual-stack (:::8025), so it isn't affected.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7700/health"]
       interval: 5s
       timeout: 5s
       retries: 10
