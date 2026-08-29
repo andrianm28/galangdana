@@ -25,7 +25,7 @@ describe("GET /search", () => {
     expect(body.results).toEqual([]);
   });
 
-  test("400s on a missing q parameter", async () => {
+  test("422s on a missing q parameter", async () => {
     const resp = await app.handle(new Request("http://localhost/search"));
     expect(resp.status).toBe(422); // TypeBox validation failure on the required, minLength:1 `q` field
   });

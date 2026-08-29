@@ -40,27 +40,25 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      imgproxy:
-        image: darthsim/imgproxy:latest
-        env:
-          IMGPROXY_KEY: 4ac5d314cc578f0216d080c03b2bc517a7e4226af8a4ed6a5617cf94e44c554c
-          IMGPROXY_SALT: 00325181fcb6c7a7ef94ba22eab86f3115ddfaf7178dcba96d19a327c0ab65f1
-          IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES: "true"
-        ports: ["8090:8080"]
-        # `imgproxy health` (the same subcommand docker-compose.yml's own
-        # healthcheck uses) was confirmed directly against the real
-        # darthsim/imgproxy:latest image -- `docker exec <container> sh -c
-        # "imgproxy health"` exits 0 with "imgproxy is running", and the
-        # image does have /bin/sh, so --health-cmd (which GitHub Actions
-        # wraps as a shell command, same as the postgres/redis/meilisearch
-        # health options above) can invoke it. Not run against a real
-        # GitHub Actions job yet -- see Task 14's report for what that
-        # still needs to confirm.
-        options: >-
-          --health-cmd "imgproxy health"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+      # No imgproxy service container here (there used to be one -- see git
+      # history / prior task reports if resurrecting this reasoning is ever
+      # needed): confirmed, while fixing a final-review finding, that
+      # nothing in this job actually makes a real HTTP request to imgproxy.
+      # buildImgproxyUrl (see the IMGPROXY_KEY/IMGPROXY_BASE_URL comment
+      # below) is pure HMAC URL-signing with no network call, and
+      # scripts/check-links.ts's crawler only follows same-origin `<a
+      # href>` links -- it explicitly skips any href starting with "http"
+      # (see that script), and never inspects `<img src>` at all, so the
+      # `http://localhost:8090/...` cover-image URLs rendered on the page
+      # are never fetched by CI either way. A service container would also
+      # be unable to actually serve those URLs even if something did reach
+      # it: MEDIA_SOURCE_BASE_URL below points at localhost:9000 (MinIO),
+      # which is unreachable from inside a `services:` container's own
+      # isolated network namespace -- `localhost` there resolves to the
+      # container itself, not the runner host MinIO is published on. If a
+      # real end-to-end image-serving assertion is wanted later, it needs a
+      # `docker run --network host ...` step (like "Create media bucket"
+      # below), not a `services:` entry.
     env:
       # Port 5432 here (not 55434) is correct and intentional: this runs in
       # an isolated GitHub Actions runner with its own services:postgres
@@ -227,4 +225,12 @@ jobs:
         run: bun run scripts/check-links.ts
         env:
           CHECK_LINKS_BASE_URL: http://localhost:5173
-          CHECK_LINKS_EXTRA_ROUTES: /search?q=banjir
+          # /explore/bencana-alam is included because the homepage has no
+          # link to any /explore/[category] page yet (a separately-tracked,
+          # deliberately-deferred gap, not fixed here) -- without an extra
+          # seed path here, the crawler starting from "/" would never reach
+          # that route at all. bencana-alam is one of the seeded categories
+          # with a real seeded campaign in it (packages/db/src/seed/
+          # categories.seed.ts + campaigns.seed.ts), so this exercises a
+          # real, non-empty /explore/[category] page.
+          CHECK_LINKS_EXTRA_ROUTES: /search?q=banjir,/explore/bencana-alam

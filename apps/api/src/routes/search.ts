@@ -1,7 +1,7 @@
 import { SearchQuerySchema, SearchResponseSchema } from "@galangdana/contracts";
 import { campaignCategories, campaigners, campaigns, db } from "@galangdana/db";
 import { searchCampaigns } from "@galangdana/search";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { toCampaignSummary } from "../lib/campaign-response";
 
@@ -28,9 +28,19 @@ export const searchRoute = new Elysia().get(
       .innerJoin(campaignCategories, eq(campaigns.categoryId, campaignCategories.id))
       .innerJoin(campaigners, eq(campaigns.campaignerId, campaigners.id))
       .where(
-        inArray(
-          campaigns.id,
-          hits.map((h) => h.id),
+        and(
+          inArray(
+            campaigns.id,
+            hits.map((h) => h.id),
+          ),
+          // Defensive layering, not currently reachable: no
+          // campaign-mutation flow exists yet in this phase, so nothing can
+          // make an indexed campaign non-active. Still, this endpoint
+          // shouldn't rely solely on the Meilisearch index never containing
+          // a non-active campaign -- matches the same eq(campaigns.status,
+          // "active") condition GET /campaigns and GET /campaigns/:slug
+          // already apply (see campaigns.ts).
+          eq(campaigns.status, "active"),
         ),
       );
 
