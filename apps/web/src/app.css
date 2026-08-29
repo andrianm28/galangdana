@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@import "@galangdana/ui/src/theme.css";
+
+/* Not strictly required: verified empirically that @tailwindcss/vite
+   running under sveltekit() already auto-detects classes used inside
+   packages/ui with zero extra config (a plain, non-SvelteKit `vite
+   build` does NOT do this, which is what an earlier, stack-mismatched
+   spike for this plan got wrong -- corrected before this task was
+   dispatched). Kept anyway as explicit, self-documenting evidence that
+   apps/web's styling depends on packages/ui's source tree. */
+@source "../../../packages/ui/src";
+
+body {
+  @apply bg-neutral-50 text-neutral-900 font-sans;
+}

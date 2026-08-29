@@ -63,6 +63,9 @@ jobs:
       - name: Unit tests (web)
         run: bun run test:web
 
+      - name: Unit tests (ui)
+        run: bun run test:ui
+
       - name: Build web
         run: bun run --cwd apps/web build
 
