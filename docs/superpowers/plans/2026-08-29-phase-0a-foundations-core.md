@@ -1040,9 +1040,19 @@ export * from "./campaigns";
 `packages/db/src/__tests__/campaigns.test.ts`:
 ```ts
 import { beforeAll, describe, expect, test } from "bun:test";
+import { inArray } from "drizzle-orm";
 import { db } from "../client";
 import { campaigns, displayAmount } from "../schema/campaigns";
 import { runSeed } from "../seed/run-seed";
+
+// The two positive-insert tests below use fixed slugs so they read clearly.
+// Unlike categories.test.ts's seed (idempotent via onConflictDoNothing),
+// these are plain inserts — re-running this file against the SAME persistent
+// local Postgres (not a fresh CI container) would otherwise fail on the
+// second run with "duplicate key value violates unique constraint
+// campaigns_slug_unique". Delete any leftover rows with these exact slugs
+// first so the file is safe to run any number of times locally.
+const TEST_SLUGS = ["bantu-warga-kalimantan-test", "sumur-bor-masjid-test"];
 
 describe("campaigns dual model", () => {
   // campaigns.category_id has a NOT NULL foreign key into campaign_categories.
@@ -1054,6 +1064,7 @@ describe("campaigns dual model", () => {
   // regardless of what has or hasn't already run.
   beforeAll(async () => {
     await runSeed();
+    await db.delete(campaigns).where(inArray(campaigns.slug, TEST_SLUGS));
   });
 
   test("a goal-model campaign requires goal_amount and allows expires_at", async () => {
