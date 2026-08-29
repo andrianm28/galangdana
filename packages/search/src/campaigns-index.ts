@@ -14,13 +14,28 @@ export interface CampaignSearchDocument {
 }
 
 /**
- * Replaces the entire campaigns index with the given documents. Full
- * replace (not incremental upsert) is the right shape for this phase:
- * there is no campaign-creation flow yet, so the only caller is a
- * from-scratch reindex script (see reindex.ts). A future phase that adds
- * live campaign creation should add an incremental
- * index.addDocuments([one document]) call at the write site instead of
- * calling this on every write.
+ * Upserts the given documents into the campaigns index via Meilisearch's
+ * `addDocuments`. This is ADDITIVE, not a full replace: documents whose
+ * `id` matches an existing document are updated in place, and documents
+ * with a new `id` are added, but any document already in the index that
+ * is NOT present in `documents` is left untouched. Removal is NOT
+ * handled by this function -- e.g. a campaign that becomes inactive (or
+ * is deleted) stays searchable indefinitely until something else removes
+ * it (a manual `deleteDocuments()` call, or rebuilding the index from
+ * scratch some other way).
+ *
+ * For this phase that's fine: there is no campaign-mutation flow yet, so
+ * the only caller is a from-scratch reindex script (see reindex.ts) that
+ * always passes every campaign. A future phase that adds live campaign
+ * creation/status changes and needs true replace semantics should reach
+ * for an index-swap/alias pattern (build a new index, populate it fully,
+ * then atomically swap it in), NOT an in-place `deleteAllDocuments()` +
+ * `addDocuments()` here -- an in-place wipe reintroduces the exact
+ * shared-index test-isolation hazard `campaigns-index.test.ts`'s
+ * `afterEach` now deliberately avoids (it used to call
+ * `deleteAllDocuments()` on this same shared Meilisearch index and was
+ * observed intermittently wiping out real seeded data out from under
+ * apps/api's GET /search test; it now deletes only its own fixture IDs).
  */
 export async function syncCampaignsIndex(documents: CampaignSearchDocument[]): Promise<void> {
   const client = getMeilisearchClient();
