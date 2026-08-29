@@ -1362,6 +1362,30 @@ describe("findOrCreateGoogleUser", () => {
     // biome-ignore lint/style/noNonNullAssertion: inserted above
     expect(linked.id).toBe(existing!.id);
   });
+
+  test("links to a user created via a different auth method (e.g. registerWithEmail) with the same email, without throwing", async () => {
+    // Simulates what registerWithEmail (Task 6) would have produced for this
+    // email a moment earlier: a users row with a passwordHash, no Google
+    // link yet. Before the fix, findOrCreateGoogleUser's create-branch
+    // insert had no onConflictDoNothing at all, so if this row existed the
+    // insert would throw an unhandled unique-constraint exception instead
+    // of falling back to the existing row.
+    const [existing] = await db
+      .insert(users)
+      .values({ email: mockProfile.email, passwordHash: "x" })
+      .returning();
+
+    const linked = await findOrCreateGoogleUser(mockProfile);
+    // biome-ignore lint/style/noNonNullAssertion: inserted above
+    expect(linked.id).toBe(existing!.id);
+
+    const [link] = await db
+      .select()
+      .from(oauthAccounts)
+      .where(eq(oauthAccounts.providerAccountId, mockProfile.sub));
+    // biome-ignore lint/style/noNonNullAssertion: inserted above
+    expect(link?.userId).toBe(existing!.id);
+  });
 });
 ```
 
@@ -1515,7 +1539,7 @@ export async function findOrCreateGoogleUser(profile: GoogleProfile): Promise<Us
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd apps/api && bun test auth/google-oauth.test.ts`
-Expected: all 6 tests PASS. No real Google credentials or network access are required — the token/userinfo tests use the injected mock `fetch`.
+Expected: all 7 tests PASS. No real Google credentials or network access are required — the token/userinfo tests use the injected mock `fetch`.
 
 - [ ] **Step 5: Typecheck and lint**
 
