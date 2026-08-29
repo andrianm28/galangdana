@@ -2,6 +2,13 @@
   "extends": ["../../tsconfig.base.json", "./.svelte-kit/tsconfig.json"],
   "compilerOptions": {
     "moduleResolution": "bundler",
-    "types": ["@sveltejs/kit"]
+    // "bun-types" alongside "@sveltejs/kit": api-client.ts imports
+    // `type { App }` from @galangdana/api (Eden Treaty's end-to-end typed
+    // client), and without TS project references this repo's packages
+    // share one TS program -- svelte-check ends up type-checking
+    // apps/api's own source files (otp.ts, password.ts, redis-client.ts)
+    // under THIS tsconfig, which needs the ambient `Bun` global those
+    // files use (Bun.password, Bun.RedisClient) to resolve.
+    "types": ["@sveltejs/kit", "bun-types"]
   }
 }
