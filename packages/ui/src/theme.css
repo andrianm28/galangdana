@@ -1,0 +1,56 @@
+@theme {
+  /* Brand: warm & trustworthy. A muted green/teal primary (giving,
+     growth, calm) paired with a warm terracotta accent for calls to
+     action (donate buttons, primary CTAs) that need to stand out against
+     the calmer brand color. Neutral scale is warm-tinted (toward beige),
+     not cold blue-gray, to stay consistent with the rest of the palette. */
+  --color-primary: #2f7a5f;
+  --color-primary-light: #e8f3ee;
+  --color-primary-dark: #1f5a44;
+
+  --color-accent: #d97748;
+  --color-accent-light: #fbeae0;
+  --color-accent-dark: #b85a30;
+
+  /* Cleared before redefining: Tailwind v4's @theme MERGES with its own
+     built-in `neutral` scale rather than replacing it, so any step this
+     file doesn't define (300/500/700/950) would otherwise silently fall
+     back to Tailwind's cold, zero-chroma default gray -- clashing with
+     the warm-tinted steps actually defined below, with no build warning.
+     Verified: after this reset, an undefined step (e.g. neutral-500)
+     compiles to nothing rather than a wrong color. */
+  --color-neutral-*: initial;
+  --color-neutral-50: #faf9f7;
+  --color-neutral-100: #f3f1ed;
+  --color-neutral-200: #e5e1d8;
+  --color-neutral-400: #a69c8d;
+  --color-neutral-600: #6b6355;
+  --color-neutral-800: #3d372c;
+  --color-neutral-900: #252017;
+
+  /* success reuses the brand primary -- giving and "this worked" share
+     the same color family in a donation product. warning/error/info are
+     the only colors outside the warm family, kept deliberately close to
+     conventional meanings so they read correctly at a glance. */
+  --color-success: #2f7a5f;
+  --color-warning: #d9a441;
+  --color-error: #c4463a;
+  --color-info: #3e7ca6;
+
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* Rounded, not sharp -- the "warm & trustworthy" personality's most
+     visible signal after color. sm for buttons/inputs/badges, md for
+     cards, lg for larger surfaces like modals.
+     Cleared before redefining for the same reason as neutral above:
+     Tailwind's own default radius scale (xl: 0.75rem, 2xl: 1rem, 3xl:
+     1.5rem) would otherwise survive alongside this file's sm/md/lg,
+     producing the genuinely confusing result that rounded-xl (0.75rem)
+     renders SMALLER than rounded-lg (1.25rem) defined here. rounded-full
+     is unaffected by this reset -- it isn't part of the --radius-* scale
+     in Tailwind v4 at all, it's a separate hardcoded utility. */
+  --radius-*: initial;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1.25rem;
+}
