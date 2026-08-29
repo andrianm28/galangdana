@@ -28,6 +28,12 @@ describe("Button", () => {
     expect(button.className).toContain("bg-error");
   });
 
+  test("applies the accent variant's classes", () => {
+    render(Button, { props: { variant: "accent", children: createSnippet("Donate") } });
+    const button = screen.getByRole("button");
+    expect(button.className).toContain("bg-accent");
+  });
+
   test("disabled buttons cannot be clicked and carry the disabled attribute", async () => {
     const onclick = vi.fn();
     render(Button, { props: { disabled: true, onclick, children: createSnippet("Wait") } });

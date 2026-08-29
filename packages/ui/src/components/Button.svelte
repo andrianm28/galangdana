@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "accent" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 interface Props {
@@ -27,6 +27,7 @@ const {
 const variantClasses: Record<Variant, string> = {
   primary: "bg-primary text-white hover:bg-primary-dark",
   secondary: "bg-primary-light text-primary-dark hover:bg-primary/20",
+  accent: "bg-accent text-white hover:bg-accent-dark",
   ghost: "bg-transparent text-neutral-800 hover:bg-neutral-100",
   danger: "bg-error text-white hover:bg-error/90",
 };
