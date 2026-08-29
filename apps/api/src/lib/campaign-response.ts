@@ -59,3 +59,8 @@ export async function toCampaignSummary(row: CampaignRow): Promise<CampaignSumma
     publishedAt: (campaign.publishedAt ?? campaign.createdAt).toISOString(),
   };
 }
+
+export async function toCampaignDetail(row: CampaignRow) {
+  const summary = await toCampaignSummary(row);
+  return { ...summary, story: row.campaign.story };
+}

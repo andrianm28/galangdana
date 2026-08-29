@@ -65,3 +65,37 @@ describe("GET /campaigns", () => {
     expect(body.page).toBe(1);
   });
 });
+
+describe("GET /campaigns/:slug", () => {
+  test("returns full campaign detail including story, for a known seeded slug", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/campaigns/bantu-korban-banjir-bandang-kalimantan-selatan"),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { title: string; story: string; model: string };
+    expect(body.title).toContain("Banjir Bandang");
+    expect(body.story.length).toBeGreaterThan(0);
+    expect(body.model).toBe("goal");
+  });
+
+  test("a program-model campaign has a null goalAmount/expiresAt and a nonzero availableAmount", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/campaigns/program-amil-zakat-mitra"),
+    );
+    const body = (await resp.json()) as {
+      model: string;
+      goalAmount: unknown;
+      expiresAt: unknown;
+      availableAmount: { amount: string };
+    };
+    expect(body.model).toBe("program");
+    expect(body.goalAmount).toBeNull();
+    expect(body.expiresAt).toBeNull();
+    expect(BigInt(body.availableAmount.amount)).toBeGreaterThan(0n);
+  });
+
+  test("returns 404 for an unknown slug", async () => {
+    const resp = await app.handle(new Request("http://localhost/campaigns/does-not-exist"));
+    expect(resp.status).toBe(404);
+  });
+});
