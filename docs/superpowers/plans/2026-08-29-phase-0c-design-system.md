@@ -14,6 +14,9 @@
 
 ## Global Constraints
 
+- **Every component's `$props()` destructuring uses `const`, EXCEPT `TextInput` (Task 2), which correctly keeps `let`.** This repo's installed Biome 1.9.4 has a genuine internal panic — `assertion failed: start.raw <= end.raw`, exit code 101, not just a lint warning — when computing the `useConst` diagnostic's range against a multi-line `let { ...destructuring }: Props = $props()` where every destructured binding is unreassigned, next to an `interface Props { ... }` block (found during Task 1, reproduced directly against this repo's actual Biome install). `const` is semantically identical everywhere this applies — Svelte 5's `$props()` return is never reassigned by any OTHER component in this plan — and fully avoids the panic. `TextInput` is the one exception: its `value` binding IS reassigned inside `handleInput` (`value = event.currentTarget.value;`), so its destructuring genuinely needs `let` — verified directly that this specific case does NOT trigger the panic (Biome's `useConst` doesn't fire when at least one destructured binding is truly reassigned), so leave `TextInput`'s `let` exactly as written; do not "fix" it to `const` or the component breaks (reassigning a `const` binding is a compile error).
+- **Every task's verification step includes `bun run lint` from the repo root, not just `vitest`/`typecheck`.** Several tasks below list only `vitest run` and `typecheck` in their per-task verification step, written before the `let`/`const` panic above was found — treat `bun run lint` (clean, no errors) as an implicit requirement of every task's final verification regardless of what that task's own step text enumerates, so a Biome-breaking pattern is caught in the task that introduced it, not accumulated across several tasks until Task 7 or the final review.
+- Component code blocks below show 2-space-indented `<script>` contents for readability in this document; this repo's actual Biome formatter (confirmed against the two pre-existing `.svelte` files before Task 1) formats `<script>` contents flush-left, with no extra indentation. Do not fight the formatter: implement the component, then run `bun run lint:fix` (or the workspace-appropriate lint-fix command) and accept its reformatting — verify afterward that no token values, prop names/types, or logic changed, only whitespace.
 - All money/monetary display in future phases will use the `money` package's existing formatting — this phase does not touch money formatting, only visual/component primitives.
 - Components are styled with Tailwind utility classes directly in the component's markup — no parallel `<style>` block CSS, no CSS-in-JS, no new styling library (`clsx`, `cva`, `tailwind-variants`, etc.). Svelte 5 already ships `clsx`-equivalent native `class` attribute handling (object/array syntax); variant-to-class-string mapping uses a plain `Record<Variant, string>` lookup object.
 - Every component lives in `packages/ui/src/components/`, is re-exported from `packages/ui/src/index.ts`, and is consumed elsewhere only via `import { X } from "@galangdana/ui"` — never a deep import path.
@@ -287,7 +290,7 @@ Expected: FAIL — `Button.svelte` does not exist yet (`Failed to resolve import
     children: Snippet;
   }
 
-  let {
+  const {
     variant = "primary",
     size = "md",
     disabled = false,
@@ -529,7 +532,7 @@ Expected: FAIL — `Label.svelte` doesn't exist.
     children: Snippet;
   }
 
-  let { for: htmlFor, children }: Props = $props();
+  const { for: htmlFor, children }: Props = $props();
 </script>
 
 <label for={htmlFor} class="block text-sm font-medium text-neutral-800 mb-1 font-sans">
@@ -732,7 +735,7 @@ Expected: FAIL — `FormField.svelte` doesn't exist.
     children: Snippet;
   }
 
-  let { label, id, error, hint, children }: Props = $props();
+  const { label, id, error, hint, children }: Props = $props();
 </script>
 
 <div class="mb-4">
@@ -844,7 +847,7 @@ Expected: FAIL.
     children: Snippet;
   }
 
-  let { padded = true, children }: Props = $props();
+  const { padded = true, children }: Props = $props();
 </script>
 
 <div
@@ -908,7 +911,7 @@ Expected: FAIL.
     children: Snippet;
   }
 
-  let { variant = "neutral", children }: Props = $props();
+  const { variant = "neutral", children }: Props = $props();
 
   const variantClasses: Record<Variant, string> = {
     neutral: "bg-neutral-100 text-neutral-800",
@@ -978,7 +981,7 @@ Expected: FAIL.
     size?: Size;
   }
 
-  let { name, src, size = "md" }: Props = $props();
+  const { name, src, size = "md" }: Props = $props();
 
   const sizeClasses: Record<Size, string> = {
     sm: "size-8 text-xs",
@@ -1057,7 +1060,7 @@ Expected: FAIL.
     size?: Size;
   }
 
-  let { size = "md" }: Props = $props();
+  const { size = "md" }: Props = $props();
 
   const sizeClasses: Record<Size, string> = {
     sm: "size-4",
@@ -1183,7 +1186,7 @@ Expected: FAIL.
     children: Snippet;
   }
 
-  let { variant = "info", dismissible = false, onDismiss, children }: Props = $props();
+  const { variant = "info", dismissible = false, onDismiss, children }: Props = $props();
 
   const variantClasses: Record<Variant, string> = {
     success: "bg-primary-light/60 text-primary-dark border-primary/30",
@@ -1307,7 +1310,7 @@ Expected: FAIL.
     children: Snippet;
   }
 
-  let { children }: Props = $props();
+  const { children }: Props = $props();
 </script>
 
 <div class="min-h-screen bg-neutral-50">
@@ -1503,7 +1506,7 @@ Expected: FAIL.
     children: Snippet;
   }
 
-  let { title, children }: Props = $props();
+  const { title, children }: Props = $props();
 </script>
 
 <div class="flex min-h-screen bg-neutral-50">
