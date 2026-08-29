@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@galangdana/contracts": "workspace:*",
+    "@galangdana/db": "workspace:*",
     "@galangdana/money": "workspace:*",
+    "drizzle-orm": "^0.36.4",
     "elysia": "1.1.26"
   },
   "devDependencies": {
