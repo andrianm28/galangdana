@@ -1,0 +1,22 @@
+{
+  "name": "@galangdana/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@galangdana/contracts": "workspace:*",
+    "@galangdana/money": "workspace:*",
+    "elysia": "1.1.26"
+  },
+  "devDependencies": {
+    "@sinclair/typebox": "^0.33.17"
+  }
+}
