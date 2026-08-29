@@ -1,10 +1,19 @@
-import { describe, expect, test } from "bun:test";
-import { eq } from "drizzle-orm";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../client";
 import { sessions } from "../schema/sessions";
 import { users } from "../schema/users";
 
+// Same persistent-local-Postgres idempotency concern as users.test.ts.
+// Deleting the users cascades to delete their sessions too (FK
+// onDelete: "cascade"), so cleaning up by phone is sufficient.
+const TEST_PHONES = ["+6281100000010", "+6281100000011"];
+
 describe("sessions", () => {
+  beforeAll(async () => {
+    await db.delete(users).where(inArray(users.phone, TEST_PHONES));
+  });
+
   test("a session references a real user and expires in the future", async () => {
     const [user] = await db.insert(users).values({ phone: "+6281100000010" }).returning();
     // biome-ignore lint/style/noNonNullAssertion: insert().returning() on a single-row insert always returns that row
