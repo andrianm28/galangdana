@@ -15,6 +15,21 @@ const testApp = withApiResponseMapping(new Elysia())
   .get("/boom", () => {
     throw new Error("boom");
   })
+  // The exact error shape the final whole-branch review leaked: a network
+  // error carrying its own enumerable errno/syscall/address/port, plus a
+  // `code` property that Elysia surfaces as the onError `code` argument
+  // (i.e. "ECONNREFUSED", NOT "UNKNOWN" -- verified empirically against
+  // Elysia 1.1.26, and the reason the error handler intercepts every code
+  // except VALIDATION rather than exempting by code name).
+  .get("/leaky", () => {
+    const err = new Error("connect ECONNREFUSED 127.0.0.1:1") as Error & Record<string, unknown>;
+    err.errno = -111;
+    err.syscall = "connect";
+    err.address = "127.0.0.1";
+    err.port = 1;
+    err.code = "ECONNREFUSED";
+    throw err;
+  })
   .get("/raw", () => new Response("raw body", { status: 201 }));
 
 describe("withApiResponseMapping", () => {
@@ -28,6 +43,35 @@ describe("withApiResponseMapping", () => {
     const response = await testApp.handle(new Request("http://localhost/boom"));
     expect(response.status).toBe(500);
     expect(response.status).not.toBe(200);
+  });
+
+  test("a thrown error's body is generic, never the raw error's own properties", async () => {
+    const response = await testApp.handle(new Request("http://localhost/boom"));
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({ error: "internal_error" });
+  });
+
+  test("a thrown network error never leaks errno/syscall/address/port to the client", async () => {
+    const response = await testApp.handle(new Request("http://localhost/leaky"));
+    expect(response.status).toBe(500);
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({ error: "internal_error" });
+    // Explicit negative assertions on the exact fields the review saw
+    // reach a client, so a future regression here fails loudly.
+    expect(text).not.toContain("ECONNREFUSED");
+    expect(text).not.toContain("errno");
+    expect(text).not.toContain("syscall");
+    expect(text).not.toContain("127.0.0.1");
+  });
+
+  test("an unmatched route still answers 404, not 500", async () => {
+    // Elysia hands NOT_FOUND to onError with `set.status` still 200 and
+    // the real 404 only on the error object -- a status derived from
+    // `set.status` would turn every 404 into a 500.
+    const response = await testApp.handle(new Request("http://localhost/no-such-route"));
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "internal_error" });
   });
 
   test("a real Response returned from a handler passes through unchanged", async () => {
