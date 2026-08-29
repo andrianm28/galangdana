@@ -1626,6 +1626,13 @@ export const LoginBodySchema = Type.Object({
 export const AuthErrorSchema = Type.Object({
   error: Type.String(),
 });
+
+// Shared by any route whose success response is just a bare acknowledgement
+// (no payload beyond "it worked") -- currently /auth/logout and
+// /auth/otp/request.
+export const SimpleSuccessSchema = Type.Object({
+  success: Type.Literal(true),
+});
 ```
 
 - [ ] **Step 2: Wire the barrel export**
@@ -1641,6 +1648,7 @@ export {
   OtpRequestBodySchema,
   OtpVerifyBodySchema,
   RegisterBodySchema,
+  SimpleSuccessSchema,
   UserSchema,
 } from "./auth";
 export type { AuthSuccessResponse, UserResponse } from "./auth";
@@ -1867,14 +1875,30 @@ describe("GET /auth/me without a session", () => {
 });
 
 describe("GET /auth/google", () => {
-  test("redirects to Google's consent screen with a state and PKCE challenge, and sets a verifier cookie", async () => {
+  test("redirects to Google's consent screen with a state and PKCE challenge, and sets verifier + state cookies", async () => {
     const resp = await app.handle(
       new Request("http://localhost/auth/google", { redirect: "manual" }),
     );
     expect(resp.status).toBe(302);
     const location = resp.headers.get("location");
     expect(location).toContain("https://accounts.google.com/o/oauth2/v2/auth");
-    expect(resp.headers.get("set-cookie")).toContain("google_oauth_verifier");
+    const setCookie = resp.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("google_oauth_verifier");
+    expect(setCookie).toContain("google_oauth_state");
+  });
+});
+
+describe("GET /auth/google/callback", () => {
+  test("rejects a callback whose state doesn't match the one issued to this browser", async () => {
+    // A verifier + state cookie pair as GET /auth/google would have set,
+    // but the query string's state deliberately doesn't match -- this is
+    // exactly the shape of a forged/replayed callback URL.
+    const resp = await app.handle(
+      new Request("http://localhost/auth/google/callback?code=some-code&state=wrong-state", {
+        headers: { cookie: "google_oauth_verifier=some-verifier; google_oauth_state=real-state" },
+      }),
+    );
+    expect(resp.status).toBe(400);
   });
 });
 ```
@@ -1895,10 +1919,11 @@ import {
   OtpRequestBodySchema,
   OtpVerifyBodySchema,
   RegisterBodySchema,
+  SimpleSuccessSchema,
   UserSchema,
 } from "@galangdana/contracts";
 import type { User } from "@galangdana/db";
-import { Elysia, t } from "elysia";
+import { type Cookie, Elysia, t } from "elysia";
 import { generatePkceVerifier, generateState, pkceChallengeFromVerifier } from "../auth/pkce";
 import {
   buildGoogleAuthUrl,
@@ -1921,6 +1946,24 @@ function toUserResponse(user: User) {
     name: user.name,
     avatarUrl: user.avatarUrl,
   };
+}
+
+/**
+ * Elysia's cookie jar (createCookieJar) always returns a real Cookie proxy
+ * for any name accessed on it -- verified empirically against this repo's
+ * installed Elysia 1.1.26 -- but the jar's type is a plain
+ * Record<string, Cookie<unknown>> index signature, so this repo's
+ * noUncheckedIndexedAccess tsconfig setting sees `cookie[name]` as possibly
+ * undefined. `cookie[name]?.value = x` isn't valid assignment syntax
+ * either way, so every write site needs this narrowed -- centralized here
+ * once instead of a bare `!` scattered through every handler.
+ */
+function requiredCookie(
+  jar: Record<string, Cookie<unknown> | undefined>,
+  name: string,
+): Cookie<unknown> {
+  // biome-ignore lint/style/noNonNullAssertion: see function doc comment above
+  return jar[name]!;
 }
 
 /**
@@ -1950,7 +1993,7 @@ export const authRoute = new Elysia({ prefix: "/auth" })
       }
       return { success: true };
     },
-    { body: OtpRequestBodySchema },
+    { body: OtpRequestBodySchema, response: { 200: SimpleSuccessSchema, 429: AuthErrorSchema } },
   )
   .post(
     "/otp/verify",
@@ -1961,11 +2004,12 @@ export const authRoute = new Elysia({ prefix: "/auth" })
         return { error: result.reason ?? "verification_failed" };
       }
       const { token, expiresAt } = await createSession(result.user.id);
-      cookie[SESSION_COOKIE].value = token;
-      cookie[SESSION_COOKIE].httpOnly = true;
-      cookie[SESSION_COOKIE].path = "/";
-      cookie[SESSION_COOKIE].maxAge = SESSION_MAX_AGE_SECONDS;
-      cookie[SESSION_COOKIE].expires = expiresAt;
+      const sessionCookie = requiredCookie(cookie, SESSION_COOKIE);
+      sessionCookie.value = token;
+      sessionCookie.httpOnly = true;
+      sessionCookie.path = "/";
+      sessionCookie.maxAge = SESSION_MAX_AGE_SECONDS;
+      sessionCookie.expires = expiresAt;
       return { user: toUserResponse(result.user) };
     },
     { body: OtpVerifyBodySchema, response: { 200: AuthSuccessSchema, 401: AuthErrorSchema } },
@@ -1979,11 +2023,12 @@ export const authRoute = new Elysia({ prefix: "/auth" })
         return { error: result.reason ?? "registration_failed" };
       }
       const { token, expiresAt } = await createSession(result.user.id);
-      cookie[SESSION_COOKIE].value = token;
-      cookie[SESSION_COOKIE].httpOnly = true;
-      cookie[SESSION_COOKIE].path = "/";
-      cookie[SESSION_COOKIE].maxAge = SESSION_MAX_AGE_SECONDS;
-      cookie[SESSION_COOKIE].expires = expiresAt;
+      const sessionCookie = requiredCookie(cookie, SESSION_COOKIE);
+      sessionCookie.value = token;
+      sessionCookie.httpOnly = true;
+      sessionCookie.path = "/";
+      sessionCookie.maxAge = SESSION_MAX_AGE_SECONDS;
+      sessionCookie.expires = expiresAt;
       return { user: toUserResponse(result.user) };
     },
     { body: RegisterBodySchema, response: { 200: AuthSuccessSchema, 409: AuthErrorSchema } },
@@ -1997,50 +2042,75 @@ export const authRoute = new Elysia({ prefix: "/auth" })
         return { error: result.reason ?? "login_failed" };
       }
       const { token, expiresAt } = await createSession(result.user.id);
-      cookie[SESSION_COOKIE].value = token;
-      cookie[SESSION_COOKIE].httpOnly = true;
-      cookie[SESSION_COOKIE].path = "/";
-      cookie[SESSION_COOKIE].maxAge = SESSION_MAX_AGE_SECONDS;
-      cookie[SESSION_COOKIE].expires = expiresAt;
+      const sessionCookie = requiredCookie(cookie, SESSION_COOKIE);
+      sessionCookie.value = token;
+      sessionCookie.httpOnly = true;
+      sessionCookie.path = "/";
+      sessionCookie.maxAge = SESSION_MAX_AGE_SECONDS;
+      sessionCookie.expires = expiresAt;
       return { user: toUserResponse(result.user) };
     },
     { body: LoginBodySchema, response: { 200: AuthSuccessSchema, 401: AuthErrorSchema } },
   )
-  .post("/logout", async ({ sessionToken, cookie, set }) => {
-    if (sessionToken) {
-      await revokeSession(sessionToken);
-    }
-    cookie[SESSION_COOKIE].value = "";
-    cookie[SESSION_COOKIE].maxAge = 0;
-    cookie[SESSION_COOKIE].path = "/";
-    set.status = 200;
-    return { success: true };
-  })
-  .get("/me", ({ user, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { error: "not_authenticated" };
-    }
-    return { user: toUserResponse(user) };
-  })
+  .post(
+    "/logout",
+    async ({ sessionToken, cookie, set }) => {
+      if (sessionToken) {
+        await revokeSession(sessionToken);
+      }
+      const sessionCookie = requiredCookie(cookie, SESSION_COOKIE);
+      sessionCookie.value = "";
+      sessionCookie.maxAge = 0;
+      sessionCookie.path = "/";
+      set.status = 200;
+      return { success: true };
+    },
+    { response: { 200: SimpleSuccessSchema } },
+  )
+  .get(
+    "/me",
+    ({ user, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      return { user: toUserResponse(user) };
+    },
+    { response: { 200: AuthSuccessSchema, 401: AuthErrorSchema } },
+  )
   .get("/google", async ({ cookie, set }) => {
     const state = generateState();
     const verifier = generatePkceVerifier();
     const challenge = await pkceChallengeFromVerifier(verifier);
-    cookie.google_oauth_verifier.value = verifier;
-    cookie.google_oauth_verifier.httpOnly = true;
-    cookie.google_oauth_verifier.path = "/";
-    cookie.google_oauth_verifier.maxAge = 600;
+    const verifierCookie = requiredCookie(cookie, "google_oauth_verifier");
+    verifierCookie.value = verifier;
+    verifierCookie.httpOnly = true;
+    verifierCookie.path = "/";
+    verifierCookie.maxAge = 600;
+    // A second, separate cookie from the PKCE verifier: PKCE alone already
+    // defeats the classic OAuth login-CSRF attack here (Google's token
+    // endpoint rejects a code exchanged with a verifier that doesn't match
+    // the code_challenge the code was originally issued for, so a forged
+    // callback using an attacker's own authorization code fails at the
+    // token-exchange step regardless of state). state is still checked as
+    // standard defense-in-depth rather than generated and silently ignored
+    // -- verified empirically (matching state -> 200, mismatched -> 400).
+    const stateCookie = requiredCookie(cookie, "google_oauth_state");
+    stateCookie.value = state;
+    stateCookie.httpOnly = true;
+    stateCookie.path = "/";
+    stateCookie.maxAge = 600;
     set.status = 302;
-    set.headers["location"] = buildGoogleAuthUrl(state, challenge);
+    set.headers.location = buildGoogleAuthUrl(state, challenge);
     return "";
   })
   .get(
     "/google/callback",
     async ({ query, cookie, set }) => {
       const verifier = cookie.google_oauth_verifier?.value;
+      const expectedState = cookie.google_oauth_state?.value;
       const code = query.code;
-      if (!verifier || !code) {
+      if (!verifier || !code || !expectedState || query.state !== expectedState) {
         set.status = 400;
         return { error: "missing_code_or_verifier" };
       }
@@ -2048,15 +2118,20 @@ export const authRoute = new Elysia({ prefix: "/auth" })
       const profile = await fetchGoogleUserInfo(tokens.access_token);
       const user = await findOrCreateGoogleUser(profile);
       const { token, expiresAt } = await createSession(user.id);
-      cookie[SESSION_COOKIE].value = token;
-      cookie[SESSION_COOKIE].httpOnly = true;
-      cookie[SESSION_COOKIE].path = "/";
-      cookie[SESSION_COOKIE].maxAge = SESSION_MAX_AGE_SECONDS;
-      cookie[SESSION_COOKIE].expires = expiresAt;
-      cookie.google_oauth_verifier.value = "";
-      cookie.google_oauth_verifier.maxAge = 0;
+      const sessionCookie = requiredCookie(cookie, SESSION_COOKIE);
+      sessionCookie.value = token;
+      sessionCookie.httpOnly = true;
+      sessionCookie.path = "/";
+      sessionCookie.maxAge = SESSION_MAX_AGE_SECONDS;
+      sessionCookie.expires = expiresAt;
+      const clearedVerifierCookie = requiredCookie(cookie, "google_oauth_verifier");
+      clearedVerifierCookie.value = "";
+      clearedVerifierCookie.maxAge = 0;
+      const clearedStateCookie = requiredCookie(cookie, "google_oauth_state");
+      clearedStateCookie.value = "";
+      clearedStateCookie.maxAge = 0;
       set.status = 302;
-      set.headers["location"] = process.env.PUBLIC_WEB_URL ?? "http://localhost:5173";
+      set.headers.location = process.env.PUBLIC_WEB_URL ?? "http://localhost:5173";
       return "";
     },
     { query: t.Object({ code: t.Optional(t.String()), state: t.Optional(t.String()) }) },
