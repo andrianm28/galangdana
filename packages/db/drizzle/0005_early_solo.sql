@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "otp_challenges_phone_created_at_idx" ON "otp_challenges" USING btree ("phone","created_at");
