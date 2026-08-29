@@ -112,8 +112,9 @@ galangdana/
   "scripts": {
     "dev:web": "bun run --cwd apps/web dev",
     "dev:api": "bun run --cwd apps/api dev",
-    "build": "bun run --filter='*' build",
-    "test": "bun test",
+    "build": "bun run --cwd apps/web build",
+    "test": "bun test packages apps/api",
+    "test:web": "bun run --cwd apps/web test",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "bun run --filter='*' typecheck",
@@ -127,6 +128,8 @@ galangdana/
   }
 }
 ```
+
+`test` is scoped to `packages apps/api` (not a bare `bun test`) because `bun test`'s recursive file discovery would otherwise also pick up `apps/web`'s `*.test.ts` files, which are written against `vitest` (Task 9) rather than `bun:test` and would misbehave under Bun's test runner. `apps/web`'s suite runs separately via `test:web` (and is wired into CI as its own step in Task 10). Likewise `build` points directly at `apps/web`'s build — it is the only package with a real build step at this phase; `packages/*` and `apps/api` run directly under Bun with no compile step.
 
 - [ ] **Step 2: Write `bunfig.toml`**
 
@@ -1013,11 +1016,23 @@ export * from "./campaigns";
 
 `packages/db/src/__tests__/campaigns.test.ts`:
 ```ts
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { db } from "../client";
 import { campaigns, displayAmount } from "../schema/campaigns";
+import { runSeed } from "../seed/run-seed";
 
 describe("campaigns dual model", () => {
+  // campaigns.category_id has a NOT NULL foreign key into campaign_categories.
+  // This test file must not assume categories.test.ts (Task 5) already ran
+  // and left rows behind — bun:test's file execution order is not guaranteed
+  // to match task order (alphabetically "campaigns.test.ts" sorts BEFORE
+  // "categories.test.ts"), and a fresh database has no categories at all.
+  // runSeed() is idempotent (onConflictDoNothing), so calling it here is safe
+  // regardless of what has or hasn't already run.
+  beforeAll(async () => {
+    await runSeed();
+  });
+
   test("a goal-model campaign requires goal_amount and allows expires_at", async () => {
     const [row] = await db
       .insert(campaigns)
@@ -1246,6 +1261,8 @@ git commit -m "feat(contracts): add shared HealthResponse TypeBox schema"
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
@@ -1256,9 +1273,14 @@ git commit -m "feat(contracts): add shared HealthResponse TypeBox schema"
     "@galangdana/contracts": "workspace:*",
     "@galangdana/money": "workspace:*",
     "elysia": "^1.1.26"
+  },
+  "devDependencies": {
+    "@sinclair/typebox": "^0.33.17"
   }
 }
 ```
+
+The `main`/`types` fields matter beyond convention: `apps/web` (Task 9) does `import type { App } from "@galangdana/api"` — without an entry point declared here, TypeScript has no way to resolve that import through the workspace symlink. `@sinclair/typebox` is a devDependency (not a runtime `dependencies` entry) because it is only imported directly by this task's test file (`Value.Check` against `HealthResponseSchema`), never by `src/index.ts` or `src/routes/health.ts`.
 
 `apps/api/tsconfig.json`:
 ```json
@@ -1714,8 +1736,11 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Unit tests
-        run: bun test
+      - name: Unit tests (packages + api)
+        run: bun run test
+
+      - name: Unit tests (web)
+        run: bun run test:web
 
       - name: Build web
         run: bun run --cwd apps/web build
@@ -1750,7 +1775,7 @@ git commit -m "ci: add GitHub Actions pipeline with lint, typecheck, tests, buil
 
 - [ ] **Step 5: Push and verify the pipeline is green**
 
-Run: push the branch and open the Actions tab (or run the same steps locally in order: `bun install && bun run lint && bun run db:migrate && bun run typecheck && bun test && bun run --cwd apps/web build`)
+Run: push the branch and open the Actions tab (or run the same steps locally in order: `bun install && bun run lint && bun run db:migrate && bun run typecheck && bun run test && bun run test:web && bun run --cwd apps/web build`)
 Expected: every step exits 0.
 
 ---
