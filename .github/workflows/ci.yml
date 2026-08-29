@@ -61,41 +61,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      minio:
-        # NOT minio/minio:latest: GitHub Actions' `services:` schema has no
-        # `command:`/`entrypoint:` key (confirmed against GitHub's own docs
-        # for the equivalent jobs.<job_id>.container schema, which
-        # explicitly says "The --network and --entrypoint options are not
-        # supported" for `options:`, and against a still-open GitHub
-        # community discussion -- #52675 -- confirming no such key exists
-        # for `services:` either), and the plain minio/minio image's
-        # default CMD only prints its usage/help and exits (verified
-        # directly: `docker run minio/minio:latest` with no args exits 0
-        # immediately without ever binding port 9000) -- there is no
-        # supported way to pass it the `server /data` arguments
-        # docker-compose.yml's own `command:` field gives it locally.
-        # fclairamb/minio-github-actions is a small, single-purpose image
-        # (its entrypoint is `minio ${MINIO_COMMAND:-server}
-        # ${MINIO_DIR:-/data}`, i.e. it bakes the missing command into the
-        # image itself) built and published specifically to solve this
-        # exact GitHub Actions limitation -- unmaintained since 2021 and
-        # bundles a genuinely old MinIO release, but pinned here by digest
-        # and verified end-to-end locally (health endpoint, our
-        # MINIO_ROOT_USER/PASSWORD, bucket creation, an anonymous-download
-        # policy, a real upload-cover-images.ts run, and an anonymous curl
-        # GET of the uploaded object all succeeded against it -- see Task
-        # 14's report). Its bundled MinIO predates the console's move to a
-        # separate port, so there's no 9001 to map here.
-        image: fclairamb/minio-github-actions@sha256:2e0792e6f99964a1c53b4c179b14392e71db495ef6d5ad8914410704fc792a50
-        env:
-          MINIO_ROOT_USER: galangdana
-          MINIO_ROOT_PASSWORD: galangdana-dev-secret
-        ports: ["9000:9000"]
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
       # Port 5432 here (not 55434) is correct and intentional: this runs in
       # an isolated GitHub Actions runner with its own services:postgres
@@ -142,6 +107,30 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      # Not a services: entry: that schema has no command/entrypoint
+      # override (confirmed against GitHub's own docs and community
+      # discussion #52675), and the plain minio/minio image's default CMD
+      # just prints usage and exits without binding port 9000. A `docker
+      # run` step has no such restriction, so this uses the real, official,
+      # actively-maintained image with its actual `server /data` command --
+      # the container is reachable at localhost:9000 exactly like a
+      # services: container would be, since this job has no `container:` key.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=galangdana \
+            -e MINIO_ROOT_PASSWORD=galangdana-dev-secret \
+            minio/minio:latest server /data
+
+      - name: Wait for MinIO
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "MinIO did not start in time" >&2
+          exit 1
 
       - name: Lint
         run: bun run lint
