@@ -1319,13 +1319,15 @@ git commit -m "feat(contracts): add shared HealthResponse TypeBox schema"
   "dependencies": {
     "@galangdana/contracts": "workspace:*",
     "@galangdana/money": "workspace:*",
-    "elysia": "^1.1.26"
+    "elysia": "1.1.26"
   },
   "devDependencies": {
     "@sinclair/typebox": "^0.33.17"
   }
 }
 ```
+
+`elysia` is pinned to the exact version `1.1.26`, not a caret range. Elysia 1.4.x requires `@sinclair/typebox >= 0.34.0`, and its API is incompatible with the `^0.33.17` this plan pins everywhere else (`t.Module is not a function` at runtime) — a caret range here would silently resolve past that boundary on a fresh `bun install`. Confirmed by installing: `elysia@^1.1.26` resolves to `1.4.30` today, which crashes; `elysia@1.1.26` exact does not.
 
 The `main`/`types` fields matter beyond convention: `apps/web` (Task 9) does `import type { App } from "@galangdana/api"` — without an entry point declared here, TypeScript has no way to resolve that import through the workspace symlink. `@sinclair/typebox` is a devDependency (not a runtime `dependencies` entry) because it is only imported directly by this task's test file (`Value.Check` against `HealthResponseSchema`), never by `src/index.ts` or `src/routes/health.ts`.
 
@@ -1466,7 +1468,7 @@ git commit -m "feat(api): bootstrap ElysiaJS app with BigInt-safe response seria
     "typecheck": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "@elysiajs/eden": "^1.1.3",
+    "@elysiajs/eden": "1.1.3",
     "@galangdana/api": "workspace:*",
     "@galangdana/contracts": "workspace:*"
   },
@@ -1481,6 +1483,8 @@ git commit -m "feat(api): bootstrap ElysiaJS app with BigInt-safe response seria
   }
 }
 ```
+
+`@elysiajs/eden` is pinned to the exact version `1.1.3`, not a caret range, for the same reason `apps/api`'s `elysia` dependency (Task 8) is pinned exactly: `@elysiajs/eden@^1.1.3` resolves to `1.4.9` today, which declares a peer dependency on `elysia >= 1.4.19` — directly incompatible with the `elysia@1.1.26` this workspace actually installs. `@elysiajs/eden@1.1.3` exact declares `elysia >= 1.1.0`, which is satisfied. Confirmed via `npm view` before this task was dispatched.
 
 - [ ] **Step 2: Write SvelteKit config**
 
