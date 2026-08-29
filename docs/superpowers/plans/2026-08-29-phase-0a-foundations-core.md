@@ -1714,8 +1714,8 @@ async function crawl(): Promise<{ visited: number; broken: string[] }> {
   const broken: string[] = [];
 
   while (queue.length > 0) {
-    const path = queue.shift()!;
-    if (seen.has(path)) continue;
+    const path = queue.shift();
+    if (path === undefined || seen.has(path)) continue;
     seen.add(path);
 
     const url = new URL(path, BASE_URL).toString();
@@ -1747,6 +1747,8 @@ if (broken.length > 0) {
 }
 console.log("No broken links.");
 ```
+
+`queue.shift()!` (non-null assertion) is replaced with an explicit `undefined` check: `biome.json`'s `linter.rules.recommended` set (Task 1) enables `noNonNullAssertion`, so the brief's original line fails `bun run lint` — one of Task 10's own CI steps — even though the assertion was runtime-safe (the enclosing `while (queue.length > 0)` guarantees `shift()` returns a value). The explicit check is behaviorally identical and satisfies the rule.
 
 - [ ] **Step 2: Verify the link-check script locally**
 
