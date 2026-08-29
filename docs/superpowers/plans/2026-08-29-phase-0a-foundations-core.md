@@ -112,8 +112,9 @@ galangdana/
   "scripts": {
     "dev:web": "bun run --cwd apps/web dev",
     "dev:api": "bun run --cwd apps/api dev",
-    "build": "bun run --filter='*' build",
-    "test": "bun test",
+    "build": "bun run --cwd apps/web build",
+    "test": "bun test packages apps/api",
+    "test:web": "bun run --cwd apps/web test",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "bun run --filter='*' typecheck",
@@ -127,6 +128,8 @@ galangdana/
   }
 }
 ```
+
+`test` is scoped to `packages apps/api` (not a bare `bun test`) because `bun test`'s recursive file discovery would otherwise also pick up `apps/web`'s `*.test.ts` files, which are written against `vitest` (Task 9) rather than `bun:test` and would misbehave under Bun's test runner. `apps/web`'s suite runs separately via `test:web` (and is wired into CI as its own step in Task 10). Likewise `build` points directly at `apps/web`'s build — it is the only package with a real build step at this phase; `packages/*` and `apps/api` run directly under Bun with no compile step.
 
 - [ ] **Step 2: Write `bunfig.toml`**
 
@@ -244,7 +247,9 @@ git commit -m "chore: scaffold bun workspace monorepo root"
 - Test: `scripts/verify-infra.sh`
 
 **Interfaces:**
-- Produces: five running services on fixed local ports that every later task (db, search, media, mail) connects to: `postgres:5432`, `redis:6379`, `minio:9000`/`9001`, `mailpit:1025`/`8025`, `meilisearch:7700`.
+- Produces: five running services on fixed local ports that every later task (db, search, media, mail) connects to: `postgres:55434` (host) → `5432` (container), `redis:6379`, `minio:9000`/`9001`, `mailpit:1025`/`8025`, `meilisearch:7700`.
+
+**Note on the Postgres port:** this plan is executed on a shared development machine that already has an unrelated project's Postgres container bound to host port 5432 (confirmed via `ss -ltn` before dispatch — do not investigate or touch that container, it belongs to different, unrelated work). To avoid the collision, this task's Postgres service maps host port **55434** to the container's internal 5432, and `.env.example` (Task 1) and `packages/db`'s connection defaults (Task 4) are updated to match. The CI workflow (Task 10) is unaffected and keeps port 5432 — GitHub Actions runners are isolated VMs with no such collision.
 
 - [ ] **Step 1: Write `docker-compose.yml`**
 
@@ -258,7 +263,7 @@ services:
       POSTGRES_USER: galangdana
       POSTGRES_PASSWORD: galangdana
       POSTGRES_DB: galangdana
-    ports: ["5432:5432"]
+    ports: ["55434:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U galangdana"]
@@ -306,7 +311,14 @@ services:
     ports: ["7700:7700"]
     volumes: ["meilidata:/meili_data"]
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:7700/health"]
+      # 127.0.0.1, not localhost: the getmeili/meilisearch image binds
+      # IPv4-only (0.0.0.0:7700), but this container's musl/busybox wget
+      # resolves "localhost" to ::1 first and gets refused there before ever
+      # trying IPv4 — confirmed by exec'ing in and diffing `wget localhost`
+      # (refused) against `wget 127.0.0.1` (succeeds) plus `ss -tlnp` showing
+      # no :::7700 listener. mailpit's healthcheck can keep "localhost" —
+      # its image listens dual-stack (:::8025), so it isn't affected.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7700/health"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -317,7 +329,17 @@ volumes:
   meilidata:
 ```
 
-- [ ] **Step 2: Write the infra verification script**
+- [ ] **Step 2: Update `.env.example`'s `DATABASE_URL` to match the adjusted Postgres port**
+
+Task 1 wrote `.env.example` with `DATABASE_URL=postgres://galangdana:galangdana@localhost:5432/galangdana`. Change the port to match this task's Postgres service:
+
+`.env.example` — change only this line:
+```
+DATABASE_URL=postgres://galangdana:galangdana@localhost:55434/galangdana
+```
+Leave every other line in `.env.example` unchanged.
+
+- [ ] **Step 3: Write the infra verification script**
 
 ```bash
 #!/usr/bin/env bash
@@ -345,16 +367,20 @@ docker compose ps
 exit 1
 ```
 
-- [ ] **Step 3: Bring infra up and verify**
+- [ ] **Step 4: Bring infra up and verify**
 
 Run: `docker compose up -d && chmod +x scripts/verify-infra.sh && ./scripts/verify-infra.sh`
 Expected: prints "All services healthy." within 60 seconds.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add docker-compose.yml scripts/verify-infra.sh
-git commit -m "chore: add docker-compose infra (postgres, redis, minio, mailpit, meilisearch)"
+git add docker-compose.yml .env.example scripts/verify-infra.sh
+git commit -m "chore: add docker-compose infra (postgres, redis, minio, mailpit, meilisearch)
+
+Postgres host port set to 55434 (not the default 5432) to avoid a
+collision with an unrelated project already running on this shared
+development machine."
 ```
 
 ---
@@ -377,7 +403,7 @@ This is the package the Global Constraints section exists to protect. Every mone
   - `type Money = { amount: bigint; currency: Currency }`
   - `money(amount: bigint | number, currency: Currency): Money`
   - `addMoney(a: Money, b: Money): Money` (throws on currency mismatch)
-  - `formatMoney(m: Money, locale?: string): string` (id-ID Rupiah grouping for IDR, e.g. `Rp1.180.879.232`; standard `$` grouping for USD converting cents → dollars for display)
+  - `formatMoney(m: Money): string` (id-ID Rupiah grouping for IDR, e.g. `Rp1.180.879.232`; standard `$` grouping for USD converting cents → dollars for display — no `locale` parameter: this platform is Indonesian-locale for IDR and en-US for USD by product requirement, not general-purpose i18n, so a speculative locale override was correctly left out of the actual implementation in Step 4 below)
   - `moneyToJSON(m: Money): { amount: string; currency: Currency }` and `moneyFromJSON(v: { amount: string; currency: Currency }): Money`
   - `bigIntSafeJSONStringify(value: unknown): string` — drop-in replacement for `JSON.stringify` that serializes any `bigint` as a string instead of throwing
 
@@ -669,7 +695,7 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? "postgres://galangdana:galangdana@localhost:5432/galangdana",
+    url: process.env.DATABASE_URL ?? "postgres://galangdana:galangdana@localhost:55434/galangdana",
   },
 });
 ```
@@ -683,7 +709,7 @@ import postgres from "postgres";
 import * as schema from "./schema/index";
 
 const connectionString =
-  process.env.DATABASE_URL ?? "postgres://galangdana:galangdana@localhost:5432/galangdana";
+  process.env.DATABASE_URL ?? "postgres://galangdana:galangdana@localhost:55434/galangdana";
 
 const queryClient = postgres(connectionString);
 
@@ -1013,11 +1039,34 @@ export * from "./campaigns";
 
 `packages/db/src/__tests__/campaigns.test.ts`:
 ```ts
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { inArray } from "drizzle-orm";
 import { db } from "../client";
 import { campaigns, displayAmount } from "../schema/campaigns";
+import { runSeed } from "../seed/run-seed";
+
+// The two positive-insert tests below use fixed slugs so they read clearly.
+// Unlike categories.test.ts's seed (idempotent via onConflictDoNothing),
+// these are plain inserts — re-running this file against the SAME persistent
+// local Postgres (not a fresh CI container) would otherwise fail on the
+// second run with "duplicate key value violates unique constraint
+// campaigns_slug_unique". Delete any leftover rows with these exact slugs
+// first so the file is safe to run any number of times locally.
+const TEST_SLUGS = ["bantu-warga-kalimantan-test", "sumur-bor-masjid-test"];
 
 describe("campaigns dual model", () => {
+  // campaigns.category_id has a NOT NULL foreign key into campaign_categories.
+  // This test file must not assume categories.test.ts (Task 5) already ran
+  // and left rows behind — bun:test's file execution order is not guaranteed
+  // to match task order (alphabetically "campaigns.test.ts" sorts BEFORE
+  // "categories.test.ts"), and a fresh database has no categories at all.
+  // runSeed() is idempotent (onConflictDoNothing), so calling it here is safe
+  // regardless of what has or hasn't already run.
+  beforeAll(async () => {
+    await runSeed();
+    await db.delete(campaigns).where(inArray(campaigns.slug, TEST_SLUGS));
+  });
+
   test("a goal-model campaign requires goal_amount and allows expires_at", async () => {
     const [row] = await db
       .insert(campaigns)
@@ -1174,6 +1223,11 @@ describe("HealthResponseSchema", () => {
   test("rejects a payload missing required fields", () => {
     expect(Value.Check(HealthResponseSchema, { status: "ok" })).toBe(false);
   });
+
+  test("rejects a payload whose timestamp is not a valid date-time", () => {
+    const payload = { status: "ok", service: "api", timestamp: "not-a-date" };
+    expect(Value.Check(HealthResponseSchema, payload)).toBe(false);
+  });
 });
 ```
 
@@ -1184,9 +1238,17 @@ Expected: FAIL — `Cannot find module './health'`.
 
 - [ ] **Step 4: Implement the schema**
 
+TypeBox 0.33.x's `Value.Check` treats any `format` keyword it doesn't recognize as an automatic validation failure — **not** a no-op. Without registering a `"date-time"` format checker, `Value.Check` returns `false` for every payload matching this schema, including genuinely valid ones (verified directly against the installed `@sinclair/typebox@0.33.17`: `Value.Check` on a fully valid payload returns `false` with error `"Unknown format 'date-time'"` when no checker is registered). So Step 1's first test cannot pass without this registration — it is required, not optional. The checker must be a real validator (`Date.parse`-based), not a stub that returns `true` unconditionally, or the third test above (rejecting a malformed timestamp) would wrongly pass.
+
 `packages/contracts/src/health.ts`:
 ```ts
-import { Type, type Static } from "@sinclair/typebox";
+import { FormatRegistry, Type, type Static } from "@sinclair/typebox";
+
+// Required: without a registered "date-time" checker, TypeBox's Value.Check
+// rejects every payload matching a schema that uses format: "date-time",
+// valid or not (see note above). Date.parse returning NaN is JavaScript's
+// standard way to detect an unparseable date string.
+FormatRegistry.Set("date-time", (value) => !Number.isNaN(Date.parse(value)));
 
 export const HealthResponseSchema = Type.Object({
   status: Type.Literal("ok"),
@@ -1200,7 +1262,7 @@ export type HealthResponse = Static<typeof HealthResponseSchema>;
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `cd packages/contracts && bun test`
-Expected: both tests PASS.
+Expected: all 3 tests PASS.
 
 - [ ] **Step 6: Write the barrel export**
 
@@ -1246,6 +1308,8 @@ git commit -m "feat(contracts): add shared HealthResponse TypeBox schema"
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
@@ -1255,10 +1319,17 @@ git commit -m "feat(contracts): add shared HealthResponse TypeBox schema"
   "dependencies": {
     "@galangdana/contracts": "workspace:*",
     "@galangdana/money": "workspace:*",
-    "elysia": "^1.1.26"
+    "elysia": "1.1.26"
+  },
+  "devDependencies": {
+    "@sinclair/typebox": "^0.33.17"
   }
 }
 ```
+
+`elysia` is pinned to the exact version `1.1.26`, not a caret range. Elysia 1.4.x requires `@sinclair/typebox >= 0.34.0`, and its API is incompatible with the `^0.33.17` this plan pins everywhere else (`t.Module is not a function` at runtime) — a caret range here would silently resolve past that boundary on a fresh `bun install`. Confirmed by installing: `elysia@^1.1.26` resolves to `1.4.30` today, which crashes; `elysia@1.1.26` exact does not.
+
+The `main`/`types` fields matter beyond convention: `apps/web` (Task 9) does `import type { App } from "@galangdana/api"` — without an entry point declared here, TypeScript has no way to resolve that import through the workspace symlink. `@sinclair/typebox` is a devDependency (not a runtime `dependencies` entry) because it is only imported directly by this task's test file (`Value.Check` against `HealthResponseSchema`), never by `src/index.ts` or `src/routes/health.ts`.
 
 `apps/api/tsconfig.json`:
 ```json
@@ -1397,7 +1468,7 @@ git commit -m "feat(api): bootstrap ElysiaJS app with BigInt-safe response seria
     "typecheck": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "@elysiajs/eden": "^1.1.3",
+    "@elysiajs/eden": "1.1.3",
     "@galangdana/api": "workspace:*",
     "@galangdana/contracts": "workspace:*"
   },
@@ -1412,6 +1483,8 @@ git commit -m "feat(api): bootstrap ElysiaJS app with BigInt-safe response seria
   }
 }
 ```
+
+`@elysiajs/eden` is pinned to the exact version `1.1.3`, not a caret range, for the same reason `apps/api`'s `elysia` dependency (Task 8) is pinned exactly: `@elysiajs/eden@^1.1.3` resolves to `1.4.9` today, which declares a peer dependency on `elysia >= 1.4.19` — directly incompatible with the `elysia@1.1.26` this workspace actually installs. `@elysiajs/eden@1.1.3` exact declares `elysia >= 1.1.0`, which is satisfied. Confirmed via `npm view` before this task was dispatched.
 
 - [ ] **Step 2: Write SvelteKit config**
 
@@ -1429,7 +1502,7 @@ export default {
 
 `apps/web/vite.config.ts`:
 ```ts
-import { sveltekit } from "@sveltejs/vite-plugin-svelte";
+import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 
 export default defineConfig({
@@ -1440,6 +1513,8 @@ export default defineConfig({
   },
 });
 ```
+
+`sveltekit()` is exported from `@sveltejs/kit/vite`, not `@sveltejs/vite-plugin-svelte` — confirmed against the installed package source (`@sveltejs/kit@2.70.3`'s `src/exports/vite/index.js` defines `export async function sveltekit(config)`; `@sveltejs/vite-plugin-svelte`'s source has no such export at all). Importing it from the wrong package fails to load the Vite config entirely.
 
 `apps/web/tsconfig.json`:
 ```json
@@ -1489,15 +1564,28 @@ export {};
 
 `apps/web/src/lib/api-client.ts`:
 ```ts
+import { env } from "$env/dynamic/public";
 import { treaty } from "@elysiajs/eden";
 import type { App } from "@galangdana/api";
 
-const API_URL = process.env.PUBLIC_API_URL ?? "http://localhost:3001";
+const API_URL = env.PUBLIC_API_URL ?? "http://localhost:3001";
 
 /**
  * Typed against the live Elysia `App` type from apps/api — renaming or
  * removing a route there is a compile error here, not a silent 404 at
  * runtime.
+ *
+ * Uses $env/dynamic/public, not raw process.env: this module is imported
+ * by a universal +page.ts load, which runs both server-side (SSR) and
+ * client-side (hydration, then every later client-side navigation).
+ * Vite's client build silently substitutes process.env with an empty
+ * object rather than throwing, so a raw process.env.PUBLIC_API_URL read
+ * doesn't crash the browser bundle -- it just always evaluates to
+ * undefined there, falling back to localhost regardless of what the
+ * server's real PUBLIC_API_URL is. $env/dynamic/public carries the
+ * actual value through to the client correctly (verified: built and
+ * served the app with a distinct PUBLIC_API_URL, confirmed it appears
+ * in the served page for client-side use, not just the SSR output).
  */
 export const api = treaty<App>(API_URL);
 ```
@@ -1626,8 +1714,8 @@ async function crawl(): Promise<{ visited: number; broken: string[] }> {
   const broken: string[] = [];
 
   while (queue.length > 0) {
-    const path = queue.shift()!;
-    if (seen.has(path)) continue;
+    const path = queue.shift();
+    if (path === undefined || seen.has(path)) continue;
     seen.add(path);
 
     const url = new URL(path, BASE_URL).toString();
@@ -1659,6 +1747,8 @@ if (broken.length > 0) {
 }
 console.log("No broken links.");
 ```
+
+`queue.shift()!` (non-null assertion) is replaced with an explicit `undefined` check: `biome.json`'s `linter.rules.recommended` set (Task 1) enables `noNonNullAssertion`, so the brief's original line fails `bun run lint` — one of Task 10's own CI steps — even though the assertion was runtime-safe (the enclosing `while (queue.length > 0)` guarantees `shift()` returns a value). The explicit check is behaviorally identical and satisfies the rule.
 
 - [ ] **Step 2: Verify the link-check script locally**
 
@@ -1693,6 +1783,11 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      # Port 5432 here (not 55434) is correct and intentional: this runs in
+      # an isolated GitHub Actions runner with its own services:postgres
+      # container above, bound to the default 5432 with no collision — the
+      # 55434 port only exists to dodge an unrelated container on the shared
+      # dev machine this plan is executed on (see Task 2's port note).
       DATABASE_URL: postgres://galangdana:galangdana@localhost:5432/galangdana
       PUBLIC_API_URL: http://localhost:3001
     steps:
@@ -1714,8 +1809,11 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Unit tests
-        run: bun test
+      - name: Unit tests (packages + api)
+        run: bun run test
+
+      - name: Unit tests (web)
+        run: bun run test:web
 
       - name: Build web
         run: bun run --cwd apps/web build
@@ -1750,7 +1848,7 @@ git commit -m "ci: add GitHub Actions pipeline with lint, typecheck, tests, buil
 
 - [ ] **Step 5: Push and verify the pipeline is green**
 
-Run: push the branch and open the Actions tab (or run the same steps locally in order: `bun install && bun run lint && bun run db:migrate && bun run typecheck && bun test && bun run --cwd apps/web build`)
+Run: push the branch and open the Actions tab (or run the same steps locally in order: `bun install && bun run lint && bun run db:migrate && bun run typecheck && bun run test && bun run test:web && bun run --cwd apps/web build`)
 Expected: every step exits 0.
 
 ---

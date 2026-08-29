@@ -1,0 +1,23 @@
+{
+  "name": "@galangdana/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/client.ts",
+  "types": "src/client.ts",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run src/migrate.ts",
+    "db:seed": "bun run src/seed/run-seed.ts"
+  },
+  "dependencies": {
+    "@galangdana/money": "workspace:*",
+    "drizzle-orm": "^0.36.4",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.28.1"
+  }
+}
