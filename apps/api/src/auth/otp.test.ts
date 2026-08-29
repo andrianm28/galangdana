@@ -74,4 +74,35 @@ describe("requestOtp / verifyOtp", () => {
 
     expect(second.user?.id).toBe(firstUserId);
   });
+
+  test("resending a code (two outstanding challenges) still verifies against the latest one", async () => {
+    const sms = new CapturingSmsProvider();
+    await requestOtp(TEST_PHONE, sms);
+    // First code is captured only to prove it's genuinely a different value
+    // (sanity: this scenario really produced two distinct challenges).
+    // biome-ignore lint/style/noNonNullAssertion: requestOtp above always calls sendOtp before returning
+    const firstCode = sms.lastCode!;
+
+    await requestOtp(TEST_PHONE, sms);
+    // biome-ignore lint/style/noNonNullAssertion: requestOtp above always calls sendOtp before returning
+    const secondCode = sms.lastCode!;
+
+    // Sanity check that this scenario really does leave two outstanding,
+    // unconsumed challenges for the phone -- the exact situation the
+    // ascending-orderBy bug broke (it kept matching the superseded first
+    // challenge instead of this newer one).
+    const outstanding = await db
+      .select()
+      .from(otpChallenges)
+      .where(eq(otpChallenges.phone, TEST_PHONE));
+    expect(outstanding.length).toBe(2);
+    expect(firstCode).not.toBe(secondCode);
+
+    // Entering the code from the SECOND (most recent) SMS must succeed. With
+    // the ascending-orderBy bug, this would instead be checked against the
+    // FIRST challenge's hash and fail with "incorrect_code".
+    const result = await verifyOtp(TEST_PHONE, secondCode);
+    expect(result.success).toBe(true);
+    expect(result.user?.phone).toBe(TEST_PHONE);
+  });
 });
