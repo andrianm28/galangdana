@@ -1502,7 +1502,7 @@ export default {
 
 `apps/web/vite.config.ts`:
 ```ts
-import { sveltekit } from "@sveltejs/vite-plugin-svelte";
+import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 
 export default defineConfig({
@@ -1513,6 +1513,8 @@ export default defineConfig({
   },
 });
 ```
+
+`sveltekit()` is exported from `@sveltejs/kit/vite`, not `@sveltejs/vite-plugin-svelte` — confirmed against the installed package source (`@sveltejs/kit@2.70.3`'s `src/exports/vite/index.js` defines `export async function sveltekit(config)`; `@sveltejs/vite-plugin-svelte`'s source has no such export at all). Importing it from the wrong package fails to load the Vite config entirely.
 
 `apps/web/tsconfig.json`:
 ```json
