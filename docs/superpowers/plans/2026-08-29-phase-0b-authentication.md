@@ -1274,6 +1274,7 @@ import {
   exchangeGoogleCode,
   fetchGoogleUserInfo,
   findOrCreateGoogleUser,
+  type GoogleFetch,
 } from "./google-oauth";
 
 describe("buildGoogleAuthUrl", () => {
@@ -1292,7 +1293,7 @@ describe("exchangeGoogleCode", () => {
   test("posts the code and verifier to Google's token endpoint and returns the tokens", async () => {
     let capturedUrl: string | undefined;
     let capturedBody: string | undefined;
-    const mockFetch: typeof fetch = async (url, init) => {
+    const mockFetch: GoogleFetch = async (url, init) => {
       capturedUrl = String(url);
       capturedBody = String(init?.body);
       return new Response(JSON.stringify({ access_token: "mock-access-token", id_token: "mock-id-token" }), {
@@ -1312,7 +1313,7 @@ describe("exchangeGoogleCode", () => {
 describe("fetchGoogleUserInfo", () => {
   test("sends the access token as a bearer header and returns the profile", async () => {
     let capturedAuth: string | null = null;
-    const mockFetch: typeof fetch = async (_url, init) => {
+    const mockFetch: GoogleFetch = async (_url, init) => {
       capturedAuth = new Headers(init?.headers).get("authorization");
       return new Response(
         JSON.stringify({ sub: "google-sub-mock-1", email: "mock@example.test", name: "Mock User" }),
@@ -1403,6 +1404,15 @@ export function buildGoogleAuthUrl(state: string, codeChallenge: string): string
   return url.toString();
 }
 
+// A narrow callable type, not `typeof fetch`: Bun's global `fetch` is a
+// function+namespace merge (it also carries a static `.preconnect` method),
+// so under this repo's tsconfig (no DOM lib) a plain mock function assigned
+// to a `typeof fetch`-typed parameter fails to typecheck ("Property
+// 'preconnect' is missing") even though it's perfectly callable at runtime.
+// Reproduced and confirmed against this repo's actual tsconfig before this
+// plan was corrected.
+export type GoogleFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
 export interface GoogleTokens {
   access_token: string;
   id_token?: string;
@@ -1411,7 +1421,7 @@ export interface GoogleTokens {
 export async function exchangeGoogleCode(
   code: string,
   codeVerifier: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: GoogleFetch = fetch,
 ): Promise<GoogleTokens> {
   const body = new URLSearchParams({
     client_id: googleClientId(),
@@ -1442,7 +1452,7 @@ export interface GoogleProfile {
 
 export async function fetchGoogleUserInfo(
   accessToken: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: GoogleFetch = fetch,
 ): Promise<GoogleProfile> {
   const response = await fetchImpl(GOOGLE_USERINFO_URL, {
     headers: { authorization: `Bearer ${accessToken}` },
@@ -1465,31 +1475,47 @@ export async function findOrCreateGoogleUser(profile: GoogleProfile): Promise<Us
     return linked.user;
   }
 
-  const [existingByEmail] = await db.select().from(users).where(eq(users.email, profile.email));
-  if (existingByEmail) {
-    await db
-      .insert(oauthAccounts)
-      .values({ userId: existingByEmail.id, provider: "google", providerAccountId: profile.sub });
-    return existingByEmail;
-  }
-
+  // Atomic insert-or-select on users.email, not a SELECT then a
+  // conditional INSERT: two concurrent signups for the SAME email via
+  // DIFFERENT auth methods (e.g. this Google flow and registerWithEmail's
+  // email/password path both completing around the same instant) could
+  // otherwise both pass a "no existing user" check, and this function's
+  // insert had NO conflict guard at all -- it would throw an unhandled
+  // unique-constraint exception instead of gracefully picking up whichever
+  // row actually won. onConflictDoNothing makes a colliding insert affect
+  // zero rows (verified empirically: a pre-existing row causes this insert
+  // to return undefined, and a plain SELECT then finds that same row).
   const [created] = await db
     .insert(users)
     .values({ email: profile.email, name: profile.name, avatarUrl: profile.picture })
+    .onConflictDoNothing({ target: users.email })
     .returning();
-  // biome-ignore lint/style/noNonNullAssertion: insert().returning() on a single-row insert always returns that row
-  const createdUser = created!;
+
+  const [existing] = created ? [] : await db.select().from(users).where(eq(users.email, profile.email));
+  const user = created ?? existing;
+  if (!user) {
+    throw new Error(`findOrCreateGoogleUser: no user found for ${profile.email} after insert-or-select`);
+  }
+
+  // Same reasoning applied to the link itself: two truly concurrent Google
+  // sign-ins for the same profile (e.g. two browser tabs) could both reach
+  // this point and both try to link the same (provider, providerAccountId)
+  // pair -- onConflictDoNothing on the composite unique index makes the
+  // second one a no-op instead of a thrown exception. Verified empirically
+  // against the real composite unique index.
   await db
     .insert(oauthAccounts)
-    .values({ userId: createdUser.id, provider: "google", providerAccountId: profile.sub });
-  return createdUser;
+    .values({ userId: user.id, provider: "google", providerAccountId: profile.sub })
+    .onConflictDoNothing({ target: [oauthAccounts.provider, oauthAccounts.providerAccountId] });
+
+  return user;
 }
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd apps/api && bun test auth/google-oauth.test.ts`
-Expected: all 7 tests PASS. No real Google credentials or network access are required — the token/userinfo tests use the injected mock `fetch`.
+Expected: all 6 tests PASS. No real Google credentials or network access are required — the token/userinfo tests use the injected mock `fetch`.
 
 - [ ] **Step 5: Typecheck and lint**
 
