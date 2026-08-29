@@ -778,7 +778,7 @@ Expected: FAIL — `Cannot find module './otp'`.
 ```ts
 import { db, otpChallenges, users } from "@galangdana/db";
 import type { User } from "@galangdana/db";
-import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { checkOtpRateLimit } from "./rate-limit";
 import { ConsoleSmsProvider, type SmsProvider } from "./sms-provider";
 
