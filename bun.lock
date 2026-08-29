@@ -10,6 +10,13 @@
         "typescript": "^5.7.2",
       },
     },
+    "packages/contracts": {
+      "name": "@galangdana/contracts",
+      "version": "0.0.0",
+      "dependencies": {
+        "@sinclair/typebox": "^0.33.17",
+      },
+    },
     "packages/db": {
       "name": "@galangdana/db",
       "version": "0.0.0",
@@ -97,9 +104,13 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.19.12", "", { "os": "win32", "cpu": "x64" }, "sha512-T1QyPSDCyMXaO3pzBkF96E8xMkiRYbUEZADd29SyPGabqxMViNoii+NcK7eWJAEoU6RZyEm5lVSIjTmcdoB9HA=="],
 
+    "@galangdana/contracts": ["@galangdana/contracts@workspace:packages/contracts"],
+
     "@galangdana/db": ["@galangdana/db@workspace:packages/db"],
 
     "@galangdana/money": ["@galangdana/money@workspace:packages/money"],
+
+    "@sinclair/typebox": ["@sinclair/typebox@0.33.24", "", {}, "sha512-91up4t0BLjfkCZ4Ap/BcgaPrMaX6n0I2YRu+kc03xGhLy9G3N05nbTpnK8q7GXdv0PxwUoxi67A8o3Wr5U7j3w=="],
 
     "@types/node": ["@types/node@26.4.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-faiGnoIrLH/V8cibOMEAZ8pMw6oXqSukl29ra4mN8GdaB2ZewzeaLj+INpV5N+Z1eKWzY+IzaIZH2EIR6YZRNQ=="],
 
