@@ -67,6 +67,10 @@
         "drizzle-kit": "^0.28.1",
       },
     },
+    "packages/media": {
+      "name": "@galangdana/media",
+      "version": "0.0.0",
+    },
     "packages/money": {
       "name": "@galangdana/money",
       "version": "0.0.0",
@@ -177,6 +181,8 @@
     "@galangdana/contracts": ["@galangdana/contracts@workspace:packages/contracts"],
 
     "@galangdana/db": ["@galangdana/db@workspace:packages/db"],
+
+    "@galangdana/media": ["@galangdana/media@workspace:packages/media"],
 
     "@galangdana/money": ["@galangdana/money@workspace:packages/money"],
 
