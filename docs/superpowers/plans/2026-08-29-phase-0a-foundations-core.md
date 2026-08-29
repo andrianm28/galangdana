@@ -403,7 +403,7 @@ This is the package the Global Constraints section exists to protect. Every mone
   - `type Money = { amount: bigint; currency: Currency }`
   - `money(amount: bigint | number, currency: Currency): Money`
   - `addMoney(a: Money, b: Money): Money` (throws on currency mismatch)
-  - `formatMoney(m: Money, locale?: string): string` (id-ID Rupiah grouping for IDR, e.g. `Rp1.180.879.232`; standard `$` grouping for USD converting cents → dollars for display)
+  - `formatMoney(m: Money): string` (id-ID Rupiah grouping for IDR, e.g. `Rp1.180.879.232`; standard `$` grouping for USD converting cents → dollars for display — no `locale` parameter: this platform is Indonesian-locale for IDR and en-US for USD by product requirement, not general-purpose i18n, so a speculative locale override was correctly left out of the actual implementation in Step 4 below)
   - `moneyToJSON(m: Money): { amount: string; currency: Currency }` and `moneyFromJSON(v: { amount: string; currency: Currency }): Money`
   - `bigIntSafeJSONStringify(value: unknown): string` — drop-in replacement for `JSON.stringify` that serializes any `bigint` as a string instead of throwing
 
