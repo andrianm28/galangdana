@@ -22,6 +22,27 @@
       "when": 1787976688878,
       "tag": "0002_flashy_earthquake",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787979109945,
+      "tag": "0003_misty_iron_fist",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787979731994,
+      "tag": "0004_workable_red_hulk",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787987823484,
+      "tag": "0005_early_solo",
+      "breakpoints": true
     }
   ]
 }

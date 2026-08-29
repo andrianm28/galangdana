@@ -21,6 +21,14 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       # Port 5432 here (not 55434) is correct and intentional: this runs in
       # an isolated GitHub Actions runner with its own services:postgres
@@ -28,6 +36,7 @@ jobs:
       # 55434 port only exists to dodge an unrelated container on the shared
       # dev machine this plan is executed on (see Task 2's port note).
       DATABASE_URL: postgres://galangdana:galangdana@localhost:5432/galangdana
+      REDIS_URL: redis://localhost:6379
       PUBLIC_API_URL: http://localhost:3001
     steps:
       - uses: actions/checkout@v4
