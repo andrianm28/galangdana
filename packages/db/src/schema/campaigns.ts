@@ -10,6 +10,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { campaigners } from "./campaigners";
 import { campaignCategories } from "./categories";
 
 // Matches @galangdana/money's Currency type exactly ("IDR" | "USD").
@@ -46,6 +47,10 @@ export const campaigns = pgTable(
     categoryId: integer("category_id")
       .notNull()
       .references(() => campaignCategories.id),
+
+    campaignerId: uuid("campaigner_id")
+      .notNull()
+      .references(() => campaigners.id),
 
     // Every money-bearing table in this platform carries an explicit
     // currency column, including in this foundational phase (see the plan's

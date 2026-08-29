@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { money } from "@galangdana/money";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../client";
+import { campaigners } from "../schema/campaigners";
 import { campaigns, displayAmount } from "../schema/campaigns";
 import { runSeed } from "../seed/run-seed";
 
@@ -25,7 +26,16 @@ const TEST_SLUGS = [
   "invalid-program-test",
 ];
 
+// campaigns.campaigner_id is a NOT NULL foreign key into campaigners (added
+// by Task 1). This test file needs a real campaigner row to attribute its
+// fixture campaigns to; fixed displayName so repeated local runs against the
+// same persistent Postgres can find-and-reuse/clean it up like every other
+// fixture in this package.
+const TEST_CAMPAIGNER_NAME = "Test Campaigner for campaigns.test.ts";
+
 describe("campaigns dual model", () => {
+  let campaignerId: string;
+
   // campaigns.category_id has a NOT NULL foreign key into campaign_categories.
   // This test file must not assume categories.test.ts (Task 5) already ran
   // and left rows behind — bun:test's file execution order is not guaranteed
@@ -35,7 +45,17 @@ describe("campaigns dual model", () => {
   // regardless of what has or hasn't already run.
   beforeAll(async () => {
     await runSeed();
+    // Delete campaigns before campaigners: campaigns.campaigner_id
+    // references campaigners.id, so a stale campaigner row from a previous
+    // run can't be removed while fixture campaigns still point at it.
     await db.delete(campaigns).where(inArray(campaigns.slug, TEST_SLUGS));
+    await db.delete(campaigners).where(eq(campaigners.displayName, TEST_CAMPAIGNER_NAME));
+    const [campaigner] = await db
+      .insert(campaigners)
+      .values({ type: "individual", displayName: TEST_CAMPAIGNER_NAME })
+      .returning();
+    if (!campaigner) throw new Error("failed to create the test campaigner fixture");
+    campaignerId = campaigner.id;
   });
 
   test("a goal-model campaign requires goal_amount and allows expires_at", async () => {
@@ -46,6 +66,7 @@ describe("campaigns dual model", () => {
         title: "Bantu Warga Kalimantan yang Terdampak Karhutla",
         shortDescription: "Uji coba model goal",
         categoryId: 22, // bencana-alam
+        campaignerId,
         model: "goal",
         goalAmount: 3_000_000_000n,
         expiresAt: new Date("2026-12-31T00:00:00Z"),
@@ -66,6 +87,7 @@ describe("campaigns dual model", () => {
         title: "Sumur Bor untuk Masjid yang Kekurangan Air",
         shortDescription: "Uji coba model program",
         categoryId: 23, // rumah-ibadah
+        campaignerId,
         model: "program",
         collectedAmount: 128_607_690n,
         disbursedAmount: 7_561_862n,
@@ -92,6 +114,7 @@ describe("campaigns dual model", () => {
           title: "Invalid",
           shortDescription: "Should fail",
           categoryId: 22,
+          campaignerId,
           model: "goal",
           // goalAmount omitted — must violate the check constraint
         }),
@@ -112,6 +135,7 @@ describe("campaigns dual model", () => {
           title: "Invalid",
           shortDescription: "Should fail",
           categoryId: 22,
+          campaignerId,
           model: "program",
           goalAmount: 1_000_000n, // must violate the check constraint
         }),

@@ -43,6 +43,13 @@
       "when": 1787987823484,
       "tag": "0005_early_solo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788000011291,
+      "tag": "0006_friendly_sharon_carter",
+      "breakpoints": true
     }
   ]
 }
