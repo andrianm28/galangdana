@@ -17,8 +17,8 @@ const { label, id, error, hint, children }: Props = $props();
   <Label for={id}>{label}</Label>
   {@render children()}
   {#if error}
-    <p role="alert" class="mt-1 text-sm text-error font-sans">{error}</p>
+    <p id="{id}-error" role="alert" class="mt-1 text-sm text-error font-sans">{error}</p>
   {:else if hint}
-    <p class="mt-1 text-sm text-neutral-600 font-sans">{hint}</p>
+    <p id="{id}-hint" class="mt-1 text-sm text-neutral-600 font-sans">{hint}</p>
   {/if}
 </div>

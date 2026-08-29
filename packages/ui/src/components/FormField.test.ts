@@ -55,4 +55,30 @@ describe("FormField", () => {
     });
     expect(screen.getByText("We'll text you a code")).not.toBeNull();
   });
+
+  test("the error paragraph's id is derived from the field id, for aria-describedby wiring", () => {
+    render(FormField, {
+      props: {
+        label: "Email",
+        id: "email",
+        error: "Enter a valid email address",
+        children: inputSnippet("email"),
+      },
+    });
+    const alert = screen.getByRole("alert");
+    expect(alert.id).toBe("email-error");
+  });
+
+  test("the hint paragraph's id is derived from the field id, for aria-describedby wiring", () => {
+    render(FormField, {
+      props: {
+        label: "Phone",
+        id: "phone",
+        hint: "We'll text you a code",
+        children: inputSnippet("phone"),
+      },
+    });
+    const hint = screen.getByText("We'll text you a code");
+    expect(hint.id).toBe("phone-hint");
+  });
 });

@@ -6,6 +6,7 @@ interface Props {
   placeholder?: string;
   disabled?: boolean;
   invalid?: boolean;
+  describedBy?: string;
   oninput?: (value: string) => void;
 }
 
@@ -16,6 +17,7 @@ let {
   placeholder,
   disabled = false,
   invalid = false,
+  describedBy,
   oninput,
 }: Props = $props();
 
@@ -32,6 +34,7 @@ function handleInput(event: Event & { currentTarget: HTMLInputElement }) {
   {placeholder}
   {disabled}
   aria-invalid={invalid}
+  aria-describedby={describedBy}
   oninput={handleInput}
   class="w-full rounded-sm border px-3 py-2 font-sans text-base text-neutral-900
     placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary/40

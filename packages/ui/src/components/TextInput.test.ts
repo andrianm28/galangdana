@@ -42,4 +42,17 @@ describe("TextInput", () => {
     const input = screen.getByRole("textbox") as HTMLInputElement;
     expect(input.disabled).toBe(true);
   });
+
+  test("renders aria-describedby when describedBy is provided, and omits it otherwise", () => {
+    const { unmount } = render(TextInput, {
+      props: { id: "email", value: "", describedBy: "email-error" },
+    });
+    let input = screen.getByRole("textbox");
+    expect(input.getAttribute("aria-describedby")).toBe("email-error");
+    unmount();
+
+    render(TextInput, { props: { id: "email", value: "" } });
+    input = screen.getByRole("textbox");
+    expect(input.hasAttribute("aria-describedby")).toBe(false);
+  });
 });
