@@ -6,14 +6,14 @@ const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo";
 
-// A plain callable type, not `typeof fetch`: Bun's global `fetch` is declared
-// as a function merged with a `namespace fetch { export function preconnect
-// ... }`, so `typeof fetch` requires a `.preconnect` property alongside the
-// call signature. A test's mock `fetch` implementation is an ordinary async
-// arrow function with no `preconnect`, so it structurally fails `typeof
-// fetch` even though it's perfectly callable the one way this module ever
-// calls it. This type captures only the call signature actually used.
-export type GoogleFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+// A narrow callable type, not `typeof fetch`: Bun's global `fetch` is a
+// function+namespace merge (it also carries a static `.preconnect` method),
+// so under this repo's tsconfig (no DOM lib) a plain mock function assigned
+// to a `typeof fetch`-typed parameter fails to typecheck ("Property
+// 'preconnect' is missing") even though it's perfectly callable at runtime.
+// Reproduced and confirmed against this repo's actual tsconfig before this
+// plan was corrected.
+export type GoogleFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 function googleClientId(): string {
   return process.env.GOOGLE_CLIENT_ID ?? "";
@@ -99,22 +99,42 @@ export async function findOrCreateGoogleUser(profile: GoogleProfile): Promise<Us
     return linked.user;
   }
 
-  const [existingByEmail] = await db.select().from(users).where(eq(users.email, profile.email));
-  if (existingByEmail) {
-    await db
-      .insert(oauthAccounts)
-      .values({ userId: existingByEmail.id, provider: "google", providerAccountId: profile.sub });
-    return existingByEmail;
-  }
-
+  // Atomic insert-or-select on users.email, not a SELECT then a
+  // conditional INSERT: two concurrent signups for the SAME email via
+  // DIFFERENT auth methods (e.g. this Google flow and registerWithEmail's
+  // email/password path both completing around the same instant) could
+  // otherwise both pass a "no existing user" check, and this function's
+  // insert had NO conflict guard at all -- it would throw an unhandled
+  // unique-constraint exception instead of gracefully picking up whichever
+  // row actually won. onConflictDoNothing makes a colliding insert affect
+  // zero rows (verified empirically: a pre-existing row causes this insert
+  // to return undefined, and a plain SELECT then finds that same row).
   const [created] = await db
     .insert(users)
     .values({ email: profile.email, name: profile.name, avatarUrl: profile.picture })
+    .onConflictDoNothing({ target: users.email })
     .returning();
-  // biome-ignore lint/style/noNonNullAssertion: insert().returning() on a single-row insert always returns that row
-  const createdUser = created!;
+
+  const [existing] = created
+    ? []
+    : await db.select().from(users).where(eq(users.email, profile.email));
+  const user = created ?? existing;
+  if (!user) {
+    throw new Error(
+      `findOrCreateGoogleUser: no user found for ${profile.email} after insert-or-select`,
+    );
+  }
+
+  // Same reasoning applied to the link itself: two truly concurrent Google
+  // sign-ins for the same profile (e.g. two browser tabs) could both reach
+  // this point and both try to link the same (provider, providerAccountId)
+  // pair -- onConflictDoNothing on the composite unique index makes the
+  // second one a no-op instead of a thrown exception. Verified empirically
+  // against the real composite unique index.
   await db
     .insert(oauthAccounts)
-    .values({ userId: createdUser.id, provider: "google", providerAccountId: profile.sub });
-  return createdUser;
+    .values({ userId: user.id, provider: "google", providerAccountId: profile.sub })
+    .onConflictDoNothing({ target: [oauthAccounts.provider, oauthAccounts.providerAccountId] });
+
+  return user;
 }

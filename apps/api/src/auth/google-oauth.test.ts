@@ -110,4 +110,28 @@ describe("findOrCreateGoogleUser", () => {
     // biome-ignore lint/style/noNonNullAssertion: inserted above
     expect(linked.id).toBe(existing!.id);
   });
+
+  test("links to a user created via a different auth method (e.g. registerWithEmail) with the same email, without throwing", async () => {
+    // Simulates what registerWithEmail (Task 6) would have produced for this
+    // email a moment earlier: a users row with a passwordHash, no Google
+    // link yet. Before the fix, findOrCreateGoogleUser's create-branch
+    // insert had no onConflictDoNothing at all, so if this row existed the
+    // insert would throw an unhandled unique-constraint exception instead
+    // of falling back to the existing row.
+    const [existing] = await db
+      .insert(users)
+      .values({ email: mockProfile.email, passwordHash: "x" })
+      .returning();
+
+    const linked = await findOrCreateGoogleUser(mockProfile);
+    // biome-ignore lint/style/noNonNullAssertion: inserted above
+    expect(linked.id).toBe(existing!.id);
+
+    const [link] = await db
+      .select()
+      .from(oauthAccounts)
+      .where(eq(oauthAccounts.providerAccountId, mockProfile.sub));
+    // biome-ignore lint/style/noNonNullAssertion: inserted above
+    expect(link?.userId).toBe(existing!.id);
+  });
 });
