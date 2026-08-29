@@ -48,9 +48,7 @@
         "campaign_categories_slug_unique": {
           "name": "campaign_categories_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -254,12 +252,8 @@
           "name": "campaigns_category_id_campaign_categories_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "campaign_categories",
-          "columnsFrom": [
-            "category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["category_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -267,12 +261,8 @@
           "name": "campaigns_campaigner_id_campaigners_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "campaigners",
-          "columnsFrom": [
-            "campaigner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaigner_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -282,9 +272,7 @@
         "campaigns_slug_unique": {
           "name": "campaigns_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -372,16 +360,12 @@
         "users_phone_unique": {
           "name": "users_phone_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "phone"
-          ]
+          "columns": ["phone"]
         },
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -436,12 +420,8 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -598,12 +578,8 @@
           "name": "oauth_accounts_user_id_users_id_fk",
           "tableFrom": "oauth_accounts",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -619,27 +595,17 @@
     "public.campaigner_type": {
       "name": "campaigner_type",
       "schema": "public",
-      "values": [
-        "individual",
-        "yayasan",
-        "platform"
-      ]
+      "values": ["individual", "yayasan", "platform"]
     },
     "public.campaign_currency": {
       "name": "campaign_currency",
       "schema": "public",
-      "values": [
-        "IDR",
-        "USD"
-      ]
+      "values": ["IDR", "USD"]
     },
     "public.campaign_model": {
       "name": "campaign_model",
       "schema": "public",
-      "values": [
-        "goal",
-        "program"
-      ]
+      "values": ["goal", "program"]
     },
     "public.campaign_status": {
       "name": "campaign_status",
@@ -657,18 +623,12 @@
     "public.campaign_type": {
       "name": "campaign_type",
       "schema": "public",
-      "values": [
-        "donation",
-        "zakat",
-        "wakaf"
-      ]
+      "values": ["donation", "zakat", "wakaf"]
     },
     "public.oauth_provider": {
       "name": "oauth_provider",
       "schema": "public",
-      "values": [
-        "google"
-      ]
+      "values": ["google"]
     }
   },
   "schemas": {},
