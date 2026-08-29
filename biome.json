@@ -12,6 +12,6 @@
     "lineWidth": 100
   },
   "files": {
-    "ignore": ["node_modules", "**/.svelte-kit", "**/dist", "**/build"]
+    "ignore": ["node_modules", "**/.svelte-kit", "**/dist", "**/build", "packages/ui/src/theme.css"]
   }
 }

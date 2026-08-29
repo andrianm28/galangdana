@@ -12,6 +12,14 @@
   --color-accent-light: #fbeae0;
   --color-accent-dark: #b85a30;
 
+  /* Cleared before redefining: Tailwind v4's @theme MERGES with its own
+     built-in `neutral` scale rather than replacing it, so any step this
+     file doesn't define (300/500/700/950) would otherwise silently fall
+     back to Tailwind's cold, zero-chroma default gray -- clashing with
+     the warm-tinted steps actually defined below, with no build warning.
+     Verified: after this reset, an undefined step (e.g. neutral-500)
+     compiles to nothing rather than a wrong color. */
+  --color-neutral-*: initial;
   --color-neutral-50: #faf9f7;
   --color-neutral-100: #f3f1ed;
   --color-neutral-200: #e5e1d8;
@@ -33,7 +41,15 @@
 
   /* Rounded, not sharp -- the "warm & trustworthy" personality's most
      visible signal after color. sm for buttons/inputs/badges, md for
-     cards, lg for larger surfaces like modals. */
+     cards, lg for larger surfaces like modals.
+     Cleared before redefining for the same reason as neutral above:
+     Tailwind's own default radius scale (xl: 0.75rem, 2xl: 1rem, 3xl:
+     1.5rem) would otherwise survive alongside this file's sm/md/lg,
+     producing the genuinely confusing result that rounded-xl (0.75rem)
+     renders SMALLER than rounded-lg (1.25rem) defined here. rounded-full
+     is unaffected by this reset -- it isn't part of the --radius-* scale
+     in Tailwind v4 at all, it's a separate hardcoded utility. */
+  --radius-*: initial;
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
   --radius-lg: 1.25rem;
