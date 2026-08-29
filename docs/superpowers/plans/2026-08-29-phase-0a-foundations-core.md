@@ -247,7 +247,9 @@ git commit -m "chore: scaffold bun workspace monorepo root"
 - Test: `scripts/verify-infra.sh`
 
 **Interfaces:**
-- Produces: five running services on fixed local ports that every later task (db, search, media, mail) connects to: `postgres:5432`, `redis:6379`, `minio:9000`/`9001`, `mailpit:1025`/`8025`, `meilisearch:7700`.
+- Produces: five running services on fixed local ports that every later task (db, search, media, mail) connects to: `postgres:55434` (host) → `5432` (container), `redis:6379`, `minio:9000`/`9001`, `mailpit:1025`/`8025`, `meilisearch:7700`.
+
+**Note on the Postgres port:** this plan is executed on a shared development machine that already has an unrelated project's Postgres container bound to host port 5432 (confirmed via `ss -ltn` before dispatch — do not investigate or touch that container, it belongs to different, unrelated work). To avoid the collision, this task's Postgres service maps host port **55434** to the container's internal 5432, and `.env.example` (Task 1) and `packages/db`'s connection defaults (Task 4) are updated to match. The CI workflow (Task 10) is unaffected and keeps port 5432 — GitHub Actions runners are isolated VMs with no such collision.
 
 - [ ] **Step 1: Write `docker-compose.yml`**
 
@@ -261,7 +263,7 @@ services:
       POSTGRES_USER: galangdana
       POSTGRES_PASSWORD: galangdana
       POSTGRES_DB: galangdana
-    ports: ["5432:5432"]
+    ports: ["55434:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U galangdana"]
@@ -320,7 +322,17 @@ volumes:
   meilidata:
 ```
 
-- [ ] **Step 2: Write the infra verification script**
+- [ ] **Step 2: Update `.env.example`'s `DATABASE_URL` to match the adjusted Postgres port**
+
+Task 1 wrote `.env.example` with `DATABASE_URL=postgres://galangdana:galangdana@localhost:5432/galangdana`. Change the port to match this task's Postgres service:
+
+`.env.example` — change only this line:
+```
+DATABASE_URL=postgres://galangdana:galangdana@localhost:55434/galangdana
+```
+Leave every other line in `.env.example` unchanged.
+
+- [ ] **Step 3: Write the infra verification script**
 
 ```bash
 #!/usr/bin/env bash
@@ -348,16 +360,20 @@ docker compose ps
 exit 1
 ```
 
-- [ ] **Step 3: Bring infra up and verify**
+- [ ] **Step 4: Bring infra up and verify**
 
 Run: `docker compose up -d && chmod +x scripts/verify-infra.sh && ./scripts/verify-infra.sh`
 Expected: prints "All services healthy." within 60 seconds.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add docker-compose.yml scripts/verify-infra.sh
-git commit -m "chore: add docker-compose infra (postgres, redis, minio, mailpit, meilisearch)"
+git add docker-compose.yml .env.example scripts/verify-infra.sh
+git commit -m "chore: add docker-compose infra (postgres, redis, minio, mailpit, meilisearch)
+
+Postgres host port set to 55434 (not the default 5432) to avoid a
+collision with an unrelated project already running on this shared
+development machine."
 ```
 
 ---
@@ -672,7 +688,7 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? "postgres://galangdana:galangdana@localhost:5432/galangdana",
+    url: process.env.DATABASE_URL ?? "postgres://galangdana:galangdana@localhost:55434/galangdana",
   },
 });
 ```
@@ -686,7 +702,7 @@ import postgres from "postgres";
 import * as schema from "./schema/index";
 
 const connectionString =
-  process.env.DATABASE_URL ?? "postgres://galangdana:galangdana@localhost:5432/galangdana";
+  process.env.DATABASE_URL ?? "postgres://galangdana:galangdana@localhost:55434/galangdana";
 
 const queryClient = postgres(connectionString);
 
@@ -1715,6 +1731,11 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      # Port 5432 here (not 55434) is correct and intentional: this runs in
+      # an isolated GitHub Actions runner with its own services:postgres
+      # container above, bound to the default 5432 with no collision — the
+      # 55434 port only exists to dodge an unrelated container on the shared
+      # dev machine this plan is executed on (see Task 2's port note).
       DATABASE_URL: postgres://galangdana:galangdana@localhost:5432/galangdana
       PUBLIC_API_URL: http://localhost:3001
     steps:
