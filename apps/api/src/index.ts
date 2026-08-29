@@ -1,18 +1,14 @@
-import { bigIntSafeJSONStringify } from "@galangdana/money";
 import { Elysia } from "elysia";
+import { withApiResponseMapping } from "./response-mapper";
 import { healthRoute } from "./routes/health";
 
-export const app = new Elysia()
-  // Every response body is run through the BigInt-safe serializer, so no
-  // route added later can accidentally hand a raw bigint to JSON.stringify
-  // and crash the response.
-  .mapResponse(({ response }) => {
-    if (response === undefined) return;
-    return new Response(bigIntSafeJSONStringify(response), {
-      headers: { "content-type": "application/json" },
-    });
-  })
-  .use(healthRoute);
+// Every response body is run through the BigInt-safe serializer, so no
+// route added later can accidentally hand a raw bigint to JSON.stringify
+// and crash the response. Also preserves set.status, thrown-error status
+// codes, and real Response objects returned directly from handlers -- see
+// response-mapper.ts (shared with response-mapper.test.ts, so the two can
+// never silently drift apart).
+export const app = withApiResponseMapping(new Elysia()).use(healthRoute);
 
 export type App = typeof app;
 

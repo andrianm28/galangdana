@@ -13,6 +13,7 @@
     "db:seed": "bun run src/seed/run-seed.ts"
   },
   "dependencies": {
+    "@galangdana/money": "workspace:*",
     "drizzle-orm": "^0.36.4",
     "postgres": "^3.4.5"
   },

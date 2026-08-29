@@ -51,6 +51,7 @@
       "name": "@galangdana/db",
       "version": "0.0.0",
       "dependencies": {
+        "@galangdana/money": "workspace:*",
         "drizzle-orm": "^0.36.4",
         "postgres": "^3.4.5",
       },

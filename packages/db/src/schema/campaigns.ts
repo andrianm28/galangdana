@@ -1,3 +1,4 @@
+import { type Money, money } from "@galangdana/money";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -10,6 +11,13 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { campaignCategories } from "./categories";
+
+// Matches @galangdana/money's Currency type exactly ("IDR" | "USD").
+// Campaigns in this platform are IDR in practice -- the column defaults to
+// IDR below -- but USD support exists here for schema honesty and
+// future-proofing, matching how the wider design's CSR/grants module needs
+// multi-currency.
+export const campaignCurrencyEnum = pgEnum("campaign_currency", ["IDR", "USD"]);
 
 export const campaignModelEnum = pgEnum("campaign_model", ["goal", "program"]);
 
@@ -39,6 +47,11 @@ export const campaigns = pgTable(
       .notNull()
       .references(() => campaignCategories.id),
 
+    // Every money-bearing table in this platform carries an explicit
+    // currency column, including in this foundational phase (see the plan's
+    // Global Constraint). Campaigns are IDR in practice, hence the default.
+    currency: campaignCurrencyEnum("currency").notNull().default("IDR"),
+
     type: campaignTypeEnum("type").notNull().default("donation"),
     status: campaignStatusEnum("status").notNull().default("draft"),
 
@@ -54,7 +67,7 @@ export const campaigns = pgTable(
 
     // Denormalized counters, recomputable from the donations/disbursements
     // tables and reconciled nightly (see Phase 2/3 plans). All amounts are
-    // IDR minor-unitless integers; currency is fixed at IDR for campaigns
+    // minor-unitless integers in the campaign's `currency` column above
     // (grants in the CSR module carry their own currency — see Phase 8 plan).
     // NOTE: default is expressed as sql`0` rather than the literal `0n`.
     // drizzle-kit 0.28.1's snapshot differ does `JSON.stringify` on the
@@ -97,9 +110,11 @@ export type NewCampaign = typeof campaigns.$inferInsert;
  * balance (collected minus already-disbursed), never a cumulative total.
  */
 export function displayAmount(
-  campaign: Pick<Campaign, "model" | "collectedAmount" | "disbursedAmount">,
-): bigint {
-  return campaign.model === "goal"
-    ? campaign.collectedAmount
-    : campaign.collectedAmount - campaign.disbursedAmount;
+  campaign: Pick<Campaign, "model" | "collectedAmount" | "disbursedAmount" | "currency">,
+): Money {
+  const amount =
+    campaign.model === "goal"
+      ? campaign.collectedAmount
+      : campaign.collectedAmount - campaign.disbursedAmount;
+  return money(amount, campaign.currency);
 }

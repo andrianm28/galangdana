@@ -60,6 +60,15 @@ jobs:
       - name: Start API in background
         run: bun run --cwd apps/api start &
 
+      - name: Wait for API
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3001/healthz > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "API did not start in time" >&2
+          exit 1
+
       - name: Start web preview in background
         run: bun run --cwd apps/web preview --port 5173 &
 
