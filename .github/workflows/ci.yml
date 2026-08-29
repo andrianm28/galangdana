@@ -40,6 +40,62 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      imgproxy:
+        image: darthsim/imgproxy:latest
+        env:
+          IMGPROXY_KEY: 4ac5d314cc578f0216d080c03b2bc517a7e4226af8a4ed6a5617cf94e44c554c
+          IMGPROXY_SALT: 00325181fcb6c7a7ef94ba22eab86f3115ddfaf7178dcba96d19a327c0ab65f1
+          IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES: "true"
+        ports: ["8090:8080"]
+        # `imgproxy health` (the same subcommand docker-compose.yml's own
+        # healthcheck uses) was confirmed directly against the real
+        # darthsim/imgproxy:latest image -- `docker exec <container> sh -c
+        # "imgproxy health"` exits 0 with "imgproxy is running", and the
+        # image does have /bin/sh, so --health-cmd (which GitHub Actions
+        # wraps as a shell command, same as the postgres/redis/meilisearch
+        # health options above) can invoke it. Not run against a real
+        # GitHub Actions job yet -- see Task 14's report for what that
+        # still needs to confirm.
+        options: >-
+          --health-cmd "imgproxy health"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      minio:
+        # NOT minio/minio:latest: GitHub Actions' `services:` schema has no
+        # `command:`/`entrypoint:` key (confirmed against GitHub's own docs
+        # for the equivalent jobs.<job_id>.container schema, which
+        # explicitly says "The --network and --entrypoint options are not
+        # supported" for `options:`, and against a still-open GitHub
+        # community discussion -- #52675 -- confirming no such key exists
+        # for `services:` either), and the plain minio/minio image's
+        # default CMD only prints its usage/help and exits (verified
+        # directly: `docker run minio/minio:latest` with no args exits 0
+        # immediately without ever binding port 9000) -- there is no
+        # supported way to pass it the `server /data` arguments
+        # docker-compose.yml's own `command:` field gives it locally.
+        # fclairamb/minio-github-actions is a small, single-purpose image
+        # (its entrypoint is `minio ${MINIO_COMMAND:-server}
+        # ${MINIO_DIR:-/data}`, i.e. it bakes the missing command into the
+        # image itself) built and published specifically to solve this
+        # exact GitHub Actions limitation -- unmaintained since 2021 and
+        # bundles a genuinely old MinIO release, but pinned here by digest
+        # and verified end-to-end locally (health endpoint, our
+        # MINIO_ROOT_USER/PASSWORD, bucket creation, an anonymous-download
+        # policy, a real upload-cover-images.ts run, and an anonymous curl
+        # GET of the uploaded object all succeeded against it -- see Task
+        # 14's report). Its bundled MinIO predates the console's move to a
+        # separate port, so there's no 9001 to map here.
+        image: fclairamb/minio-github-actions@sha256:2e0792e6f99964a1c53b4c179b14392e71db495ef6d5ad8914410704fc792a50
+        env:
+          MINIO_ROOT_USER: galangdana
+          MINIO_ROOT_PASSWORD: galangdana-dev-secret
+        ports: ["9000:9000"]
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       # Port 5432 here (not 55434) is correct and intentional: this runs in
       # an isolated GitHub Actions runner with its own services:postgres
@@ -68,6 +124,15 @@ jobs:
       IMGPROXY_SALT: 00325181fcb6c7a7ef94ba22eab86f3115ddfaf7178dcba96d19a327c0ab65f1
       IMGPROXY_BASE_URL: http://localhost:8090
       MEDIA_SOURCE_BASE_URL: http://localhost:9000/campaign-media
+      # packages/db/src/seed/upload-cover-images.ts's Bun.S3Client -- these
+      # match that file's own fallback defaults exactly (same as the
+      # MEILISEARCH_*/IMGPROXY_* pairs above), kept explicit for the same
+      # reason: this job's services are the source of truth for "real"
+      # here, not a script's hardcoded fallback.
+      MEDIA_S3_ENDPOINT: http://localhost:9000
+      MEDIA_S3_ACCESS_KEY_ID: galangdana
+      MEDIA_S3_SECRET_ACCESS_KEY: galangdana-dev-secret
+      MEDIA_S3_BUCKET: campaign-media
     steps:
       - uses: actions/checkout@v4
 
@@ -84,6 +149,31 @@ jobs:
       - name: Run database migrations
         run: bun run db:migrate
 
+      - name: Create media bucket
+        # MinIO's bucket-creation API needs a real SigV4-signed request, and
+        # the anonymous-download policy imgproxy needs to fetch objects
+        # unauthenticated (packages/media's buildImgproxyUrl signs a URL
+        # imgproxy fetches with a plain unauthenticated GET -- see
+        # packages/media/src/imgproxy.ts) is a separate policy call a plain
+        # PUT has no equivalent for at all -- confirmed directly: an
+        # unsigned `curl -X PUT` against a real MinIO instance is rejected,
+        # and even a successful bucket creation with no policy set leaves
+        # anonymous GETs on it 403ing. This uses the official minio/mc
+        # image against the minio service's published localhost:9000 port,
+        # the same operations Task 3's own documented local-dev command
+        # runs via `docker compose exec minio mc ...` (not usable here,
+        # since a GitHub Actions service container isn't reachable via
+        # `docker compose exec`) -- verified end-to-end locally: this exact
+        # command sequence, then a real `upload-cover-images.ts` run, then
+        # an anonymous curl GET of an uploaded object, all succeeded (see
+        # Task 14's report).
+        run: |
+          docker run --rm --network host --entrypoint sh minio/mc -c "
+            mc alias set local http://localhost:9000 galangdana galangdana-dev-secret &&
+            mc mb --ignore-existing local/campaign-media &&
+            mc anonymous set download local/campaign-media
+          "
+
       # Task 6's apps/api/src/routes/campaigns.test.ts asserts against the
       # real seed fixture data (8 campaigns, the "zakat" category, etc.) --
       # it needs that data to already exist. `bun test`'s file-execution
@@ -96,6 +186,14 @@ jobs:
       # find-or-create) seed step here removes that ordering dependency.
       - name: Seed database
         run: bun run db:seed
+
+      - name: Upload seed cover images
+        run: bun run src/seed/upload-cover-images.ts
+        working-directory: packages/db
+
+      - name: Reindex search
+        run: bun run reindex
+        working-directory: packages/search
 
       - name: Typecheck
         run: bun run typecheck
@@ -140,3 +238,4 @@ jobs:
         run: bun run scripts/check-links.ts
         env:
           CHECK_LINKS_BASE_URL: http://localhost:5173
+          CHECK_LINKS_EXTRA_ROUTES: /search?q=banjir
