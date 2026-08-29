@@ -3,6 +3,7 @@ import { withApiResponseMapping } from "./response-mapper";
 import { authRoute } from "./routes/auth";
 import { campaignsRoute } from "./routes/campaigns";
 import { healthRoute } from "./routes/health";
+import { searchRoute } from "./routes/search";
 
 // Every response body is run through the BigInt-safe serializer, so no
 // route added later can accidentally hand a raw bigint to JSON.stringify
@@ -13,7 +14,8 @@ import { healthRoute } from "./routes/health";
 export const app = withApiResponseMapping(new Elysia())
   .use(healthRoute)
   .use(authRoute)
-  .use(campaignsRoute);
+  .use(campaignsRoute)
+  .use(searchRoute);
 
 export type App = typeof app;
 
