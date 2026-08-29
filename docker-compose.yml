@@ -1,0 +1,73 @@
+name: galangdana
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: galangdana
+      POSTGRES_PASSWORD: galangdana
+      POSTGRES_DB: galangdana
+    ports: ["55434:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U galangdana"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: galangdana
+      MINIO_ROOT_PASSWORD: galangdana-dev-secret
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["miniodata:/data"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["1025:1025", "8025:8025"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8025/api/v1/info"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    environment:
+      MEILI_MASTER_KEY: galangdana-dev-master-key
+      MEILI_NO_ANALYTICS: "true"
+    ports: ["7700:7700"]
+    volumes: ["meilidata:/meili_data"]
+    healthcheck:
+      # 127.0.0.1, not localhost: the getmeili/meilisearch image binds
+      # IPv4-only (0.0.0.0:7700), but this container's musl/busybox wget
+      # resolves "localhost" to ::1 first and gets refused there before ever
+      # trying IPv4 — confirmed by exec'ing in and diffing `wget localhost`
+      # (refused) against `wget 127.0.0.1` (succeeds) plus `ss -tlnp` showing
+      # no :::7700 listener. mailpit's healthcheck can keep "localhost" —
+      # its image listens dual-stack (:::8025), so it isn't affected.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  miniodata:
+  meilidata:
