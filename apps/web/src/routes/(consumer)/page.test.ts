@@ -1,34 +1,34 @@
 import { describe, expect, test, vi } from "vitest";
 
 describe("home page load", () => {
-  test("fetches health status from the API and passes it to the page", async () => {
+  test("fetches a campaign feed and the category list, and passes both to the page", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({ status: "ok", service: "api", timestamp: "2026-08-29T00:00:00.000Z" }),
-            {
-              headers: { "content-type": "application/json" },
-            },
-          ),
-      ),
+      vi.fn(async (url: string) => {
+        if (url.includes("/campaigns?")) {
+          return new Response(
+            JSON.stringify({
+              campaigns: [{ slug: "test-campaign", title: "Test Campaign" }],
+              page: 1,
+              totalPages: 1,
+              totalCount: 1,
+            }),
+            { headers: { "content-type": "application/json" } },
+          );
+        }
+        throw new Error(`unexpected fetch to ${url}`);
+      }),
     );
 
     const { load } = await import("./+page");
     const result = await load({ fetch: globalThis.fetch } as never);
 
-    expect(result).toEqual({
-      apiStatus: "ok",
-      apiService: "api",
-    });
+    expect((result as { campaigns: unknown }).campaigns).toEqual([
+      { slug: "test-campaign", title: "Test Campaign" },
+    ]);
   });
 
-  test("falls back to unknown, without throwing, when the API connection fails", async () => {
-    // Eden Treaty throws on a connection failure (verified directly:
-    // TypeError: Unable to connect...) rather than resolving to a
-    // { data: null, error } pair -- so the load function must catch it
-    // itself for the "unknown" fallback to ever be reachable.
+  test("falls back to an empty feed, without throwing, when the API connection fails", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
@@ -39,9 +39,6 @@ describe("home page load", () => {
     const { load } = await import("./+page");
     const result = await load({ fetch: globalThis.fetch } as never);
 
-    expect(result).toEqual({
-      apiStatus: "unknown",
-      apiService: "unknown",
-    });
+    expect((result as { campaigns: unknown }).campaigns).toEqual([]);
   });
 });

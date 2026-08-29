@@ -1,21 +1,25 @@
 <script lang="ts">
-import { Badge, Card } from "@galangdana/ui";
+import { CampaignCard } from "@galangdana/ui";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
-
-const isHealthy = $derived(data.apiStatus === "ok");
 </script>
 
-<div class="flex flex-col gap-4">
-  <h1 class="font-sans text-2xl font-bold text-neutral-900">Welcome to GalangDana</h1>
-  <p class="font-sans text-neutral-600">
-    A platform for giving that puts trust and transparency first.
-  </p>
-  <Card>
-    <div class="flex items-center justify-between">
-      <span class="font-sans text-sm text-neutral-600">API status</span>
-      <Badge variant={isHealthy ? "success" : "error"}>{data.apiStatus}</Badge>
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="font-sans text-2xl font-bold text-neutral-900">Galang kebaikan bersama</h1>
+    <p class="mt-1 font-sans text-neutral-600">
+      Bantu sesama melalui donasi yang tepat sasaran dan transparan.
+    </p>
+  </div>
+
+  {#if data.campaigns.length > 0}
+    <div class="grid grid-cols-1 gap-4">
+      {#each data.campaigns as campaign (campaign.slug)}
+        <CampaignCard {campaign} />
+      {/each}
     </div>
-  </Card>
+  {:else}
+    <p class="font-sans text-neutral-600">Belum ada campaign yang bisa ditampilkan saat ini.</p>
+  {/if}
 </div>
