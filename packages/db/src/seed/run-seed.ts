@@ -1,11 +1,11 @@
+import { eq } from "drizzle-orm";
 import { db } from "../client";
 import { campaigners } from "../schema/campaigners";
 import { campaigns } from "../schema/campaigns";
 import { campaignCategories } from "../schema/categories";
-import { CATEGORY_SEED_DATA } from "./categories.seed";
 import { CAMPAIGNER_SEED_DATA } from "./campaigners.seed";
 import { CAMPAIGN_SEED_DATA } from "./campaigns.seed";
-import { eq } from "drizzle-orm";
+import { CATEGORY_SEED_DATA } from "./categories.seed";
 
 async function runSeed() {
   await db
@@ -45,7 +45,8 @@ async function runSeed() {
     const categoryId = categoryIdBySlug.get(seed.categorySlug);
     const campaignerId = campaignerIdByName.get(seed.campaignerName);
     if (!categoryId) throw new Error(`unknown category slug in seed data: ${seed.categorySlug}`);
-    if (!campaignerId) throw new Error(`unknown campaigner name in seed data: ${seed.campaignerName}`);
+    if (!campaignerId)
+      throw new Error(`unknown campaigner name in seed data: ${seed.campaignerName}`);
 
     await db
       .insert(campaigns)
