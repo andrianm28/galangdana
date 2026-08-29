@@ -1,7 +1,10 @@
 import { FormatRegistry, type Static, Type } from "@sinclair/typebox";
 
-// Register date-time format for validation
-FormatRegistry.Set("date-time", () => true);
+// Required: without a registered "date-time" checker, TypeBox's Value.Check
+// rejects every payload matching a schema that uses format: "date-time",
+// valid or not. Date.parse returning NaN is JavaScript's standard way to
+// detect an unparseable date string.
+FormatRegistry.Set("date-time", (value) => !Number.isNaN(Date.parse(value)));
 
 export const HealthResponseSchema = Type.Object({
   status: Type.Literal("ok"),

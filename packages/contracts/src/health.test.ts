@@ -11,4 +11,9 @@ describe("HealthResponseSchema", () => {
   test("rejects a payload missing required fields", () => {
     expect(Value.Check(HealthResponseSchema, { status: "ok" })).toBe(false);
   });
+
+  test("rejects a payload whose timestamp is not a valid date-time", () => {
+    const payload = { status: "ok", service: "api", timestamp: "not-a-date" };
+    expect(Value.Check(HealthResponseSchema, payload)).toBe(false);
+  });
 });
