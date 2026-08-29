@@ -30,7 +30,16 @@ const testApp = withApiResponseMapping(new Elysia())
     err.code = "ECONNREFUSED";
     throw err;
   })
-  .get("/raw", () => new Response("raw body", { status: 201 }));
+  .get("/raw", () => new Response("raw body", { status: 201 }))
+  // A thrown value fully controls its own `status` property, same as
+  // `code` -- an out-of-range value here must not reach
+  // `new Response(..., { status })` unclamped, or it throws a RangeError
+  // and the error handler itself becomes the failure.
+  .get("/bad-status", () => {
+    const err = new Error("weird") as Error & Record<string, unknown>;
+    err.status = 999;
+    throw err;
+  });
 
 describe("withApiResponseMapping", () => {
   test("preserves a non-200 status set via set.status", async () => {
@@ -65,12 +74,21 @@ describe("withApiResponseMapping", () => {
     expect(text).not.toContain("127.0.0.1");
   });
 
-  test("an unmatched route still answers 404, not 500", async () => {
+  test("an unmatched route still answers 404, with a matching generic body", async () => {
     // Elysia hands NOT_FOUND to onError with `set.status` still 200 and
     // the real 404 only on the error object -- a status derived from
-    // `set.status` would turn every 404 into a 500.
+    // `set.status` would turn every 404 into a 500. The body label is a
+    // re-labeling of the (already-safe) status, not a code-name
+    // exemption, so it stays generic rather than echoing anything about
+    // the specific route.
     const response = await testApp.handle(new Request("http://localhost/no-such-route"));
     expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "not_found" });
+  });
+
+  test("an out-of-range error status is clamped to 500, not passed through raw", async () => {
+    const response = await testApp.handle(new Request("http://localhost/bad-status"));
+    expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: "internal_error" });
   });
 

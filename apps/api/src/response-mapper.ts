@@ -45,9 +45,23 @@ export function withApiResponseMapping<T extends AnyElysia>(instance: T) {
       //    missed precisely the case being fixed, which is why this
       //    intercepts everything except VALIDATION.
       //  - A plain thrown Error carries no `status` at all, hence 500.
+      //
+      // `errorStatus` is also range-clamped, not used as-is: a thrown
+      // value fully controls its own `status` property (same as `code`
+      // above), and `new Response(..., { status })` throws a RangeError
+      // for anything outside 200-599 -- an attacker-shaped error with an
+      // out-of-range status would otherwise crash this handler itself.
       const errorStatus = (error as { status?: unknown }).status;
-      set.status = typeof errorStatus === "number" ? errorStatus : 500;
-      return { error: "internal_error" };
+      const status =
+        typeof errorStatus === "number" && errorStatus >= 400 && errorStatus <= 599
+          ? errorStatus
+          : 500;
+      set.status = status;
+      // "not_found" is a plain re-labeling of the status, not a code-name
+      // exemption -- the raw error body still never escapes either way,
+      // so an attacker-controlled `code`/`status` can only pick which of
+      // these two generic strings comes back, never real error content.
+      return { error: status === 404 ? "not_found" : "internal_error" };
     })
     .mapResponse(({ response, set }) => {
       if (response === undefined) return;
