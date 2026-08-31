@@ -3,9 +3,11 @@ import {
   CampaignDraftErrorSchema,
   CampaignDraftSchema,
   CreateCampaignDraftBodySchema,
+  SaveBeneficiaryBodySchema,
   SaveDraftAnswersBodySchema,
   SaveGuidedStoryBodySchema,
   SaveManualStoryBodySchema,
+  SavePatientBodySchema,
 } from "@galangdana/contracts";
 import {
   beneficiaries,
@@ -221,6 +223,72 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
     {
       params: t.Object({ id: t.String() }),
       body: t.Union([SaveGuidedStoryBodySchema, SaveManualStoryBodySchema]),
+      response: {
+        200: t.Object({ success: t.Boolean() }),
+        401: CampaignDraftErrorSchema,
+        404: CampaignDraftErrorSchema,
+      },
+    },
+  )
+  .put(
+    "/:id/patient",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const [draft] = await db
+        .select({ id: campaignDrafts.id })
+        .from(campaignDrafts)
+        .where(and(eq(campaignDrafts.id, params.id), eq(campaignDrafts.userId, user.id)));
+      if (!draft) {
+        set.status = 404;
+        return { error: "draft_not_found" };
+      }
+
+      await db
+        .insert(patients)
+        .values({ draftId: params.id, ...body })
+        .onConflictDoUpdate({ target: patients.draftId, set: body });
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: SavePatientBodySchema,
+      response: {
+        200: t.Object({ success: t.Boolean() }),
+        401: CampaignDraftErrorSchema,
+        404: CampaignDraftErrorSchema,
+      },
+    },
+  )
+  .put(
+    "/:id/beneficiary",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const [draft] = await db
+        .select({ id: campaignDrafts.id })
+        .from(campaignDrafts)
+        .where(and(eq(campaignDrafts.id, params.id), eq(campaignDrafts.userId, user.id)));
+      if (!draft) {
+        set.status = 404;
+        return { error: "draft_not_found" };
+      }
+
+      await db
+        .insert(beneficiaries)
+        .values({ draftId: params.id, ...body })
+        .onConflictDoUpdate({ target: beneficiaries.draftId, set: body });
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: SaveBeneficiaryBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
         401: CampaignDraftErrorSchema,

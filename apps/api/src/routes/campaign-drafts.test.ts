@@ -281,3 +281,72 @@ describe("PUT /campaign-drafts/:id/story", () => {
     expect(detailBody.manualStory).toBe("Cerita lengkap yang ditulis manual.");
   });
 });
+
+describe("PUT /campaign-drafts/:id/patient", () => {
+  test("upserts patient details, re-saving overwrites rather than duplicating", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const first = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/patient`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Aldi", age: 2, illness: "Kelainan jantung" }),
+      }),
+    );
+    expect(first.status).toBe(200);
+
+    const second = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/patient`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Aldi Revisi", age: 3, illness: "Kelainan jantung bawaan" }),
+      }),
+    );
+    expect(second.status).toBe(200);
+
+    const detail = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}`, TEST_TOKEN),
+    );
+    const body = (await detail.json()) as { patient: { name: string; age: number } | null };
+    expect(body.patient?.name).toBe("Aldi Revisi");
+    expect(body.patient?.age).toBe(3);
+  });
+});
+
+describe("PUT /campaign-drafts/:id/beneficiary", () => {
+  test("upserts beneficiary details", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "non_medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/beneficiary`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Warga Desa Sukamaju",
+          needDescription: "Renovasi musala.",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const detail = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}`, TEST_TOKEN),
+    );
+    const body = (await detail.json()) as { beneficiary: { name: string } | null };
+    expect(body.beneficiary?.name).toBe("Warga Desa Sukamaju");
+  });
+});
