@@ -57,6 +57,13 @@
       "when": 1788145847200,
       "tag": "0007_bumpy_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788146875005,
+      "tag": "0008_sparkling_stark_industries",
+      "breakpoints": true
     }
   ]
 }
