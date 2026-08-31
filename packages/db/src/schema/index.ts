@@ -5,3 +5,4 @@ export * from "./users";
 export * from "./sessions";
 export * from "./otp-challenges";
 export * from "./oauth-accounts";
+export * from "./campaign-drafts";

@@ -50,6 +50,13 @@
       "when": 1788000011291,
       "tag": "0006_friendly_sharon_carter",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788145847200,
+      "tag": "0007_bumpy_red_wolf",
+      "breakpoints": true
     }
   ]
 }
