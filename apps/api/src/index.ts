@@ -1,3 +1,4 @@
+import { cors } from "@elysiajs/cors";
 import { Elysia } from "elysia";
 import { withApiResponseMapping } from "./response-mapper";
 import { authRoute } from "./routes/auth";
@@ -12,6 +13,16 @@ import { searchRoute } from "./routes/search";
 // response-mapper.ts (shared with response-mapper.test.ts, so the two can
 // never silently drift apart).
 export const app = withApiResponseMapping(new Elysia())
+  // credentials: true + a specific origin (not `*`) is required for the
+  // browser to actually attach the session cookie to a cross-origin
+  // request -- verified directly against this repo's real elysia@1.1.26 +
+  // @elysiajs/cors@1.1.1 (see this task's brief for the full spike).
+  .use(
+    cors({
+      origin: process.env.PUBLIC_WEB_URL ?? "http://localhost:5173",
+      credentials: true,
+    }),
+  )
   .use(healthRoute)
   .use(authRoute)
   .use(campaignsRoute)

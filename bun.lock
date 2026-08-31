@@ -14,6 +14,7 @@
       "name": "@galangdana/api",
       "version": "0.0.0",
       "dependencies": {
+        "@elysiajs/cors": "1.1.1",
         "@galangdana/contracts": "workspace:*",
         "@galangdana/db": "workspace:*",
         "@galangdana/media": "workspace:*",
@@ -136,6 +137,8 @@
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@1.9.4", "", { "os": "win32", "cpu": "x64" }, "sha512-8Y5wMhVIPaWe6jw2H+KlEm4wP/f7EW3810ZLmDlrEEy5KvBsb9ECEfu/kMWD484ijfQ8+nIi0giMgu9g1UAuuA=="],
 
     "@drizzle-team/brocli": ["@drizzle-team/brocli@0.10.2", "", {}, "sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w=="],
+
+    "@elysiajs/cors": ["@elysiajs/cors@1.1.1", "", { "peerDependencies": { "elysia": ">= 1.1.0" } }, "sha512-Bl6JSURwbneaJqkq02bd0C/F8StkmU5zoPLpnSncy4DZSU8TDwWPXxmoHqozI3hf1piDaSQ+I21cmpjPlQ8uYQ=="],
 
     "@elysiajs/eden": ["@elysiajs/eden@1.1.3", "", { "peerDependencies": { "elysia": ">= 1.1.0" } }, "sha512-N4AbnQ0q5dmpPLv+SHJc11EjOWUhSLGSpsWuMJ4Kg2NhoXzsZB/dPgjtgKJFIKcUdBmpS3k2YLiN/nrNzotNrA=="],
 
