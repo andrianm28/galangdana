@@ -1,4 +1,18 @@
+import { basename, join } from "node:path";
 import { CAMPAIGN_SEED_DATA } from "./campaigns.seed";
+
+// Vendored fixture photos, one per seeded campaign (filename matches each
+// campaign's coverMediaUrl basename in campaigns.seed.ts). These used to be
+// fetched live from picsum.photos on every fresh seed run -- reliable
+// enough for local dev, but a real GitHub Actions run hit two consecutive
+// failures against it (a 503, then a 522) fetching the very first image,
+// which also failed to load from this same sandbox at the same time,
+// confirming a real availability problem with depending on that external
+// service rather than a one-off blip. Seed data must be reproducible
+// without live third-party network access, so these bytes -- captured from
+// an earlier successful picsum.photos fetch -- are checked into the repo
+// instead.
+const FIXTURES_DIR = join(import.meta.dir, "fixtures", "covers");
 
 const s3 = new Bun.S3Client({
   endpoint: process.env.MEDIA_S3_ENDPOINT ?? "http://localhost:9000",
@@ -39,15 +53,14 @@ async function uploadCoverImages(): Promise<void> {
     if (await file.exists()) {
       continue; // idempotent: skip images already uploaded by a prior run
     }
-    // picsum.photos serves real, freely-licensed placeholder photographs
-    // designed for exactly this purpose -- a stable per-seed-slug seed
-    // value keeps the same campaign always getting the same placeholder
-    // image across repeated `db:seed` runs.
-    const response = await fetch(`https://picsum.photos/seed/${campaign.slug}/800/600`);
-    if (!response.ok) {
-      throw new Error(`failed to fetch placeholder image for ${campaign.slug}: ${response.status}`);
+    const fixturePath = join(FIXTURES_DIR, basename(campaign.coverMediaUrl));
+    const fixtureFile = Bun.file(fixturePath);
+    if (!(await fixtureFile.exists())) {
+      throw new Error(
+        `missing vendored fixture image for ${campaign.slug}: expected ${fixturePath}`,
+      );
     }
-    const bytes = await response.arrayBuffer();
+    const bytes = await fixtureFile.arrayBuffer();
     await s3.write(campaign.coverMediaUrl, bytes, { type: "image/jpeg" });
     uploaded++;
   }
