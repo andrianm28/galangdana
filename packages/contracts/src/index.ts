@@ -30,3 +30,26 @@ export type {
   MoneyJSONResponse,
   SearchResponse,
 } from "./campaigns";
+export {
+  CampaignDocumentSchema,
+  CampaignDocumentTypeSchema,
+  CampaignDraftDetailSchema,
+  CampaignDraftErrorSchema,
+  CampaignDraftSchema,
+  CampaignDraftTrackSchema,
+  ConfirmDocumentUploadBodySchema,
+  CreateCampaignDraftBodySchema,
+  PresignDocumentUploadBodySchema,
+  PresignDocumentUploadResponseSchema,
+  SaveBeneficiaryBodySchema,
+  SaveDraftAnswersBodySchema,
+  SaveGuidedStoryBodySchema,
+  SaveManualStoryBodySchema,
+  SavePatientBodySchema,
+  StoryQuestionAnswerSchema,
+} from "./campaign-drafts";
+export type {
+  CampaignDocumentResponse,
+  CampaignDraftDetailResponse,
+  CampaignDraftResponse,
+} from "./campaign-drafts";
