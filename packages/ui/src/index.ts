@@ -3,6 +3,7 @@ export { default as Alert } from "./components/Alert.svelte";
 export { default as Avatar } from "./components/Avatar.svelte";
 export { default as Badge } from "./components/Badge.svelte";
 export { default as Button } from "./components/Button.svelte";
+export { default as CampaignCard } from "./components/CampaignCard.svelte";
 export { default as Card } from "./components/Card.svelte";
 export { default as ConsumerShell } from "./layouts/ConsumerShell.svelte";
 export { default as FormField } from "./components/FormField.svelte";

@@ -1,4 +1,5 @@
 export * from "./categories";
+export * from "./campaigners";
 export * from "./campaigns";
 export * from "./users";
 export * from "./sessions";

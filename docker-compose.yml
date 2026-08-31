@@ -47,6 +47,45 @@ services:
       timeout: 5s
       retries: 10
 
+  imgproxy:
+    image: darthsim/imgproxy:latest
+    # Dev-only: network_mode: host (not the bridge + "ports:" mapping used
+    # by every other service here) so imgproxy's own container shares the
+    # host's network namespace. Source URLs signed by this package point at
+    # http://localhost:9000/... (MinIO's host-mapped port, per
+    # MEDIA_SOURCE_BASE_URL below) -- under ordinary bridge networking,
+    # "localhost" inside the imgproxy container resolves to the container
+    # itself, not the host, and every fetch 404s with "Source is
+    # unreachable" (confirmed directly: switching this service to bridge +
+    # port-mapping, matching the pattern of the other services, reproduces
+    # that 404 even with IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES=true).
+    # Host networking is how this scheme was actually verified during this
+    # plan's research. Never do this in a real deployment, where the media
+    # source is a real, non-loopback host and imgproxy runs alongside other
+    # properly-isolated services.
+    network_mode: host
+    environment:
+      IMGPROXY_KEY: ${IMGPROXY_KEY:-4ac5d314cc578f0216d080c03b2bc517a7e4226af8a4ed6a5617cf94e44c554c}
+      IMGPROXY_SALT: ${IMGPROXY_SALT:-00325181fcb6c7a7ef94ba22eab86f3115ddfaf7178dcba96d19a327c0ab65f1}
+      # Dev-only: MinIO is reached at localhost/127.0.0.1 from the host
+      # machine (see the port mapping on the minio service below), and
+      # imgproxy refuses loopback source addresses by default as an SSRF
+      # protection -- verified directly (a signed, correctly-formed
+      # request 404s with "Loopback source address is not allowed"
+      # without this). Never set this in a real deployment, where the
+      # media source is a real, non-loopback host.
+      IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES: "true"
+      # With network_mode: host there's no "ports:" mapping to remap
+      # imgproxy's default :8080 to the host's 8090 -- imgproxy has to
+      # actually listen on 8090 itself so it matches
+      # IMGPROXY_BASE_URL=http://localhost:8090 in .env.example.
+      IMGPROXY_BIND: ":8090"
+    healthcheck:
+      test: ["CMD", "imgproxy", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   meilisearch:
     image: getmeili/meilisearch:v1.11
     environment:

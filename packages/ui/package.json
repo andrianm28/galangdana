@@ -10,6 +10,7 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
+    "@galangdana/money": "workspace:*",
     "svelte": "^5.2.9"
   },
   "devDependencies": {
