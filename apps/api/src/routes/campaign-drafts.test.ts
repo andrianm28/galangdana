@@ -350,3 +350,133 @@ describe("PUT /campaign-drafts/:id/beneficiary", () => {
     expect(body.beneficiary?.name).toBe("Warga Desa Sukamaju");
   });
 });
+
+describe("POST /campaign-drafts/:id/documents/presign", () => {
+  test("returns a presigned PUT URL scoped under drafts/{draftId}/{type}/", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest(
+        `http://localhost/campaign-drafts/${created.id}/documents/presign`,
+        TEST_TOKEN,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ type: "riwayat_medis", fileName: "riwayat.pdf" }),
+        },
+      ),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { uploadUrl: string; objectKey: string };
+    expect(body.objectKey.startsWith(`drafts/${created.id}/riwayat_medis/`)).toBe(true);
+    expect(body.objectKey.endsWith(".pdf")).toBe(true);
+    expect(body.uploadUrl).toContain(body.objectKey);
+  });
+
+  test("rejects a disallowed file extension", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest(
+        `http://localhost/campaign-drafts/${created.id}/documents/presign`,
+        TEST_TOKEN,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ type: "riwayat_medis", fileName: "malware.exe" }),
+        },
+      ),
+    );
+    expect(resp.status).toBe(422);
+  });
+});
+
+describe("POST /campaign-drafts/:id/documents (confirm)", () => {
+  test("records the document after a real presigned upload round-trip", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const presignResp = await app.handle(
+      authedRequest(
+        `http://localhost/campaign-drafts/${created.id}/documents/presign`,
+        TEST_TOKEN,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ type: "riwayat_medis", fileName: "riwayat.pdf" }),
+        },
+      ),
+    );
+    const { uploadUrl, objectKey } = (await presignResp.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+
+    // A real PUT against the real presigned URL, against real local MinIO
+    // -- not a mock -- matching this codebase's established no-mocking
+    // testing philosophy for real infrastructure.
+    const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake pdf bytes" });
+    expect(putResp.status).toBe(200);
+
+    const confirmResp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/documents`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "riwayat_medis", objectKey }),
+      }),
+    );
+    expect(confirmResp.status).toBe(200);
+
+    const detail = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}`, TEST_TOKEN),
+    );
+    const detailBody = (await detail.json()) as {
+      documents: Array<{ type: string; objectKey: string }>;
+    };
+    expect(detailBody.documents.length).toBe(1);
+    expect(detailBody.documents[0]?.objectKey).toBe(objectKey);
+  });
+
+  test("rejects confirming an objectKey outside this draft's own prefix", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/documents`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "riwayat_medis",
+          objectKey: "drafts/00000000-0000-0000-0000-000000000000/riwayat_medis/hijack.pdf",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(400);
+  });
+});

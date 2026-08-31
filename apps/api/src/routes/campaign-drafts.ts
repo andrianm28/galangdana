@@ -1,8 +1,12 @@
 import {
+  CampaignDocumentSchema,
   CampaignDraftDetailSchema,
   CampaignDraftErrorSchema,
   CampaignDraftSchema,
+  ConfirmDocumentUploadBodySchema,
   CreateCampaignDraftBodySchema,
+  PresignDocumentUploadBodySchema,
+  PresignDocumentUploadResponseSchema,
   SaveBeneficiaryBodySchema,
   SaveDraftAnswersBodySchema,
   SaveGuidedStoryBodySchema,
@@ -22,6 +26,21 @@ import { Elysia, t } from "elysia";
 import { sessionDerive } from "../lib/session";
 
 const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const ALLOWED_DOCUMENT_EXTENSIONS = ["pdf", "jpg", "jpeg", "png"];
+
+const documentsS3 = new Bun.S3Client({
+  endpoint: process.env.MEDIA_S3_ENDPOINT ?? "http://localhost:9000",
+  accessKeyId: process.env.MEDIA_S3_ACCESS_KEY_ID ?? "galangdana",
+  secretAccessKey: process.env.MEDIA_S3_SECRET_ACCESS_KEY ?? "galangdana-dev-secret",
+  bucket: process.env.MEDIA_S3_PRIVATE_BUCKET ?? "campaign-documents",
+  region: "us-east-1",
+});
+
+function extractExtension(fileName: string): string | null {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  return ext && ALLOWED_DOCUMENT_EXTENSIONS.includes(ext) ? ext : null;
+}
 
 export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
   .use(sessionDerive)
@@ -293,6 +312,100 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
         200: t.Object({ success: t.Boolean() }),
         401: CampaignDraftErrorSchema,
         404: CampaignDraftErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/:id/documents/presign",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const [draft] = await db
+        .select({ id: campaignDrafts.id })
+        .from(campaignDrafts)
+        .where(and(eq(campaignDrafts.id, params.id), eq(campaignDrafts.userId, user.id)));
+      if (!draft) {
+        set.status = 404;
+        return { error: "draft_not_found" };
+      }
+
+      const ext = extractExtension(body.fileName);
+      if (!ext) {
+        set.status = 422;
+        return { error: "unsupported_file_type" };
+      }
+
+      const objectKey = `drafts/${params.id}/${body.type}/${crypto.randomUUID()}.${ext}`;
+      const expiresInSeconds = 300;
+      const uploadUrl = documentsS3.file(objectKey).presign({
+        method: "PUT",
+        expiresIn: expiresInSeconds,
+      });
+
+      return { uploadUrl, objectKey, expiresInSeconds };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: PresignDocumentUploadBodySchema,
+      response: {
+        200: PresignDocumentUploadResponseSchema,
+        401: CampaignDraftErrorSchema,
+        404: CampaignDraftErrorSchema,
+        422: CampaignDraftErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/:id/documents",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const [draft] = await db
+        .select({ id: campaignDrafts.id })
+        .from(campaignDrafts)
+        .where(and(eq(campaignDrafts.id, params.id), eq(campaignDrafts.userId, user.id)));
+      if (!draft) {
+        set.status = 404;
+        return { error: "draft_not_found" };
+      }
+
+      // Must match this draft's own presign prefix exactly -- rejects a
+      // client confirming an objectKey it never legitimately received a
+      // presigned URL for (see this task's brief).
+      if (!body.objectKey.startsWith(`drafts/${params.id}/${body.type}/`)) {
+        set.status = 400;
+        return { error: "object_key_mismatch" };
+      }
+
+      const [document] = await db
+        .insert(campaignDocuments)
+        .values({ draftId: params.id, type: body.type, objectKey: body.objectKey })
+        .returning();
+      if (!document) {
+        set.status = 500;
+        return { error: "document_confirm_failed" };
+      }
+
+      return {
+        id: document.id,
+        type: document.type,
+        objectKey: document.objectKey,
+        uploadedAt: document.uploadedAt.toISOString(),
+      };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: ConfirmDocumentUploadBodySchema,
+      response: {
+        200: CampaignDocumentSchema,
+        400: CampaignDraftErrorSchema,
+        401: CampaignDraftErrorSchema,
+        404: CampaignDraftErrorSchema,
+        500: CampaignDraftErrorSchema,
       },
     },
   );
