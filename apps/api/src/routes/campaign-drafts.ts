@@ -4,6 +4,8 @@ import {
   CampaignDraftSchema,
   CreateCampaignDraftBodySchema,
   SaveDraftAnswersBodySchema,
+  SaveGuidedStoryBodySchema,
+  SaveManualStoryBodySchema,
 } from "@galangdana/contracts";
 import {
   beneficiaries,
@@ -171,6 +173,58 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
         401: CampaignDraftErrorSchema,
         404: CampaignDraftErrorSchema,
         500: CampaignDraftErrorSchema,
+      },
+    },
+  )
+  .put(
+    "/:id/story",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const [existing] = await db
+        .select({ id: campaignDrafts.id, answers: campaignDrafts.answers })
+        .from(campaignDrafts)
+        .where(and(eq(campaignDrafts.id, params.id), eq(campaignDrafts.userId, user.id)));
+      if (!existing) {
+        set.status = 404;
+        return { error: "draft_not_found" };
+      }
+
+      // Both modes clear the other's data first, so a draft never ends up
+      // with both a guided answer set and a manual story simultaneously.
+      await db.delete(campaignStoryAnswers).where(eq(campaignStoryAnswers.draftId, params.id));
+
+      if (body.mode === "guided") {
+        await db.insert(campaignStoryAnswers).values(
+          body.answers.map((a) => ({
+            draftId: params.id,
+            questionNumber: a.questionNumber,
+            answerText: a.answerText,
+          })),
+        );
+        const { story: _removed, ...restAnswers } = existing.answers;
+        await db
+          .update(campaignDrafts)
+          .set({ answers: restAnswers, updatedAt: new Date() })
+          .where(eq(campaignDrafts.id, params.id));
+      } else {
+        await db
+          .update(campaignDrafts)
+          .set({ answers: { ...existing.answers, story: body.text }, updatedAt: new Date() })
+          .where(eq(campaignDrafts.id, params.id));
+      }
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Union([SaveGuidedStoryBodySchema, SaveManualStoryBodySchema]),
+      response: {
+        200: t.Object({ success: t.Boolean() }),
+        401: CampaignDraftErrorSchema,
+        404: CampaignDraftErrorSchema,
       },
     },
   );

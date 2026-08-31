@@ -184,3 +184,100 @@ describe("PATCH /campaign-drafts/:id/answers", () => {
     expect(resp.status).toBe(404);
   });
 });
+
+describe("PUT /campaign-drafts/:id/story", () => {
+  test("guided mode replaces the full story-answer set", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const first = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "guided",
+          answers: [
+            { questionNumber: 1, answerText: "Jawaban pertama" },
+            { questionNumber: 2, answerText: "Jawaban kedua" },
+          ],
+        }),
+      }),
+    );
+    expect(first.status).toBe(200);
+
+    const detailFirst = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}`, TEST_TOKEN),
+    );
+    const detailFirstBody = (await detailFirst.json()) as { storyAnswers: unknown[] };
+    expect(detailFirstBody.storyAnswers.length).toBe(2);
+
+    // Re-saving guided mode with fewer answers REPLACES the set, not merges.
+    const second = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "guided",
+          answers: [{ questionNumber: 1, answerText: "Jawaban revisi" }],
+        }),
+      }),
+    );
+    expect(second.status).toBe(200);
+
+    const detailSecond = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}`, TEST_TOKEN),
+    );
+    const detailSecondBody = (await detailSecond.json()) as {
+      storyAnswers: Array<{ questionNumber: number; answerText: string }>;
+    };
+    expect(detailSecondBody.storyAnswers.length).toBe(1);
+    expect(detailSecondBody.storyAnswers[0]?.answerText).toBe("Jawaban revisi");
+  });
+
+  test("manual mode sets answers.story and clears any existing guided answers", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "non_medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "guided",
+          answers: [{ questionNumber: 1, answerText: "will be cleared" }],
+        }),
+      }),
+    );
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "manual", text: "Cerita lengkap yang ditulis manual." }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const detail = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}`, TEST_TOKEN),
+    );
+    const detailBody = (await detail.json()) as {
+      storyAnswers: unknown[];
+      manualStory: string | null;
+    };
+    expect(detailBody.storyAnswers).toEqual([]);
+    expect(detailBody.manualStory).toBe("Cerita lengkap yang ditulis manual.");
+  });
+});
