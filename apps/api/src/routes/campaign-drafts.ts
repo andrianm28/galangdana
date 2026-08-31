@@ -3,6 +3,7 @@ import {
   CampaignDraftErrorSchema,
   CampaignDraftSchema,
   CreateCampaignDraftBodySchema,
+  SaveDraftAnswersBodySchema,
 } from "@galangdana/contracts";
 import {
   beneficiaries,
@@ -122,6 +123,54 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
         200: CampaignDraftDetailSchema,
         401: CampaignDraftErrorSchema,
         404: CampaignDraftErrorSchema,
+      },
+    },
+  )
+  .patch(
+    "/:id/answers",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const [existing] = await db
+        .select({ answers: campaignDrafts.answers })
+        .from(campaignDrafts)
+        .where(and(eq(campaignDrafts.id, params.id), eq(campaignDrafts.userId, user.id)));
+      if (!existing) {
+        set.status = 404;
+        return { error: "draft_not_found" };
+      }
+
+      const [updated] = await db
+        .update(campaignDrafts)
+        .set({
+          answers: { ...existing.answers, ...body.answers },
+          currentStep: body.step,
+          updatedAt: new Date(),
+        })
+        .where(eq(campaignDrafts.id, params.id))
+        .returning();
+      if (!updated) {
+        set.status = 500;
+        return { error: "draft_update_failed" };
+      }
+
+      return {
+        ...updated,
+        expiresAt: updated.expiresAt.toISOString(),
+        createdAt: updated.createdAt.toISOString(),
+        updatedAt: updated.updatedAt.toISOString(),
+      };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: SaveDraftAnswersBodySchema,
+      response: {
+        200: CampaignDraftSchema,
+        401: CampaignDraftErrorSchema,
+        404: CampaignDraftErrorSchema,
+        500: CampaignDraftErrorSchema,
       },
     },
   );

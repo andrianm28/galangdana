@@ -118,3 +118,69 @@ describe("GET /campaign-drafts/:id", () => {
     expect(resp.status).toBe(404);
   });
 });
+
+describe("PATCH /campaign-drafts/:id/answers", () => {
+  test("merges new answers into the existing jsonb and advances currentStep", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const first = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/answers`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ step: "tujuan", answers: { purpose: "Biaya operasi jantung" } }),
+      }),
+    );
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as {
+      currentStep: string;
+      answers: Record<string, unknown>;
+    };
+    expect(firstBody.currentStep).toBe("tujuan");
+    expect(firstBody.answers).toEqual({ purpose: "Biaya operasi jantung" });
+
+    // A second save on a different step merges rather than replaces.
+    const second = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/answers`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ step: "judul", answers: { title: "Bantu Aldi Sembuh" } }),
+      }),
+    );
+    const secondBody = (await second.json()) as {
+      currentStep: string;
+      answers: Record<string, unknown>;
+    };
+    expect(secondBody.currentStep).toBe("judul");
+    expect(secondBody.answers).toEqual({
+      purpose: "Biaya operasi jantung",
+      title: "Bantu Aldi Sembuh",
+    });
+  });
+
+  test("404s (not 403) when saving to someone else's draft", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/answers`, OTHER_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ step: "tujuan", answers: { purpose: "hijack attempt" } }),
+      }),
+    );
+    expect(resp.status).toBe(404);
+  });
+});
