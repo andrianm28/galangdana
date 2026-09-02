@@ -24,4 +24,9 @@ describe("kyc-step-order", () => {
     expect(previousKycStep("contact")).toBe("identity");
     expect(previousKycStep("identity")).toBeNull();
   });
+
+  test("nextKycStep and previousKycStep return null for an unrecognized step", () => {
+    expect(nextKycStep("bogus")).toBeNull();
+    expect(previousKycStep("bogus")).toBeNull();
+  });
 });

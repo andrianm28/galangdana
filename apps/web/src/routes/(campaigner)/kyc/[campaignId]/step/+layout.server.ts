@@ -1,4 +1,6 @@
 import { createServerApiClient } from "$lib/server-api-client";
+import type { Treaty } from "@elysiajs/eden";
+import type { KycStatusResponse } from "@galangdana/contracts";
 import { error, redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 
@@ -33,9 +35,21 @@ export const load: LayoutServerLoad = async ({ params, cookies, url }) => {
   // apps/web/src/routes/(campaigner)/create/select-category/+page.svelte for
   // the same class of Eden route-merging conflict.
   // biome-ignore lint/suspicious/noExplicitAny: Eden route-merging conflict requires narrowing
-  const { data: kyc, error: apiError } = await (client.campaigns as any)({
+  const { data: kyc, error: apiError } = (await (client.campaigns as any)({
     id: params.campaignId,
-  }).kyc.get();
+  }).kyc.get()) as Treaty.TreatyResponse<{
+    // The cast above erases Eden's inference for this whole chain (`.kyc`,
+    // `.get()`, and both destructured bindings) to `any` -- confining that
+    // escape hatch to just the unresolvable overload, this re-establishes
+    // the real response shape (matching this endpoint's actual `response:
+    // { 200, 401, 404 }` map in apps/api/src/routes/campaigns.ts) so
+    // `"error" in kyc` below, and every `data.kyc.*` access in
+    // +layout.svelte and downstream KYC step pages, are still checked
+    // against KycStatusResponse's real fields.
+    200: KycStatusResponse;
+    401: { error: string };
+    404: { error: string };
+  }>;
 
   if (apiError?.status === 401) {
     redirect(303, `/login?redirectTo=${encodeURIComponent(currentPath)}`);
