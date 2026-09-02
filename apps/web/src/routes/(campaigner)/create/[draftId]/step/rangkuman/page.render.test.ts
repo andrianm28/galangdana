@@ -73,4 +73,34 @@ describe("rangkuman step rendering", () => {
     });
     expect(screen.getByText("Cerita lengkap yang ditulis manual.")).not.toBeNull();
   });
+
+  // M1 regression test: this page used to render a document's raw enum
+  // value (e.g. "riwayat_medis") instead of the human-readable label that
+  // dokumen/document-types.ts already provides for the same value.
+  test("shows a human-readable label for each uploaded document, not the raw type", () => {
+    render(Page, {
+      props: {
+        params: { draftId: DRAFT.id },
+        data: {
+          draft: {
+            ...DRAFT,
+            storyAnswers: [],
+            manualStory: "Cerita.",
+            patient: null,
+            beneficiary: null,
+            documents: [
+              {
+                id: "d1",
+                type: "riwayat_medis",
+                objectKey: "drafts/x/riwayat_medis/y.pdf",
+                uploadedAt: new Date().toISOString(),
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(screen.getByText("Riwayat medis")).not.toBeNull();
+    expect(screen.queryByText("riwayat_medis")).toBeNull();
+  });
 });

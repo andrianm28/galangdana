@@ -1,10 +1,19 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { formatMoney, money } from "@galangdana/money";
+import { getDocumentTypes } from "../dokumen/document-types";
 import { previousStep } from "../step-order";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
+
+// Every document in this phase belongs to the draft's own track, so looking
+// up labels via the draft's track is safe; fall back to the raw type string
+// if a value isn't found (mirrors dokumen/+page.svelte's own typeLabel()).
+const documentTypes = $derived(getDocumentTypes(data.draft.track));
+function documentTypeLabel(value: string): string {
+  return documentTypes.find((t) => t.value === value)?.label ?? value;
+}
 
 const title = $derived(
   typeof data.draft.answers.title === "string" ? data.draft.answers.title : "",
@@ -90,7 +99,7 @@ async function back() {
       {#if data.draft.documents.length > 0}
         <dd class="text-neutral-600">
           {#each data.draft.documents as doc (doc.id)}
-            <p>{doc.type}</p>
+            <p>{documentTypeLabel(doc.type)}</p>
           {/each}
         </dd>
       {:else}
