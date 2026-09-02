@@ -99,6 +99,11 @@ export const campaigns = pgTable(
     donationCount: integer("donation_count").notNull().default(0),
 
     publishedAt: timestamp("published_at", { withTimezone: true }),
+    // Set once by POST /campaigns/:id/submit (Phase 2c, extended by this
+    // plan's Task 6) -- a more precise, purpose-specific signal for the
+    // admin queue's sort order than reusing updatedAt, which several
+    // other writes also touch.
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
