@@ -99,6 +99,13 @@
       "when": 1788353202803,
       "tag": "0013_steady_lionheart",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788353552289,
+      "tag": "0014_high_sugar_man",
+      "breakpoints": true
     }
   ]
 }
