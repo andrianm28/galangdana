@@ -34,10 +34,14 @@ async function save(direction: "next" | "back") {
   submitting = true;
   const { error: apiError } = await api["campaign-drafts"]({ id: data.draft.id }).patient.put({
     name,
-    age: age ? Number(age) : undefined,
+    // `null` (not `undefined`) so an intentionally-cleared optional field
+    // actually serializes onto the wire and overwrites a stale DB value --
+    // Elysia/TypeBox omits `undefined`-valued keys entirely, which would
+    // leave the old value untouched. See campaign-drafts.ts's SavePatientBodySchema.
+    age: age ? Number(age) : null,
     illness,
-    hospitalName: hospitalName || undefined,
-    relationshipToCampaigner: relationshipToCampaigner || undefined,
+    hospitalName: hospitalName || null,
+    relationshipToCampaigner: relationshipToCampaigner || null,
   });
   submitting = false;
   if (apiError) {

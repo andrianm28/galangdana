@@ -280,6 +280,28 @@ describe("PUT /campaign-drafts/:id/story", () => {
     expect(detailBody.storyAnswers).toEqual([]);
     expect(detailBody.manualStory).toBe("Cerita lengkap yang ditulis manual.");
   });
+
+  test("404s (not 403) when saving a story to someone else's draft", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/story`, OTHER_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "manual", text: "hijack attempt" }),
+      }),
+    );
+    expect(resp.status).toBe(404);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("draft_not_found");
+  });
 });
 
 describe("PUT /campaign-drafts/:id/patient", () => {
@@ -318,6 +340,85 @@ describe("PUT /campaign-drafts/:id/patient", () => {
     expect(body.patient?.name).toBe("Aldi Revisi");
     expect(body.patient?.age).toBe(3);
   });
+
+  test("explicitly clearing an optional field with null actually clears it, not leaves it stale", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    // First save sets hospitalName.
+    const first = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/patient`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Budi",
+          illness: "Demam berdarah",
+          hospitalName: "RS Persahabatan",
+        }),
+      }),
+    );
+    expect(first.status).toBe(200);
+
+    const afterFirst = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}`, TEST_TOKEN),
+    );
+    const afterFirstBody = (await afterFirst.json()) as {
+      patient: { hospitalName: string | null } | null;
+    };
+    expect(afterFirstBody.patient?.hospitalName).toBe("RS Persahabatan");
+
+    // Second save sends hospitalName as an explicit null (this is what the
+    // web client sends once it clears the field) -- the stale
+    // "RS Persahabatan" value must not survive this.
+    const second = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/patient`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Budi",
+          illness: "Demam berdarah",
+          hospitalName: null,
+        }),
+      }),
+    );
+    expect(second.status).toBe(200);
+
+    const afterSecond = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}`, TEST_TOKEN),
+    );
+    const afterSecondBody = (await afterSecond.json()) as {
+      patient: { hospitalName: string | null } | null;
+    };
+    expect(afterSecondBody.patient?.hospitalName).toBeNull();
+  });
+
+  test("404s (not 403) when saving patient details to someone else's draft", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/patient`, OTHER_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Hijack", illness: "n/a" }),
+      }),
+    );
+    expect(resp.status).toBe(404);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("draft_not_found");
+  });
 });
 
 describe("PUT /campaign-drafts/:id/beneficiary", () => {
@@ -348,6 +449,28 @@ describe("PUT /campaign-drafts/:id/beneficiary", () => {
     );
     const body = (await detail.json()) as { beneficiary: { name: string } | null };
     expect(body.beneficiary?.name).toBe("Warga Desa Sukamaju");
+  });
+
+  test("404s (not 403) when saving beneficiary details to someone else's draft", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "non_medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/beneficiary`, OTHER_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Hijack", needDescription: "n/a" }),
+      }),
+    );
+    expect(resp.status).toBe(404);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("draft_not_found");
   });
 });
 
@@ -402,6 +525,32 @@ describe("POST /campaign-drafts/:id/documents/presign", () => {
       ),
     );
     expect(resp.status).toBe(422);
+  });
+
+  test("404s (not 403) when presigning a document upload for someone else's draft", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest(
+        `http://localhost/campaign-drafts/${created.id}/documents/presign`,
+        OTHER_TOKEN,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ type: "riwayat_medis", fileName: "hijack.pdf" }),
+        },
+      ),
+    );
+    expect(resp.status).toBe(404);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("draft_not_found");
   });
 });
 
@@ -478,5 +627,34 @@ describe("POST /campaign-drafts/:id/documents (confirm)", () => {
       }),
     );
     expect(resp.status).toBe(400);
+  });
+
+  test("404s (not 403) when confirming a document upload for someone else's draft", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/documents`, OTHER_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "riwayat_medis",
+          objectKey: `drafts/${created.id}/riwayat_medis/hijack.pdf`,
+        }),
+      }),
+    );
+    // Ownership is checked before the objectKey-prefix check, so even a
+    // well-formed, correctly-prefixed objectKey must still 404 (not 400 or
+    // 200) for a non-owner -- this must never distinguish "exists but not
+    // yours" from "doesn't exist".
+    expect(resp.status).toBe(404);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("draft_not_found");
   });
 });
