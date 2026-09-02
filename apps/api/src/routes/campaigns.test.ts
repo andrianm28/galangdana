@@ -1,5 +1,55 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { campaignCategories, campaigners, campaigns, db, sessions, users } from "@galangdana/db";
+import { eq, inArray } from "drizzle-orm";
 import { app } from "../index";
+
+const TEST_USER_ID = "44444444-5555-6666-7777-888888888801";
+const OTHER_USER_ID = "44444444-5555-6666-7777-888888888802";
+const TEST_TOKEN = "campaigns-test-token";
+const OTHER_TOKEN = "campaigns-other-token";
+let categoryId: number;
+
+beforeAll(async () => {
+  const [category] = await db.select().from(campaignCategories).limit(1);
+  if (!category) throw new Error("no seeded category found — run db:seed first");
+  categoryId = category.id;
+
+  // A prior run of this file's own "creates a real campaign" test leaves a
+  // real `campaigns` row behind, whose `campaignerId` FK has no cascade.
+  // Deleting the test users below cascades to their `campaigners` row
+  // (campaigners.userId IS cascade), which then fails with a FK violation
+  // unless that leftover campaign is cleared first.
+  const staleCampaigners = await db
+    .select({ id: campaigners.id })
+    .from(campaigners)
+    .where(inArray(campaigners.userId, [TEST_USER_ID, OTHER_USER_ID]));
+  if (staleCampaigners.length > 0) {
+    await db.delete(campaigns).where(
+      inArray(
+        campaigns.campaignerId,
+        staleCampaigners.map((c) => c.id),
+      ),
+    );
+  }
+
+  await db.delete(users).where(eq(users.id, TEST_USER_ID));
+  await db.delete(users).where(eq(users.id, OTHER_USER_ID));
+  await db.insert(users).values([
+    { id: TEST_USER_ID, phone: "+6281199990301" },
+    { id: OTHER_USER_ID, phone: "+6281199990302" },
+  ]);
+  await db.insert(sessions).values([
+    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+  ]);
+});
+
+function authedRequest(url: string, token: string, init: RequestInit = {}) {
+  return new Request(url, {
+    ...init,
+    headers: { ...init.headers, cookie: `session=${token}` },
+  });
+}
 
 describe("GET /campaigns", () => {
   test("returns a paginated list of active campaigns with money fields as MoneyJSON", async () => {
@@ -97,5 +147,111 @@ describe("GET /campaigns/:slug", () => {
   test("returns 404 for an unknown slug", async () => {
     const resp = await app.handle(new Request("http://localhost/campaigns/does-not-exist"));
     expect(resp.status).toBe(404);
+  });
+});
+
+describe("POST /campaigns", () => {
+  test("creates a real campaign from a finished draft, in status 'draft'", async () => {
+    const createDraftResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const draft = (await createDraftResp.json()) as { id: string };
+
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          step: "rangkuman",
+          answers: {
+            title: "Bantu Aldi Sembuh",
+            purpose: "Biaya operasi jantung",
+            goalAmountStr: "15000000",
+          },
+        }),
+      }),
+    );
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "manual", text: "Cerita lengkap Aldi." }),
+      }),
+    );
+
+    const resp = await app.handle(
+      authedRequest("http://localhost/campaigns", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draftId: draft.id }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { id: string; slug: string };
+    expect(body.slug).toContain("bantu-aldi-sembuh");
+
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, body.id));
+    expect(row?.status).toBe("draft");
+    expect(row?.title).toBe("Bantu Aldi Sembuh");
+    expect(row?.goalAmount).toBe(15000000n);
+    expect(row?.story).toBe("Cerita lengkap Aldi.");
+    expect(row?.draftId).toBe(draft.id);
+  });
+
+  test("requires authentication", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/campaigns", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draftId: "11111111-1111-1111-1111-111111111111" }),
+      }),
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  test("404s (not 403) when creating from someone else's draft", async () => {
+    const createDraftResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const draft = (await createDraftResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest("http://localhost/campaigns", OTHER_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draftId: draft.id }),
+      }),
+    );
+    expect(resp.status).toBe(404);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("draft_not_found");
+  });
+
+  test("400s when the draft is missing required fields", async () => {
+    const createDraftResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const draft = (await createDraftResp.json()) as { id: string };
+
+    const resp = await app.handle(
+      authedRequest("http://localhost/campaigns", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draftId: draft.id }),
+      }),
+    );
+    expect(resp.status).toBe(400);
   });
 });
