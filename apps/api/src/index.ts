@@ -4,6 +4,7 @@ import { withApiResponseMapping } from "./response-mapper";
 import { authRoute } from "./routes/auth";
 import { campaignDraftsRoute } from "./routes/campaign-drafts";
 import { campaignsRoute } from "./routes/campaigns";
+import { categoriesRoute } from "./routes/categories";
 import { healthRoute } from "./routes/health";
 import { searchRoute } from "./routes/search";
 
@@ -27,6 +28,7 @@ export const app = withApiResponseMapping(new Elysia())
   .use(healthRoute)
   .use(authRoute)
   .use(campaignsRoute)
+  .use(categoriesRoute)
   .use(campaignDraftsRoute)
   .use(searchRoute);
 
