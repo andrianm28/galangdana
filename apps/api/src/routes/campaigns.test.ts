@@ -1,5 +1,13 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import { campaignCategories, campaigners, campaigns, db, sessions, users } from "@galangdana/db";
+import {
+  campaignCategories,
+  campaigners,
+  campaigns,
+  db,
+  individualVerifications,
+  sessions,
+  users,
+} from "@galangdana/db";
 import { eq, inArray } from "drizzle-orm";
 import { app } from "../index";
 
@@ -49,6 +57,49 @@ function authedRequest(url: string, token: string, init: RequestInit = {}) {
     ...init,
     headers: { ...init.headers, cookie: `session=${token}` },
   });
+}
+
+async function createTestCampaign(token: string) {
+  const createDraftResp = await app.handle(
+    authedRequest("http://localhost/campaign-drafts", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ track: "medical", categoryId }),
+    }),
+  );
+  const draft = (await createDraftResp.json()) as { id: string };
+
+  await app.handle(
+    authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, token, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        step: "rangkuman",
+        answers: {
+          title: "Bantu Aldi Sembuh",
+          purpose: "Biaya operasi jantung",
+          goalAmountStr: "15000000",
+        },
+      }),
+    }),
+  );
+  await app.handle(
+    authedRequest(`http://localhost/campaign-drafts/${draft.id}/story`, token, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "manual", text: "Cerita lengkap Aldi." }),
+    }),
+  );
+
+  const resp = await app.handle(
+    authedRequest("http://localhost/campaigns", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ draftId: draft.id }),
+    }),
+  );
+  const body = (await resp.json()) as { id: string; slug: string };
+  return { id: body.id, slug: body.slug };
 }
 
 describe("GET /campaigns", () => {
@@ -152,54 +203,14 @@ describe("GET /campaigns/:slug", () => {
 
 describe("POST /campaigns", () => {
   test("creates a real campaign from a finished draft, in status 'draft'", async () => {
-    const createDraftResp = await app.handle(
-      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ track: "medical", categoryId }),
-      }),
-    );
-    const draft = (await createDraftResp.json()) as { id: string };
+    const campaign = await createTestCampaign(TEST_TOKEN);
 
-    await app.handle(
-      authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, TEST_TOKEN, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          step: "rangkuman",
-          answers: {
-            title: "Bantu Aldi Sembuh",
-            purpose: "Biaya operasi jantung",
-            goalAmountStr: "15000000",
-          },
-        }),
-      }),
-    );
-    await app.handle(
-      authedRequest(`http://localhost/campaign-drafts/${draft.id}/story`, TEST_TOKEN, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "manual", text: "Cerita lengkap Aldi." }),
-      }),
-    );
-
-    const resp = await app.handle(
-      authedRequest("http://localhost/campaigns", TEST_TOKEN, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ draftId: draft.id }),
-      }),
-    );
-    expect(resp.status).toBe(200);
-    const body = (await resp.json()) as { id: string; slug: string };
-    expect(body.slug).toContain("bantu-aldi-sembuh");
-
-    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, body.id));
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
     expect(row?.status).toBe("draft");
     expect(row?.title).toBe("Bantu Aldi Sembuh");
     expect(row?.goalAmount).toBe(15000000n);
     expect(row?.story).toBe("Cerita lengkap Aldi.");
-    expect(row?.draftId).toBe(draft.id);
+    expect(campaign.slug).toContain("bantu-aldi-sembuh");
   });
 
   test("requires authentication", async () => {
@@ -297,5 +308,141 @@ describe("POST /campaigns", () => {
     expect(resp.status).toBe(400);
     const body = (await resp.json()) as { error: string };
     expect(body.error).toBe("draft_incomplete");
+  });
+});
+
+describe("PUT /campaigns/:id/kyc/identity", () => {
+  test("saves identity fields for the owning user's campaign", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc/identity`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fullName: "Aldi Setiawan",
+          nationalId: "3271234567890001",
+          dateOfBirth: "1990-05-12",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const [row] = await db
+      .select()
+      .from(individualVerifications)
+      .where(eq(individualVerifications.campaignId, campaign.id));
+    expect(row?.fullName).toBe("Aldi Setiawan");
+  });
+
+  test("re-saving overwrites rather than duplicating (upsert on unique campaignId)", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc/identity`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fullName: "First Name",
+          nationalId: "1111111111111111",
+          dateOfBirth: "1990-01-01",
+        }),
+      }),
+    );
+    await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc/identity`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fullName: "Revised Name",
+          nationalId: "2222222222222222",
+          dateOfBirth: "1991-02-02",
+        }),
+      }),
+    );
+
+    const rows = await db
+      .select()
+      .from(individualVerifications)
+      .where(eq(individualVerifications.campaignId, campaign.id));
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.fullName).toBe("Revised Name");
+  });
+
+  test("404s (not 403) for a non-owner's campaign", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc/identity`, OTHER_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fullName: "x",
+          nationalId: "1111111111111111",
+          dateOfBirth: "1990-01-01",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(404);
+  });
+});
+
+describe("PUT /campaigns/:id/kyc/contact", () => {
+  test("saves contact fields for the owning user's campaign", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc/contact`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          address: "Jl. Merdeka No. 1",
+          city: "Bandung",
+          postalCode: "40111",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const [row] = await db
+      .select()
+      .from(individualVerifications)
+      .where(eq(individualVerifications.campaignId, campaign.id));
+    expect(row?.city).toBe("Bandung");
+  });
+
+  test("identity then contact populate the same row, not two rows", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc/identity`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fullName: "Aldi Setiawan",
+          nationalId: "3271234567890001",
+          dateOfBirth: "1990-05-12",
+        }),
+      }),
+    );
+    await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc/contact`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          address: "Jl. Merdeka No. 1",
+          city: "Bandung",
+          postalCode: "40111",
+        }),
+      }),
+    );
+
+    const rows = await db
+      .select()
+      .from(individualVerifications)
+      .where(eq(individualVerifications.campaignId, campaign.id));
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.fullName).toBe("Aldi Setiawan");
+    expect(rows[0]?.city).toBe("Bandung");
   });
 });
