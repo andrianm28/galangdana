@@ -20,6 +20,11 @@ async function save(direction: "next" | "back") {
     error = "Kolom ini wajib diisi.";
     return;
   }
+  if (direction === "back" && !value.trim()) {
+    const target = previousStep(data.draft.track, STEP);
+    if (target) await goto(`/create/${data.draft.id}/step/${target}`);
+    return;
+  }
   submitting = true;
   const { error: apiError } = await api["campaign-drafts"]({ id: data.draft.id }).answers.patch({
     step: STEP,
