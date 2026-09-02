@@ -1,11 +1,15 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
+import { api } from "$lib/api-client";
 import { formatMoney, money } from "@galangdana/money";
 import { getDocumentTypes } from "../dokumen/document-types";
 import { previousStep } from "../step-order";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
+
+let submitting = $state(false);
+let error = $state<string | null>(null);
 
 // Every document in this phase belongs to the draft's own track, so looking
 // up labels via the draft's track is safe; fall back to the raw type string
@@ -30,6 +34,18 @@ const goalAmountStr = $derived(
 const formattedGoal = $derived(
   goalAmountStr ? formatMoney(money(BigInt(goalAmountStr), "IDR")) : null,
 );
+
+async function submitForVerification() {
+  error = null;
+  submitting = true;
+  const { data: created, error: apiError } = await api.campaigns.post({ draftId: data.draft.id });
+  submitting = false;
+  if (apiError || !created) {
+    error = "Gagal mengajukan campaign untuk verifikasi. Silakan coba lagi.";
+    return;
+  }
+  await goto(`/kyc/${created.id}/step/identity`);
+}
 
 async function back() {
   const target = previousStep(data.draft.track, "rangkuman");
@@ -108,10 +124,19 @@ async function back() {
     </div>
   </dl>
 
-  <p class="mb-6 rounded-sm bg-neutral-100 p-3 font-sans text-sm text-neutral-600">
-    Verifikasi identitas dan pengajuan akhir campaign akan tersedia setelah langkah verifikasi
-    ditambahkan pada tahap berikutnya.
-  </p>
+  {#if error}
+    <p class="mb-3 font-sans text-sm text-error">{error}</p>
+  {/if}
 
-  <button type="button" onclick={back} class="font-sans text-sm text-neutral-600">Kembali</button>
+  <div class="mt-6 flex justify-between">
+    <button type="button" onclick={back} class="font-sans text-sm text-neutral-600">Kembali</button>
+    <button
+      type="button"
+      onclick={submitForVerification}
+      disabled={submitting}
+      class="rounded-sm bg-primary px-4 py-2 font-sans font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
+    >
+      Ajukan Verifikasi
+    </button>
+  </div>
 </div>

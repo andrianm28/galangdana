@@ -9,3 +9,4 @@ export * from "./campaign-drafts";
 export * from "./campaign-documents";
 export * from "./patients";
 export * from "./beneficiaries";
+export * from "./individual-verifications";

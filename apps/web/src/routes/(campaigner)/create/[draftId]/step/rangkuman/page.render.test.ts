@@ -1,7 +1,17 @@
 // @vitest-environment happy-dom
-import { render, screen } from "@testing-library/svelte";
-import { describe, expect, test } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/svelte";
+import { describe, expect, test, vi } from "vitest";
 import Page from "./+page.svelte";
+
+vi.mock("$env/dynamic/public", () => ({
+  env: {
+    PUBLIC_API_URL: "http://localhost:3001",
+  },
+}));
+
+vi.mock("$app/navigation", () => ({
+  goto: vi.fn(),
+}));
 
 const DRAFT = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -102,5 +112,49 @@ describe("rangkuman step rendering", () => {
     });
     expect(screen.getByText("Riwayat medis")).not.toBeNull();
     expect(screen.queryByText("riwayat_medis")).toBeNull();
+  });
+
+  test("shows a working submit button that creates a real campaign and navigates to KYC", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ id: "22222222-2222-2222-2222-222222222222", slug: "bantu-aldi-sembuh" }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const { goto } = await import("$app/navigation");
+
+    render(Page, {
+      props: {
+        params: { draftId: DRAFT.id },
+        data: {
+          draft: {
+            ...DRAFT,
+            storyAnswers: [{ questionNumber: 1, answerText: "Sejak dua bulan lalu." }],
+            manualStory: null,
+            patient: {
+              name: "Aldi",
+              age: 2,
+              illness: "Kelainan jantung",
+              hospitalName: null,
+              relationshipToCampaigner: null,
+            },
+            beneficiary: null,
+            documents: [],
+          },
+        },
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Ajukan Verifikasi" }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(goto).toHaveBeenCalledWith("/kyc/22222222-2222-2222-2222-222222222222/step/identity");
+
+    fetchSpy.mockRestore();
   });
 });
