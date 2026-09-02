@@ -86,3 +86,65 @@ export const SearchResponseSchema = Type.Object({
   query: Type.String(),
 });
 export type SearchResponse = Static<typeof SearchResponseSchema>;
+
+export const CreateCampaignFromDraftBodySchema = Type.Object({
+  draftId: Type.String({ format: "uuid" }),
+});
+
+export const CreateCampaignFromDraftResponseSchema = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  slug: Type.String(),
+});
+
+export const CampaignErrorSchema2c = Type.Object({ error: Type.String() });
+
+export const SaveKycIdentityBodySchema = Type.Object({
+  fullName: Type.String({ minLength: 1 }),
+  nationalId: Type.String({ minLength: 16, maxLength: 16 }),
+  dateOfBirth: Type.String({ minLength: 1 }),
+});
+
+export const SaveKycContactBodySchema = Type.Object({
+  address: Type.String({ minLength: 1 }),
+  city: Type.String({ minLength: 1 }),
+  postalCode: Type.String({ minLength: 1 }),
+});
+
+export const KycDocumentTypeSchema = Type.Union([Type.Literal("ktp"), Type.Literal("selfie")]);
+
+export const PresignKycDocumentBodySchema = Type.Object({
+  documentType: KycDocumentTypeSchema,
+  fileName: Type.String({ minLength: 1 }),
+});
+
+export const PresignKycDocumentResponseSchema = Type.Object({
+  uploadUrl: Type.String(),
+  objectKey: Type.String(),
+  expiresInSeconds: Type.Number(),
+});
+
+export const ConfirmKycDocumentBodySchema = Type.Object({
+  documentType: KycDocumentTypeSchema,
+  objectKey: Type.String({ minLength: 1 }),
+});
+
+export const KycStatusSchema = Type.Object({
+  campaignId: Type.String({ format: "uuid" }),
+  campaignTitle: Type.String(),
+  campaignSlug: Type.String(),
+  campaignStatus: Type.String(),
+  fullName: Type.Union([Type.String(), Type.Null()]),
+  nationalId: Type.Union([Type.String(), Type.Null()]),
+  dateOfBirth: Type.Union([Type.String(), Type.Null()]),
+  address: Type.Union([Type.String(), Type.Null()]),
+  city: Type.Union([Type.String(), Type.Null()]),
+  postalCode: Type.Union([Type.String(), Type.Null()]),
+  ktpObjectKey: Type.Union([Type.String(), Type.Null()]),
+  selfieObjectKey: Type.Union([Type.String(), Type.Null()]),
+  consentedAt: Type.Union([Type.String(), Type.Null()]),
+});
+export type KycStatusResponse = Static<typeof KycStatusSchema>;
+
+export const SubmitCampaignResponseSchema = Type.Object({
+  status: Type.String(),
+});
