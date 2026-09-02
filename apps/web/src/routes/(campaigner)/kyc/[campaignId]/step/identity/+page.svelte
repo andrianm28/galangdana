@@ -1,6 +1,7 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { api } from "$lib/api-client";
+import type { Treaty } from "@elysiajs/eden";
 import { nextKycStep, previousKycStep } from "../kyc-step-order";
 import type { PageProps } from "./$types";
 
@@ -29,8 +30,18 @@ async function save(direction: "next" | "back") {
   }
   submitting = true;
   // biome-ignore lint/suspicious/noExplicitAny: Eden route-merging conflict requires narrowing
-  const { error: apiError } = await (api.campaigns as any)({ id: data.kyc.campaignId })
-    .kyc.identity.put({ fullName, nationalId, dateOfBirth });
+  const { error: apiError } = (await (api.campaigns as any)({
+    id: data.kyc.campaignId,
+  }).kyc.identity.put({ fullName, nationalId, dateOfBirth })) as Treaty.TreatyResponse<{
+    // The cast above erases Eden's inference for this whole chain to `any` -- confining that
+    // escape hatch to just the unresolvable overload, this re-establishes the real response
+    // shape (matching this endpoint's actual `response: { 200, 401, 404 }` map in
+    // apps/api/src/routes/campaigns.ts) so `apiError` is still checked against
+    // the real KycStatusResponse error shapes.
+    200: { success: boolean };
+    401: { error: string };
+    404: { error: string };
+  }>;
   submitting = false;
   if (apiError) {
     error = "Gagal menyimpan. Silakan coba lagi.";
