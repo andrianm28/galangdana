@@ -20,7 +20,9 @@ let submitting = $state(false);
 // right after a successful login instead of a graceful fallback.
 const redirectTo = $derived.by(() => {
   const raw = page.url.searchParams.get("redirectTo");
-  return raw?.startsWith("/") ? raw : "/";
+  // A protocol-relative value (e.g. "//evil.com") passes startsWith("/") but
+  // is still cross-origin from goto()'s perspective -- exclude it too.
+  return raw?.startsWith("/") && !raw.startsWith("//") ? raw : "/";
 });
 
 async function requestOtp() {
