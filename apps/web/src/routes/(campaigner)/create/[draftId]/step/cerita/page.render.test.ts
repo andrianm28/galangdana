@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { render, screen } from "@testing-library/svelte";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { previousStep } from "../step-order";
 import Page from "./+page.svelte";
 
 // Required so importing the page (which imports $lib/api-client at module
@@ -11,6 +12,16 @@ vi.mock("$env/dynamic/public", () => ({
   env: {
     PUBLIC_API_URL: "http://localhost:3001",
   },
+}));
+
+// Spied so the "Kembali on an empty step" test can assert navigation
+// happened WITHOUT going through a real SvelteKit router (goto() throws
+// outside a real app context) and without hitting the network via
+// $lib/api-client -- goto is the only externally-observable effect of
+// save("back") skipping the (invalid, empty-content) API call.
+const goto = vi.fn();
+vi.mock("$app/navigation", () => ({
+  goto: (...args: unknown[]) => goto(...args),
 }));
 
 // Widened past the plan's literal fixture: GET /campaign-drafts/:id's
@@ -43,6 +54,10 @@ const DRAFT = {
 };
 
 describe("cerita step rendering", () => {
+  beforeEach(() => {
+    goto.mockClear();
+  });
+
   test("defaults to guided mode, showing 6 questions for a medical draft", () => {
     render(Page, {
       props: {
@@ -93,5 +108,23 @@ describe("cerita step rendering", () => {
     // node, so getByText's textContent-based matcher can never see it --
     // getByDisplayValue is testing-library's query for exactly this case.
     expect(screen.getByDisplayValue("Cerita yang sudah ditulis.")).not.toBeNull();
+  });
+
+  test("clicking Kembali on a fresh, empty draft navigates back without an error, instead of forcing an invalid save", async () => {
+    render(Page, {
+      props: {
+        params: { draftId: DRAFT.id },
+        data: { draft: { ...DRAFT, storyAnswers: [], manualStory: null } },
+      },
+    });
+    screen.getByText("Kembali").click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    // No empty-content PUT was attempted (it would have failed
+    // StoryQuestionAnswerSchema's minLength: 1 and surfaced this error).
+    expect(screen.queryByText("Gagal menyimpan cerita. Silakan coba lagi.")).toBeNull();
+    expect(goto).toHaveBeenCalledWith(
+      `/create/${DRAFT.id}/step/${previousStep(DRAFT.track, "cerita")}`,
+    );
   });
 });

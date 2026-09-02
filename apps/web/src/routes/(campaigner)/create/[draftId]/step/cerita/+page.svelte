@@ -29,13 +29,20 @@ let error = $state<string | null>(null);
 
 async function save(direction: "next" | "back") {
   error = null;
-  if (direction === "next") {
-    const incomplete =
-      mode === "guided" ? guidedAnswers.some((a) => !a.trim()) : !manualText.trim();
-    if (incomplete) {
-      error = "Lengkapi cerita campaign sebelum melanjutkan.";
-      return;
-    }
+  const incomplete = mode === "guided" ? guidedAnswers.some((a) => !a.trim()) : !manualText.trim();
+  if (direction === "next" && incomplete) {
+    error = "Lengkapi cerita campaign sebelum melanjutkan.";
+    return;
+  }
+  if (direction === "back" && incomplete) {
+    // Nothing worth saving yet (e.g. a first-time visit to this step,
+    // since cerita is never the wizard's first step) -- calling the story
+    // PUT with empty content would fail StoryQuestionAnswerSchema's /
+    // SaveManualStoryBodySchema's minLength: 1 validation. Just navigate
+    // back without forcing an invalid save.
+    const target = previousStep(data.draft.track, "cerita");
+    if (target) await goto(`/create/${data.draft.id}/step/${target}`);
+    return;
   }
   submitting = true;
   const body =
