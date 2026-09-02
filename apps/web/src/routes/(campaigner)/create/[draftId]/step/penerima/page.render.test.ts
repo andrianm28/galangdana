@@ -9,6 +9,10 @@ vi.mock("$env/dynamic/public", () => ({
   },
 }));
 
+vi.mock("$app/navigation", () => ({
+  goto: vi.fn(),
+}));
+
 const DRAFT = {
   id: "22222222-2222-2222-2222-222222222222",
   track: "non_medical" as const,
@@ -54,7 +58,19 @@ describe("penerima step rendering", () => {
       },
     });
     expect((screen.getByLabelText("Nama penerima manfaat") as HTMLInputElement).value).toBe(
-      "Warga Desa Sukamaju"
+      "Warga Desa Sukamaju",
     );
+  });
+
+  test("back button does not require beneficiary data", () => {
+    render(Page, {
+      props: {
+        data: { draft: { ...DRAFT, beneficiary: null } },
+        params: { draftId: DRAFT.id },
+      },
+    });
+    const backButton = screen.getByRole("button", { name: "Kembali" }) as HTMLButtonElement;
+    expect(backButton.disabled).toBe(false);
+    expect(screen.queryByText(/wajib diisi/)).toBe(null);
   });
 });

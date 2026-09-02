@@ -9,6 +9,10 @@ vi.mock("$env/dynamic/public", () => ({
   },
 }));
 
+vi.mock("$app/navigation", () => ({
+  goto: vi.fn(),
+}));
+
 const DRAFT = {
   id: "11111111-1111-1111-1111-111111111111",
   track: "medical" as const,
@@ -56,6 +60,20 @@ describe("pasien step rendering", () => {
       },
     });
     expect((screen.getByLabelText("Nama pasien") as HTMLInputElement).value).toBe("Aldi");
-    expect((screen.getByLabelText("Kondisi/penyakit") as HTMLInputElement).value).toBe("Kelainan jantung");
+    expect((screen.getByLabelText("Kondisi/penyakit") as HTMLInputElement).value).toBe(
+      "Kelainan jantung",
+    );
+  });
+
+  test("back button does not require patient data", () => {
+    render(Page, {
+      props: {
+        data: { draft: { ...DRAFT, patient: null } },
+        params: { draftId: DRAFT.id },
+      },
+    });
+    const backButton = screen.getByRole("button", { name: "Kembali" }) as HTMLButtonElement;
+    expect(backButton.disabled).toBe(false);
+    expect(screen.queryByText(/wajib diisi/)).toBe(null);
   });
 });

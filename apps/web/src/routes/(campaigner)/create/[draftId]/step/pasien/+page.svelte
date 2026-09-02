@@ -6,26 +6,29 @@ import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
 
-let name = $state("");
-let age = $state("");
-let illness = $state("");
-let hospitalName = $state("");
-let relationshipToCampaigner = $state("");
+// biome-ignore lint/style/useConst: state variables must be let for reactivity
+let name = $state(data.draft.patient?.name ?? "");
+// biome-ignore lint/style/useConst: state variables must be let for reactivity
+let age = $state(data.draft.patient?.age != null ? String(data.draft.patient.age) : "");
+// biome-ignore lint/style/useConst: state variables must be let for reactivity
+let illness = $state(data.draft.patient?.illness ?? "");
+// biome-ignore lint/style/useConst: state variables must be let for reactivity
+let hospitalName = $state(data.draft.patient?.hospitalName ?? "");
+// biome-ignore lint/style/useConst: state variables must be let for reactivity
+let relationshipToCampaigner = $state(data.draft.patient?.relationshipToCampaigner ?? "");
 let submitting = $state(false);
 let error = $state<string | null>(null);
 
-$effect(() => {
-  name = data.draft.patient?.name ?? "";
-  age = data.draft.patient?.age != null ? String(data.draft.patient.age) : "";
-  illness = data.draft.patient?.illness ?? "";
-  hospitalName = data.draft.patient?.hospitalName ?? "";
-  relationshipToCampaigner = data.draft.patient?.relationshipToCampaigner ?? "";
-});
-
 async function save(direction: "next" | "back") {
   error = null;
-  if (direction === "next" && (!name.trim() || !illness.trim())) {
+  const incomplete = !name.trim() || !illness.trim();
+  if (direction === "next" && incomplete) {
     error = "Nama dan kondisi pasien wajib diisi.";
+    return;
+  }
+  if (direction === "back" && incomplete) {
+    const target = previousStep(data.draft.track, "pasien");
+    if (target) await goto(`/create/${data.draft.id}/step/${target}`);
     return;
   }
   submitting = true;

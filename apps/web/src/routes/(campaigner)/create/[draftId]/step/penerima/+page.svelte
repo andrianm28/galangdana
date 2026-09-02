@@ -6,22 +6,25 @@ import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
 
-let name = $state("");
-let relationship = $state("");
-let needDescription = $state("");
+// biome-ignore lint/style/useConst: state variables must be let for reactivity
+let name = $state(data.draft.beneficiary?.name ?? "");
+// biome-ignore lint/style/useConst: state variables must be let for reactivity
+let relationship = $state(data.draft.beneficiary?.relationship ?? "");
+// biome-ignore lint/style/useConst: state variables must be let for reactivity
+let needDescription = $state(data.draft.beneficiary?.needDescription ?? "");
 let submitting = $state(false);
 let error = $state<string | null>(null);
 
-$effect(() => {
-  name = data.draft.beneficiary?.name ?? "";
-  relationship = data.draft.beneficiary?.relationship ?? "";
-  needDescription = data.draft.beneficiary?.needDescription ?? "";
-});
-
 async function save(direction: "next" | "back") {
   error = null;
-  if (direction === "next" && (!name.trim() || !needDescription.trim())) {
+  const incomplete = !name.trim() || !needDescription.trim();
+  if (direction === "next" && incomplete) {
     error = "Nama dan kebutuhan penerima manfaat wajib diisi.";
+    return;
+  }
+  if (direction === "back" && incomplete) {
+    const target = previousStep(data.draft.track, "penerima");
+    if (target) await goto(`/create/${data.draft.id}/step/${target}`);
     return;
   }
   submitting = true;
