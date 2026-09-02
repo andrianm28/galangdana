@@ -1,12 +1,14 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { api } from "$lib/api-client";
-import type { PageProps } from "./$types";
 import { getStepOrder } from "../[draftId]/step/step-order";
+import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
 
+// biome-ignore lint/style/useConst: Svelte binding requires mutable let
 let track: "medical" | "non_medical" = $state("medical");
+// biome-ignore lint/style/useConst: Svelte binding requires mutable let
 let categoryId = $state<number | undefined>(data.categories[0]?.id);
 let submitting = $state(false);
 let error = $state<string | null>(null);
@@ -16,6 +18,7 @@ async function createDraft() {
   submitting = true;
   // Bracket notation required -- Eden Treaty does NOT camelCase a kebab-case
   // route prefix (this plan's Global Constraint). api.campaignDrafts(...) silently 404s.
+  // @ts-expect-error Eden Treaty types don't recognize bracket notation correctly
   const { data: draft, error: apiError } = await api["campaign-drafts"].post({
     track,
     categoryId,
