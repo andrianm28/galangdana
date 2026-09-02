@@ -92,6 +92,13 @@
       "when": 1788352942019,
       "tag": "0012_silly_squirrel_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788353202803,
+      "tag": "0013_steady_lionheart",
+      "breakpoints": true
     }
   ]
 }

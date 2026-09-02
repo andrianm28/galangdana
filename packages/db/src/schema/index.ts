@@ -1,6 +1,7 @@
 export * from "./categories";
 export * from "./campaigners";
 export * from "./campaigns";
+export * from "./campaign-revisions";
 export * from "./users";
 export * from "./sessions";
 export * from "./otp-challenges";
