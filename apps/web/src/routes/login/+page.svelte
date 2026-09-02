@@ -14,7 +14,14 @@ let code = $state("");
 let error = $state<string | null>(null);
 let submitting = $state(false);
 
-const redirectTo = $derived(page.url.searchParams.get("redirectTo") ?? "/");
+// Only honor redirectTo when it's a same-origin relative path. goto() throws
+// on a cross-origin target (this isn't an open-redirect vector), but an
+// unguarded crafted link would still produce an unhandled runtime error
+// right after a successful login instead of a graceful fallback.
+const redirectTo = $derived.by(() => {
+  const raw = page.url.searchParams.get("redirectTo");
+  return raw?.startsWith("/") ? raw : "/";
+});
 
 async function requestOtp() {
   error = null;
