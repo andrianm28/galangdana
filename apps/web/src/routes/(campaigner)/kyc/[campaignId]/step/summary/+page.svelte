@@ -2,6 +2,7 @@
 import { goto } from "$app/navigation";
 import { api } from "$lib/api-client";
 import type { Treaty } from "@elysiajs/eden";
+import type { SubmitCampaignResponse } from "@galangdana/contracts";
 import { previousKycStep } from "../kyc-step-order";
 import type { PageProps } from "./$types";
 
@@ -27,7 +28,7 @@ async function submitCampaign() {
     // shape (matching this endpoint's actual `response: { 200, 400, 401, 404 }` map in
     // apps/api/src/routes/campaigns.ts) so `apiError` is still checked against the real
     // SubmitCampaignResponse / error shapes.
-    200: { status: string };
+    200: SubmitCampaignResponse;
     400: { error: string };
     401: { error: string };
     404: { error: string };
@@ -79,7 +80,7 @@ async function submitCampaign() {
     <button
       type="button"
       onclick={submitCampaign}
-      disabled={submitting}
+      disabled={submitting || !data.kyc.ktpObjectKey || !data.kyc.selfieObjectKey}
       class="rounded-sm bg-primary px-4 py-2 font-sans font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
     >
       Ajukan Campaign

@@ -40,7 +40,9 @@ export type {
   CampaignSummaryResponse,
   KycStatusResponse,
   MoneyJSONResponse,
+  PresignKycDocumentResponse,
   SearchResponse,
+  SubmitCampaignResponse,
 } from "./campaigns";
 export {
   CampaignDocumentSchema,

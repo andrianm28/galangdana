@@ -2,6 +2,7 @@
 import { goto, invalidateAll } from "$app/navigation";
 import { api } from "$lib/api-client";
 import type { Treaty } from "@elysiajs/eden";
+import type { PresignKycDocumentResponse } from "@galangdana/contracts";
 import { nextKycStep, previousKycStep } from "../kyc-step-order";
 
 interface Props {
@@ -43,7 +44,7 @@ async function upload() {
     // shape (matching this endpoint's actual `response: { 200, 401, 404, 422 }` map in
     // apps/api/src/routes/campaigns.ts) so `presign`/`presignError` are still checked against
     // the real PresignKycDocumentResponse / error shapes.
-    200: { uploadUrl: string; objectKey: string; expiresInSeconds: number };
+    200: PresignKycDocumentResponse;
     401: { error: string };
     404: { error: string };
     422: { error: string };

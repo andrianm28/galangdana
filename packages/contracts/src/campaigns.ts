@@ -122,6 +122,7 @@ export const PresignKycDocumentResponseSchema = Type.Object({
   objectKey: Type.String(),
   expiresInSeconds: Type.Number(),
 });
+export type PresignKycDocumentResponse = Static<typeof PresignKycDocumentResponseSchema>;
 
 export const ConfirmKycDocumentBodySchema = Type.Object({
   documentType: KycDocumentTypeSchema,
@@ -148,3 +149,4 @@ export type KycStatusResponse = Static<typeof KycStatusSchema>;
 export const SubmitCampaignResponseSchema = Type.Object({
   status: Type.String(),
 });
+export type SubmitCampaignResponse = Static<typeof SubmitCampaignResponseSchema>;

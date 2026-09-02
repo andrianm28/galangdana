@@ -31,6 +31,27 @@ describe("kyc summary page rendering", () => {
     expect(screen.getByText("Bandung")).not.toBeNull();
   });
 
+  test("disables the submit button when a document is missing", () => {
+    render(Page, {
+      props: {
+        data: { kyc: { ...KYC, ktpObjectKey: null } },
+        params: { campaignId: KYC.campaignId },
+      },
+    });
+    const submitButton = screen.getByRole("button", {
+      name: "Ajukan Campaign",
+    }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+  });
+
+  test("enables the submit button when both documents are present", () => {
+    render(Page, { props: { data: { kyc: KYC }, params: { campaignId: KYC.campaignId } } });
+    const submitButton = screen.getByRole("button", {
+      name: "Ajukan Campaign",
+    }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(false);
+  });
+
   test("clicking Ajukan Campaign submits and navigates to pending", async () => {
     const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ status: "pending_review" }), {
