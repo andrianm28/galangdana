@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "campaigns_draft_id_unique" ON "campaigns" USING btree ("draft_id") WHERE draft_id IS NOT NULL;

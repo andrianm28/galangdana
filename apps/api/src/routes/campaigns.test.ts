@@ -59,6 +59,55 @@ function authedRequest(url: string, token: string, init: RequestInit = {}) {
   });
 }
 
+async function fillKycIdentityAndContact(campaignId: string, token: string) {
+  await app.handle(
+    authedRequest(`http://localhost/campaigns/${campaignId}/kyc/identity`, token, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fullName: "Aldi Setiawan",
+        nationalId: "3271234567890001",
+        dateOfBirth: "1990-05-12",
+      }),
+    }),
+  );
+  await app.handle(
+    authedRequest(`http://localhost/campaigns/${campaignId}/kyc/contact`, token, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        address: "Jl. Merdeka No. 1",
+        city: "Bandung",
+        postalCode: "40111",
+      }),
+    }),
+  );
+}
+
+async function uploadKycDocuments(campaignId: string, token: string) {
+  for (const documentType of ["ktp", "selfie"] as const) {
+    const presignResp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaignId}/kyc/documents/presign`, token, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType, fileName: `${documentType}.jpg` }),
+      }),
+    );
+    const { uploadUrl, objectKey } = (await presignResp.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+    await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
+    await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaignId}/kyc/documents/confirm`, token, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType, objectKey }),
+      }),
+    );
+  }
+}
+
 async function createTestCampaign(token: string) {
   const createDraftResp = await app.handle(
     authedRequest("http://localhost/campaign-drafts", token, {
@@ -387,6 +436,32 @@ describe("PUT /campaigns/:id/kyc/identity", () => {
     );
     expect(resp.status).toBe(404);
   });
+
+  test("409s once the campaign has left draft/needs_revision (e.g. after a successful submit)", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await fillKycIdentityAndContact(campaign.id, TEST_TOKEN);
+    await uploadKycDocuments(campaign.id, TEST_TOKEN);
+    await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc/identity`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fullName: "Changed After Submit",
+          nationalId: "9999999999999999",
+          dateOfBirth: "1999-09-09",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("campaign_not_editable");
+  });
 });
 
 describe("PUT /campaigns/:id/kyc/contact", () => {
@@ -573,38 +648,10 @@ describe("GET /campaigns/:id/kyc", () => {
 });
 
 describe("POST /campaigns/:id/submit", () => {
-  test("flips status from draft to pending_review once both documents are on file", async () => {
+  test("flips status from draft to pending_review once identity, contact, and both documents are on file", async () => {
     const campaign = await createTestCampaign(TEST_TOKEN);
-
-    for (const documentType of ["ktp", "selfie"] as const) {
-      const presignResp = await app.handle(
-        authedRequest(
-          `http://localhost/campaigns/${campaign.id}/kyc/documents/presign`,
-          TEST_TOKEN,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ documentType, fileName: `${documentType}.jpg` }),
-          },
-        ),
-      );
-      const { uploadUrl, objectKey } = (await presignResp.json()) as {
-        uploadUrl: string;
-        objectKey: string;
-      };
-      await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
-      await app.handle(
-        authedRequest(
-          `http://localhost/campaigns/${campaign.id}/kyc/documents/confirm`,
-          TEST_TOKEN,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ documentType, objectKey }),
-          },
-        ),
-      );
-    }
+    await fillKycIdentityAndContact(campaign.id, TEST_TOKEN);
+    await uploadKycDocuments(campaign.id, TEST_TOKEN);
 
     const resp = await app.handle(
       authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
@@ -631,37 +678,27 @@ describe("POST /campaigns/:id/submit", () => {
     expect(row?.status).toBe("draft");
   });
 
+  test("rejects submission when documents are uploaded but identity/contact were never filled in", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await uploadKycDocuments(campaign.id, TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("kyc_incomplete");
+
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.status).toBe("draft");
+  });
+
   test("is safe to call again after a successful submit (does not error on an already-pending_review campaign)", async () => {
     const campaign = await createTestCampaign(TEST_TOKEN);
-    for (const documentType of ["ktp", "selfie"] as const) {
-      const presignResp = await app.handle(
-        authedRequest(
-          `http://localhost/campaigns/${campaign.id}/kyc/documents/presign`,
-          TEST_TOKEN,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ documentType, fileName: `${documentType}.jpg` }),
-          },
-        ),
-      );
-      const { uploadUrl, objectKey } = (await presignResp.json()) as {
-        uploadUrl: string;
-        objectKey: string;
-      };
-      await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
-      await app.handle(
-        authedRequest(
-          `http://localhost/campaigns/${campaign.id}/kyc/documents/confirm`,
-          TEST_TOKEN,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ documentType, objectKey }),
-          },
-        ),
-      );
-    }
+    await fillKycIdentityAndContact(campaign.id, TEST_TOKEN);
+    await uploadKycDocuments(campaign.id, TEST_TOKEN);
     await app.handle(
       authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
         method: "POST",
@@ -676,6 +713,33 @@ describe("POST /campaigns/:id/submit", () => {
     expect(secondResp.status).toBe(200);
   });
 
+  test("409s when submitting a campaign that is already active, not silently demoting it back to pending_review", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await fillKycIdentityAndContact(campaign.id, TEST_TOKEN);
+    await uploadKycDocuments(campaign.id, TEST_TOKEN);
+    await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    await db
+      .update(campaigns)
+      .set({ status: "active", publishedAt: new Date() })
+      .where(eq(campaigns.id, campaign.id));
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("invalid_campaign_status");
+
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.status).toBe("active");
+  });
+
   test("404s (not 403) for a non-owner's campaign", async () => {
     const campaign = await createTestCampaign(TEST_TOKEN);
     const resp = await app.handle(
@@ -684,5 +748,62 @@ describe("POST /campaigns/:id/submit", () => {
       }),
     );
     expect(resp.status).toBe(404);
+  });
+});
+
+describe("POST /campaigns idempotency", () => {
+  test("submitting the same draftId twice returns the same campaign id/slug and creates only one row", async () => {
+    const createDraftResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const draft = (await createDraftResp.json()) as { id: string };
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          step: "rangkuman",
+          answers: {
+            title: "Bantu Aldi Sembuh Lagi",
+            purpose: "Biaya operasi jantung",
+            goalAmountStr: "15000000",
+          },
+        }),
+      }),
+    );
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "manual", text: "Cerita lengkap Aldi." }),
+      }),
+    );
+
+    const makeRequest = () =>
+      app.handle(
+        authedRequest("http://localhost/campaigns", TEST_TOKEN, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ draftId: draft.id }),
+        }),
+      );
+
+    const firstResp = await makeRequest();
+    expect(firstResp.status).toBe(200);
+    const first = (await firstResp.json()) as { id: string; slug: string };
+
+    const secondResp = await makeRequest();
+    expect(secondResp.status).toBe(200);
+    const second = (await secondResp.json()) as { id: string; slug: string };
+
+    expect(second.id).toBe(first.id);
+    expect(second.slug).toBe(first.slug);
+
+    const rows = await db.select().from(campaigns).where(eq(campaigns.draftId, draft.id));
+    expect(rows.length).toBe(1);
   });
 });

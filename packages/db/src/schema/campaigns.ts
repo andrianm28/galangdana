@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { campaignDrafts } from "./campaign-drafts";
@@ -112,6 +113,14 @@ export const campaigns = pgTable(
       sql`(${table.model} = 'goal' AND ${table.goalAmount} IS NOT NULL) OR
           (${table.model} = 'program' AND ${table.goalAmount} IS NULL AND ${table.expiresAt} IS NULL)`,
     ),
+    // Prevents converting the same draft into two real campaigns under a
+    // concurrent double-submit -- the application-level check in the
+    // POST /campaigns handler closes the common case, this closes the race.
+    // Partial (draft_id IS NOT NULL) so it never blocks multiple campaigns
+    // that all have draftId: null.
+    uniqueIndex("campaigns_draft_id_unique")
+      .on(table.draftId)
+      .where(sql`draft_id IS NOT NULL`),
   ],
 );
 

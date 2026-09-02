@@ -162,6 +162,11 @@ export const campaignsRoute = new Elysia()
         return { error: "draft_incomplete" };
       }
 
+      const [existing] = await db.select().from(campaigns).where(eq(campaigns.draftId, draft.id));
+      if (existing) {
+        return { id: existing.id, slug: existing.slug };
+      }
+
       const storyAnswers = await db
         .select({
           questionNumber: campaignStoryAnswers.questionNumber,
@@ -247,6 +252,10 @@ export const campaignsRoute = new Elysia()
         set.status = 404;
         return { error: "campaign_not_found" };
       }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
 
       await db
         .insert(individualVerifications)
@@ -278,6 +287,7 @@ export const campaignsRoute = new Elysia()
         200: t.Object({ success: t.Boolean() }),
         401: CampaignErrorSchema2c,
         404: CampaignErrorSchema2c,
+        409: CampaignErrorSchema2c,
       },
     },
   )
@@ -292,6 +302,10 @@ export const campaignsRoute = new Elysia()
       if (!campaign) {
         set.status = 404;
         return { error: "campaign_not_found" };
+      }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
       }
 
       await db
@@ -324,6 +338,7 @@ export const campaignsRoute = new Elysia()
         200: t.Object({ success: t.Boolean() }),
         401: CampaignErrorSchema2c,
         404: CampaignErrorSchema2c,
+        409: CampaignErrorSchema2c,
       },
     },
   )
@@ -377,6 +392,10 @@ export const campaignsRoute = new Elysia()
         set.status = 404;
         return { error: "campaign_not_found" };
       }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
 
       if (!body.objectKey.startsWith(`kyc/${params.id}/${body.documentType}/`)) {
         set.status = 400;
@@ -411,6 +430,7 @@ export const campaignsRoute = new Elysia()
         400: CampaignErrorSchema2c,
         401: CampaignErrorSchema2c,
         404: CampaignErrorSchema2c,
+        409: CampaignErrorSchema2c,
       },
     },
   )
@@ -479,11 +499,25 @@ export const campaignsRoute = new Elysia()
         return { status: campaign.status };
       }
 
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "invalid_campaign_status" };
+      }
+
       const [verification] = await db
         .select()
         .from(individualVerifications)
         .where(eq(individualVerifications.campaignId, campaign.id));
-      if (!verification?.ktpObjectKey || !verification?.selfieObjectKey) {
+      if (
+        !verification?.ktpObjectKey ||
+        !verification?.selfieObjectKey ||
+        !verification?.fullName?.trim() ||
+        !verification?.nationalId?.trim() ||
+        !verification?.dateOfBirth?.trim() ||
+        !verification?.address?.trim() ||
+        !verification?.city?.trim() ||
+        !verification?.postalCode?.trim()
+      ) {
         set.status = 400;
         return { error: "kyc_incomplete" };
       }
@@ -502,6 +536,7 @@ export const campaignsRoute = new Elysia()
         400: CampaignErrorSchema2c,
         401: CampaignErrorSchema2c,
         404: CampaignErrorSchema2c,
+        409: CampaignErrorSchema2c,
       },
     },
   );
