@@ -67,4 +67,47 @@ describe("dokumen step rendering", () => {
     });
     expect(screen.getByText("Riwayat medis", { exact: false })).not.toBeNull();
   });
+
+  // Regression test: uploadDocument() ends with `await invalidateAll()`,
+  // which reloads the layout's load function and updates this SAME mounted
+  // page's `data` prop in place -- SvelteKit does not remount the
+  // component for an in-app upload. `rerender()` below simulates exactly
+  // that in-place `data` update (per @testing-library/svelte's own docs,
+  // it updates props on the already-mounted component rather than
+  // re-mounting). If `documentTypes`/`uploadedTypes`/`availableTypes` were
+  // ever changed back to plain `const`s (computed once from the initial
+  // `data`) instead of `$derived`, this test would fail: the select would
+  // keep offering "Riwayat medis" even after the update says it's already
+  // uploaded, reproducing the exact label collision the filter exists to
+  // prevent.
+  test("filters an uploaded type out of the selector after a reactive data update, not just a fresh render", async () => {
+    const { rerender } = render(Page, {
+      props: { params: { draftId: DRAFT.id }, data: { draft: { ...DRAFT, documents: [] } } },
+    });
+
+    const select = screen.getByLabelText("Jenis dokumen") as HTMLSelectElement;
+    const optionsBefore = Array.from(select.options).map((o) => o.textContent);
+    expect(optionsBefore).toContain("Riwayat medis");
+
+    await rerender({
+      data: {
+        draft: {
+          ...DRAFT,
+          documents: [
+            {
+              id: "d1",
+              type: "riwayat_medis",
+              objectKey: "drafts/x/riwayat_medis/y.pdf",
+              uploadedAt: new Date().toISOString(),
+            },
+          ],
+        },
+      },
+    });
+
+    const optionsAfter = Array.from(select.options).map((o) => o.textContent);
+    expect(optionsAfter).not.toContain("Riwayat medis");
+    expect(optionsAfter).toContain("Tagihan rumah sakit");
+    expect(screen.getByText("Riwayat medis", { exact: false })).not.toBeNull();
+  });
 });

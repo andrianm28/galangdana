@@ -7,14 +7,23 @@ import { getDocumentTypes } from "./document-types";
 
 const { data }: PageProps = $props();
 
-const documentTypes = getDocumentTypes(data.draft.track);
+// $derived, not plain const: `data` updates in place (no remount) after
+// uploadDocument()'s invalidateAll() reloads the layout's load function --
+// a plain const computed once at init would go stale and keep offering an
+// already-uploaded type in the selector below (see this task's Deviations
+// for the bug this caused and the reactive-update test that catches it).
+const documentTypes = $derived(getDocumentTypes(data.draft.track));
 // Types with a document already uploaded are dropped from the selectable
 // list -- otherwise picking one of them here would look identical to (and,
 // in the DOM, literally collide with) that type's own already-uploaded
 // list entry below.
-const uploadedTypes = new Set(data.draft.documents.map((doc) => doc.type));
-const availableTypes = documentTypes.filter((t) => !uploadedTypes.has(t.value));
+const uploadedTypes = $derived(new Set(data.draft.documents.map((doc) => doc.type)));
+const availableTypes = $derived(documentTypes.filter((t) => !uploadedTypes.has(t.value)));
 
+// Deliberately only seeds the initial default -- selectedType is the
+// user's own in-progress selection, so it must NOT re-track availableTypes
+// on every data update (that would blow away whatever the user has picked
+// each time a document finishes uploading).
 // biome-ignore lint/style/useConst: Svelte binding requires mutable let
 let selectedType = $state(availableTypes[0]?.value ?? documentTypes[0]?.value ?? "riwayat_medis");
 let selectedFile: File | null = $state(null);
