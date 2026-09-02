@@ -9,7 +9,17 @@ const ANSWER_KEY = "goalAmountStr";
 
 const { data }: PageProps = $props();
 
-// biome-ignore lint/style/useConst: Svelte $state runes require let for bind:
+// Not bound via bind:value -- Svelte's bind:value on a type="number" input
+// coerces through to_number() (empty string -> null, else +value -> a real
+// number) before calling set(), which breaks this whole project's
+// "money is always a decimal string" convention and makes save("next")'s
+// value.trim() throw the moment a user types a digit. Kept a plain string
+// end-to-end via one-way value={value} + an oninput handler instead (see
+// this task's Deviations for the full root-cause trace). Reassigned only in
+// that oninput handler below, which lives inside a template expression --
+// biome's linter doesn't see assignments there, only ones in the script
+// block, so it can't tell `value` is ever reassigned at all.
+// biome-ignore lint/style/useConst: reassigned in the oninput handler below
 let value = $state(String(data.draft.answers[ANSWER_KEY] ?? ""));
 let submitting = $state(false);
 let error = $state<string | null>(null);
@@ -18,6 +28,11 @@ async function save(direction: "next" | "back") {
   error = null;
   if (direction === "next" && !value.trim()) {
     error = "Kolom ini wajib diisi.";
+    return;
+  }
+  if (direction === "back" && !value.trim()) {
+    const target = previousStep(data.draft.track, STEP);
+    if (target) await goto(`/create/${data.draft.id}/step/${target}`);
     return;
   }
   submitting = true;
@@ -46,7 +61,15 @@ async function save(direction: "next" | "back") {
   <label for={ANSWER_KEY} class="mb-2 block font-sans text-sm font-medium text-neutral-900">
     Jumlah target (Rp)
   </label>
-  <input id={ANSWER_KEY} bind:value type="number" min="10000" step="1000" class="w-full rounded-sm border border-neutral-200 px-3 py-2 font-sans text-base" />
+  <input
+    id={ANSWER_KEY}
+    type="number"
+    min="10000"
+    step="1000"
+    value={value}
+    oninput={(e) => (value = (e.currentTarget as HTMLInputElement).value)}
+    class="w-full rounded-sm border border-neutral-200 px-3 py-2 font-sans text-base"
+  />
 
   <div class="mt-6 flex justify-between">
     <button
