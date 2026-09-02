@@ -18,6 +18,12 @@ const DRAFT = {
   expiresAt: new Date().toISOString(),
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
+  storyAnswers: [],
+  manualStory: null,
+  patient: null,
+  beneficiary: null,
+  documents: [],
+  userId: "test-user-id",
 };
 
 describe("target-donasi step rendering", () => {
@@ -28,8 +34,13 @@ describe("target-donasi step rendering", () => {
 
   test("pre-fills the input from an existing draft answer", () => {
     render(Page, {
-      props: { data: { draft: { ...DRAFT, answers: { goalAmountStr: "50000000" } } }, params: { draftId: DRAFT.id } },
+      props: {
+        data: { draft: { ...DRAFT, answers: { goalAmountStr: "50000000" } } },
+        params: { draftId: DRAFT.id },
+      },
     });
-    expect(screen.getByLabelText("Jumlah target (Rp)")).toHaveValue(50000000);
+    expect((screen.getByLabelText("Jumlah target (Rp)") as HTMLInputElement).value).toBe(
+      "50000000",
+    );
   });
 });

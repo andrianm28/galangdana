@@ -18,6 +18,12 @@ const DRAFT = {
   expiresAt: new Date().toISOString(),
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
+  storyAnswers: [],
+  manualStory: null,
+  patient: null,
+  beneficiary: null,
+  documents: [],
+  userId: "test-user-id",
 };
 
 describe("ajakan step rendering", () => {
@@ -28,8 +34,13 @@ describe("ajakan step rendering", () => {
 
   test("pre-fills the input from an existing draft answer", () => {
     render(Page, {
-      props: { data: { draft: { ...DRAFT, answers: { callToAction: "Mari bantu sesama" } } }, params: { draftId: DRAFT.id } },
+      props: {
+        data: { draft: { ...DRAFT, answers: { callToAction: "Mari bantu sesama" } } },
+        params: { draftId: DRAFT.id },
+      },
     });
-    expect(screen.getByLabelText("Kalimat ajakan singkat")).toHaveValue("Mari bantu sesama");
+    expect((screen.getByLabelText("Kalimat ajakan singkat") as HTMLInputElement).value).toBe(
+      "Mari bantu sesama",
+    );
   });
 });

@@ -18,6 +18,12 @@ const DRAFT = {
   expiresAt: new Date().toISOString(),
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
+  storyAnswers: [],
+  manualStory: null,
+  patient: null,
+  beneficiary: null,
+  documents: [],
+  userId: "test-user-id",
 };
 
 describe("tujuan step rendering", () => {
@@ -28,8 +34,13 @@ describe("tujuan step rendering", () => {
 
   test("pre-fills the input from an existing draft answer", () => {
     render(Page, {
-      props: { data: { draft: { ...DRAFT, answers: { purpose: "Biaya operasi" } } }, params: { draftId: DRAFT.id } },
+      props: {
+        data: { draft: { ...DRAFT, answers: { purpose: "Biaya operasi" } } },
+        params: { draftId: DRAFT.id },
+      },
     });
-    expect(screen.getByLabelText("Jelaskan tujuan secara singkat")).toHaveValue("Biaya operasi");
+    expect(
+      (screen.getByLabelText("Jelaskan tujuan secara singkat") as HTMLTextAreaElement).value,
+    ).toBe("Biaya operasi");
   });
 });
