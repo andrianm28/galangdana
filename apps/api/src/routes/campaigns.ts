@@ -4,8 +4,11 @@ import {
   CampaignErrorSchema2c,
   CampaignListQuerySchema,
   CampaignListResponseSchema,
+  ConfirmKycDocumentBodySchema,
   CreateCampaignFromDraftBodySchema,
   CreateCampaignFromDraftResponseSchema,
+  PresignKycDocumentBodySchema,
+  PresignKycDocumentResponseSchema,
   SaveKycContactBodySchema,
   SaveKycIdentityBodySchema,
 } from "@galangdana/contracts";
@@ -26,6 +29,21 @@ import { sessionDerive } from "../lib/session";
 import { generateUniqueSlug } from "../lib/slug";
 
 const DEFAULT_LIMIT = 12;
+
+const ALLOWED_KYC_EXTENSIONS = ["jpg", "jpeg", "png"];
+
+const kycDocumentsS3 = new Bun.S3Client({
+  endpoint: process.env.MEDIA_S3_ENDPOINT ?? "http://localhost:9000",
+  accessKeyId: process.env.MEDIA_S3_ACCESS_KEY_ID ?? "galangdana",
+  secretAccessKey: process.env.MEDIA_S3_SECRET_ACCESS_KEY ?? "galangdana-dev-secret",
+  bucket: process.env.MEDIA_S3_PRIVATE_BUCKET ?? "campaign-documents",
+  region: "us-east-1",
+});
+
+function extractKycExtension(fileName: string): string | null {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  return ext && ALLOWED_KYC_EXTENSIONS.includes(ext) ? ext : null;
+}
 
 async function findOwnedCampaign(campaignId: string, userId: string) {
   const [campaigner] = await db
@@ -302,6 +320,93 @@ export const campaignsRoute = new Elysia()
       body: SaveKycContactBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
+        401: CampaignErrorSchema2c,
+        404: CampaignErrorSchema2c,
+      },
+    },
+  )
+  .post(
+    "/campaigns/:id/kyc/documents/presign",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+
+      const ext = extractKycExtension(body.fileName);
+      if (!ext) {
+        set.status = 422;
+        return { error: "unsupported_file_type" };
+      }
+
+      const objectKey = `kyc/${params.id}/${body.documentType}/${crypto.randomUUID()}.${ext}`;
+      const expiresInSeconds = 300;
+      const uploadUrl = kycDocumentsS3
+        .file(objectKey)
+        .presign({ method: "PUT", expiresIn: expiresInSeconds });
+
+      return { uploadUrl, objectKey, expiresInSeconds };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: PresignKycDocumentBodySchema,
+      response: {
+        200: PresignKycDocumentResponseSchema,
+        401: CampaignErrorSchema2c,
+        404: CampaignErrorSchema2c,
+        422: CampaignErrorSchema2c,
+      },
+    },
+  )
+  .post(
+    "/campaigns/:id/kyc/documents/confirm",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+
+      if (!body.objectKey.startsWith(`kyc/${params.id}/${body.documentType}/`)) {
+        set.status = 400;
+        return { error: "object_key_mismatch" };
+      }
+
+      const column = body.documentType === "ktp" ? "ktpObjectKey" : "selfieObjectKey";
+      await db
+        .insert(individualVerifications)
+        .values({
+          campaignId: campaign.id,
+          fullName: "",
+          nationalId: "",
+          dateOfBirth: "",
+          address: "",
+          city: "",
+          postalCode: "",
+          [column]: body.objectKey,
+        })
+        .onConflictDoUpdate({
+          target: individualVerifications.campaignId,
+          set: { [column]: body.objectKey, updatedAt: new Date() },
+        });
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: ConfirmKycDocumentBodySchema,
+      response: {
+        200: t.Object({ success: t.Boolean() }),
+        400: CampaignErrorSchema2c,
         401: CampaignErrorSchema2c,
         404: CampaignErrorSchema2c,
       },

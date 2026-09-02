@@ -448,3 +448,99 @@ describe("PUT /campaigns/:id/kyc/contact", () => {
     expect(rows[0]?.city).toBe("Bandung");
   });
 });
+
+describe("POST /campaigns/:id/kyc/documents/presign + /confirm", () => {
+  test("returns a presigned PUT URL scoped under kyc/{campaignId}/{documentType}/", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc/documents/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType: "ktp", fileName: "ktp.jpg" }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { uploadUrl: string; objectKey: string };
+    expect(body.objectKey.startsWith(`kyc/${campaign.id}/ktp/`)).toBe(true);
+    expect(body.objectKey.endsWith(".jpg")).toBe(true);
+  });
+
+  test("records the document after a real presigned upload round-trip, for both ktp and selfie", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    for (const documentType of ["ktp", "selfie"] as const) {
+      const presignResp = await app.handle(
+        authedRequest(
+          `http://localhost/campaigns/${campaign.id}/kyc/documents/presign`,
+          TEST_TOKEN,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ documentType, fileName: `${documentType}.jpg` }),
+          },
+        ),
+      );
+      const { uploadUrl, objectKey } = (await presignResp.json()) as {
+        uploadUrl: string;
+        objectKey: string;
+      };
+
+      const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
+      expect(putResp.status).toBe(200);
+
+      const confirmResp = await app.handle(
+        authedRequest(
+          `http://localhost/campaigns/${campaign.id}/kyc/documents/confirm`,
+          TEST_TOKEN,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ documentType, objectKey }),
+          },
+        ),
+      );
+      expect(confirmResp.status).toBe(200);
+    }
+
+    const [row] = await db
+      .select()
+      .from(individualVerifications)
+      .where(eq(individualVerifications.campaignId, campaign.id));
+    expect(row?.ktpObjectKey).not.toBeNull();
+    expect(row?.selfieObjectKey).not.toBeNull();
+  });
+
+  test("rejects confirming an objectKey outside this campaign's own kyc prefix", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc/documents/confirm`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          documentType: "ktp",
+          objectKey: "kyc/00000000-0000-0000-0000-000000000000/ktp/hijack.jpg",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(400);
+  });
+
+  test("404s (not 403) for a non-owner's campaign on both presign and confirm", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    const presignResp = await app.handle(
+      authedRequest(
+        `http://localhost/campaigns/${campaign.id}/kyc/documents/presign`,
+        OTHER_TOKEN,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ documentType: "ktp", fileName: "ktp.jpg" }),
+        },
+      ),
+    );
+    expect(presignResp.status).toBe(404);
+  });
+});
