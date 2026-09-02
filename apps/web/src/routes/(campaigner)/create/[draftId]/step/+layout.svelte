@@ -1,4 +1,5 @@
 <script lang="ts">
+import { page } from "$app/state";
 import { Card } from "@galangdana/ui";
 import type { LayoutProps } from "./$types";
 import { getStepOrder } from "./step-order";
@@ -6,7 +7,14 @@ import { getStepOrder } from "./step-order";
 const { data, children }: LayoutProps = $props();
 
 const stepOrder = $derived(getStepOrder(data.draft.track));
-const currentIndex = $derived(stepOrder.indexOf(data.draft.currentStep));
+// Derived from the URL's own path segment, not `data.draft.currentStep` --
+// `currentStep` names the step the last PATCH was FOR (the step just left),
+// not the one being viewed, and a fresh draft's `currentStep` defaults to
+// "info" (not even a member of stepOrder). Reading the URL sidesteps both
+// that off-by-one/undefined-index problem and the layout load's own
+// staleness (see +layout.server.ts), since the path always reflects
+// whichever step page actually just rendered.
+const currentIndex = $derived(stepOrder.indexOf(page.url.pathname.split("/").pop() ?? ""));
 </script>
 
 <div class="mx-auto max-w-md px-4 py-6">
