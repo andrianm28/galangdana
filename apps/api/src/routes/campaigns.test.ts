@@ -254,4 +254,48 @@ describe("POST /campaigns", () => {
     );
     expect(resp.status).toBe(400);
   });
+
+  test("400s (not 500) when goalAmountStr is not a valid integer literal", async () => {
+    const createDraftResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const draft = (await createDraftResp.json()) as { id: string };
+
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          step: "rangkuman",
+          answers: {
+            title: "Bantu Aldi Sembuh",
+            purpose: "Biaya operasi jantung",
+            goalAmountStr: "abc",
+          },
+        }),
+      }),
+    );
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "manual", text: "Cerita lengkap Aldi." }),
+      }),
+    );
+
+    const resp = await app.handle(
+      authedRequest("http://localhost/campaigns", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draftId: draft.id }),
+      }),
+    );
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("draft_incomplete");
+  });
 });

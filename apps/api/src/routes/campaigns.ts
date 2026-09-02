@@ -118,7 +118,9 @@ export const campaignsRoute = new Elysia()
       const shortDescription =
         typeof draft.answers.purpose === "string" ? draft.answers.purpose : null;
       const goalAmountStr =
-        typeof draft.answers.goalAmountStr === "string" ? draft.answers.goalAmountStr : null;
+        typeof draft.answers.goalAmountStr === "string" && /^\d+$/.test(draft.answers.goalAmountStr)
+          ? draft.answers.goalAmountStr
+          : null;
       if (!title || !shortDescription || !goalAmountStr || !draft.categoryId) {
         set.status = 400;
         return { error: "draft_incomplete" };
