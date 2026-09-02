@@ -544,3 +544,145 @@ describe("POST /campaigns/:id/kyc/documents/presign + /confirm", () => {
     expect(presignResp.status).toBe(404);
   });
 });
+
+describe("GET /campaigns/:id/kyc", () => {
+  test("returns the campaign plus whatever KYC data has been saved so far, defaulting to nulls", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc`, TEST_TOKEN),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      campaignId: string;
+      fullName: string | null;
+      ktpObjectKey: string | null;
+    };
+    expect(body.campaignId).toBe(campaign.id);
+    expect(body.fullName).toBeNull();
+    expect(body.ktpObjectKey).toBeNull();
+  });
+
+  test("404s (not 403) for a non-owner's campaign", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/kyc`, OTHER_TOKEN),
+    );
+    expect(resp.status).toBe(404);
+  });
+});
+
+describe("POST /campaigns/:id/submit", () => {
+  test("flips status from draft to pending_review once both documents are on file", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    for (const documentType of ["ktp", "selfie"] as const) {
+      const presignResp = await app.handle(
+        authedRequest(
+          `http://localhost/campaigns/${campaign.id}/kyc/documents/presign`,
+          TEST_TOKEN,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ documentType, fileName: `${documentType}.jpg` }),
+          },
+        ),
+      );
+      const { uploadUrl, objectKey } = (await presignResp.json()) as {
+        uploadUrl: string;
+        objectKey: string;
+      };
+      await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
+      await app.handle(
+        authedRequest(
+          `http://localhost/campaigns/${campaign.id}/kyc/documents/confirm`,
+          TEST_TOKEN,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ documentType, objectKey }),
+          },
+        ),
+      );
+    }
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.status).toBe("pending_review");
+  });
+
+  test("rejects submission when KTP or selfie is missing", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(400);
+
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.status).toBe("draft");
+  });
+
+  test("is safe to call again after a successful submit (does not error on an already-pending_review campaign)", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    for (const documentType of ["ktp", "selfie"] as const) {
+      const presignResp = await app.handle(
+        authedRequest(
+          `http://localhost/campaigns/${campaign.id}/kyc/documents/presign`,
+          TEST_TOKEN,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ documentType, fileName: `${documentType}.jpg` }),
+          },
+        ),
+      );
+      const { uploadUrl, objectKey } = (await presignResp.json()) as {
+        uploadUrl: string;
+        objectKey: string;
+      };
+      await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
+      await app.handle(
+        authedRequest(
+          `http://localhost/campaigns/${campaign.id}/kyc/documents/confirm`,
+          TEST_TOKEN,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ documentType, objectKey }),
+          },
+        ),
+      );
+    }
+    await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+
+    const secondResp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(secondResp.status).toBe(200);
+  });
+
+  test("404s (not 403) for a non-owner's campaign", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, OTHER_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(404);
+  });
+});

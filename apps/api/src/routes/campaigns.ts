@@ -7,10 +7,12 @@ import {
   ConfirmKycDocumentBodySchema,
   CreateCampaignFromDraftBodySchema,
   CreateCampaignFromDraftResponseSchema,
+  KycStatusSchema,
   PresignKycDocumentBodySchema,
   PresignKycDocumentResponseSchema,
   SaveKycContactBodySchema,
   SaveKycIdentityBodySchema,
+  SubmitCampaignResponseSchema,
 } from "@galangdana/contracts";
 import {
   campaignCategories,
@@ -406,6 +408,97 @@ export const campaignsRoute = new Elysia()
       body: ConfirmKycDocumentBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
+        400: CampaignErrorSchema2c,
+        401: CampaignErrorSchema2c,
+        404: CampaignErrorSchema2c,
+      },
+    },
+  )
+  .get(
+    // Path param is named ":slug" (not ":id") solely to match the existing
+    // GET /campaigns/:slug route's param name at this same trie position --
+    // memoirist (Elysia's router) requires a consistent param name per HTTP
+    // method at a shared position, even though this route's continuation
+    // ("/kyc") differs. The value is actually a campaign id, not a slug.
+    "/campaigns/:slug/kyc",
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.slug, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+
+      const [verification] = await db
+        .select()
+        .from(individualVerifications)
+        .where(eq(individualVerifications.campaignId, campaign.id));
+
+      return {
+        campaignId: campaign.id,
+        campaignTitle: campaign.title,
+        campaignSlug: campaign.slug,
+        campaignStatus: campaign.status,
+        fullName: verification?.fullName || null,
+        nationalId: verification?.nationalId || null,
+        dateOfBirth: verification?.dateOfBirth || null,
+        address: verification?.address || null,
+        city: verification?.city || null,
+        postalCode: verification?.postalCode || null,
+        ktpObjectKey: verification?.ktpObjectKey ?? null,
+        selfieObjectKey: verification?.selfieObjectKey ?? null,
+        consentedAt: verification?.consentedAt?.toISOString() ?? null,
+      };
+    },
+    {
+      params: t.Object({ slug: t.String() }),
+      response: {
+        200: KycStatusSchema,
+        401: CampaignErrorSchema2c,
+        404: CampaignErrorSchema2c,
+      },
+    },
+  )
+  .post(
+    "/campaigns/:id/submit",
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+
+      if (campaign.status === "pending_review") {
+        return { status: campaign.status };
+      }
+
+      const [verification] = await db
+        .select()
+        .from(individualVerifications)
+        .where(eq(individualVerifications.campaignId, campaign.id));
+      if (!verification?.ktpObjectKey || !verification?.selfieObjectKey) {
+        set.status = 400;
+        return { error: "kyc_incomplete" };
+      }
+
+      await db
+        .update(campaigns)
+        .set({ status: "pending_review", updatedAt: new Date() })
+        .where(eq(campaigns.id, campaign.id));
+
+      return { status: "pending_review" };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: {
+        200: SubmitCampaignResponseSchema,
         400: CampaignErrorSchema2c,
         401: CampaignErrorSchema2c,
         404: CampaignErrorSchema2c,
