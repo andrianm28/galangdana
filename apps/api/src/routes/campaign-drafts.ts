@@ -42,6 +42,26 @@ function extractExtension(fileName: string): string | null {
   return ext && ALLOWED_DOCUMENT_EXTENSIONS.includes(ext) ? ext : null;
 }
 
+// Shapes a raw campaignDrafts row into exactly the fields
+// CampaignDraftSchema declares -- deliberately omits userId (a real DB
+// column) since Eden Treaty's TypeScript inference reads this literal
+// return shape, not the declared `response` schema, so a raw `{ ...draft }`
+// spread would leak userId into every consumer's statically-inferred type
+// even though Elysia's response schema already stripped it from the actual
+// wire response.
+function toDraftResponse(draft: typeof campaignDrafts.$inferSelect) {
+  return {
+    id: draft.id,
+    track: draft.track,
+    categoryId: draft.categoryId,
+    currentStep: draft.currentStep,
+    answers: draft.answers,
+    expiresAt: draft.expiresAt.toISOString(),
+    createdAt: draft.createdAt.toISOString(),
+    updatedAt: draft.updatedAt.toISOString(),
+  };
+}
+
 export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
   .use(sessionDerive)
   .post(
@@ -64,12 +84,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
         set.status = 500;
         return { error: "draft_creation_failed" };
       }
-      return {
-        ...draft,
-        expiresAt: draft.expiresAt.toISOString(),
-        createdAt: draft.createdAt.toISOString(),
-        updatedAt: draft.updatedAt.toISOString(),
-      };
+      return toDraftResponse(draft);
     },
     {
       body: CreateCampaignDraftBodySchema,
@@ -110,10 +125,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
       ]);
 
       return {
-        ...draft,
-        expiresAt: draft.expiresAt.toISOString(),
-        createdAt: draft.createdAt.toISOString(),
-        updatedAt: draft.updatedAt.toISOString(),
+        ...toDraftResponse(draft),
         storyAnswers,
         manualStory: typeof draft.answers.story === "string" ? draft.answers.story : null,
         patient: patient
@@ -179,12 +191,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
         return { error: "draft_update_failed" };
       }
 
-      return {
-        ...updated,
-        expiresAt: updated.expiresAt.toISOString(),
-        createdAt: updated.createdAt.toISOString(),
-        updatedAt: updated.updatedAt.toISOString(),
-      };
+      return toDraftResponse(updated);
     },
     {
       params: t.Object({ id: t.String() }),

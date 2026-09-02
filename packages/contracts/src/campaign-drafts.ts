@@ -44,17 +44,25 @@ export const SaveManualStoryBodySchema = Type.Object({
   text: Type.String({ minLength: 1 }),
 });
 
+// age/hospitalName/relationshipToCampaigner accept `null` (not just plain
+// Optional) so the web client can send an explicit `null` to clear a
+// previously-filled field: this endpoint always receives the full current
+// form state, and Elysia/TypeBox serialization OMITS `undefined`-valued
+// keys from the actual wire body, so `undefined` can never overwrite a
+// stale value in `.onConflictDoUpdate({ set: body })` -- only a real,
+// present `null` key can. Still `Type.Optional` too so a caller that omits
+// the key entirely (never having had a value to clear) remains valid.
 export const SavePatientBodySchema = Type.Object({
   name: Type.String({ minLength: 1 }),
-  age: Type.Optional(Type.Number({ minimum: 0 })),
+  age: Type.Optional(Type.Union([Type.Number({ minimum: 0 }), Type.Null()])),
   illness: Type.String({ minLength: 1 }),
-  hospitalName: Type.Optional(Type.String()),
-  relationshipToCampaigner: Type.Optional(Type.String()),
+  hospitalName: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  relationshipToCampaigner: Type.Optional(Type.Union([Type.String(), Type.Null()])),
 });
 
 export const SaveBeneficiaryBodySchema = Type.Object({
   name: Type.String({ minLength: 1 }),
-  relationship: Type.Optional(Type.String()),
+  relationship: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   needDescription: Type.String({ minLength: 1 }),
 });
 

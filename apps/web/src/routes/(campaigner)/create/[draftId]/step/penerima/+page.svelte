@@ -30,7 +30,10 @@ async function save(direction: "next" | "back") {
   submitting = true;
   const { error: apiError } = await api["campaign-drafts"]({ id: data.draft.id }).beneficiary.put({
     name,
-    relationship: relationship || undefined,
+    // `null` (not `undefined`) so clearing this field actually overwrites a
+    // stale DB value -- see the matching comment in pasien/+page.svelte and
+    // campaign-drafts.ts's SaveBeneficiaryBodySchema.
+    relationship: relationship || null,
     needDescription,
   });
   submitting = false;
