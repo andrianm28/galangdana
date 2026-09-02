@@ -10,14 +10,14 @@ describe("kyc-step-order", () => {
       "upload-ktp",
       "upload-selfie",
       "hold",
-      "pending",
       "summary",
+      "pending",
     ]);
   });
 
   test("nextKycStep returns the following step, or null at the end", () => {
     expect(nextKycStep("identity")).toBe("contact");
-    expect(nextKycStep("summary")).toBeNull();
+    expect(nextKycStep("pending")).toBeNull();
   });
 
   test("previousKycStep returns the prior step, or null at the start", () => {

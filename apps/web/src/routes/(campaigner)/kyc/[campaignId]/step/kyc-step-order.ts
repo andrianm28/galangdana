@@ -5,8 +5,8 @@ const KYC_STEP_ORDER = [
   "upload-ktp",
   "upload-selfie",
   "hold",
-  "pending",
   "summary",
+  "pending",
 ] as const;
 
 export function getKycStepOrder(): string[] {
