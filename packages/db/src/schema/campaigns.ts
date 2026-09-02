@@ -10,6 +10,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { campaignDrafts } from "./campaign-drafts";
 import { campaigners } from "./campaigners";
 import { campaignCategories } from "./categories";
 
@@ -51,6 +52,15 @@ export const campaigns = pgTable(
     campaignerId: uuid("campaigner_id")
       .notNull()
       .references(() => campaigners.id),
+
+    // Nullable pointer back to the draft this campaign was submitted from.
+    // campaign_drafts (and its child tables: story answers, patient/
+    // beneficiary, documents) remain the permanent source of truth for
+    // authored content -- this column is a pointer, not a duplication.
+    // set null on delete: losing the scratch draft after submission is
+    // fine and expected (drafts have a 7-day TTL); the campaign itself
+    // must survive.
+    draftId: uuid("draft_id").references(() => campaignDrafts.id, { onDelete: "set null" }),
 
     // Every money-bearing table in this platform carries an explicit
     // currency column, including in this foundational phase (see the plan's
