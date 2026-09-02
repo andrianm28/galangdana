@@ -18,7 +18,8 @@ import {
 import { requestOtp, verifyOtp } from "../auth/otp";
 import { loginWithEmail, registerWithEmail } from "../auth/password";
 import { generatePkceVerifier, generateState, pkceChallengeFromVerifier } from "../auth/pkce";
-import { createSession, revokeSession, validateSession } from "../auth/session";
+import { createSession, revokeSession } from "../auth/session";
+import { sessionDerive } from "../lib/session";
 
 const SESSION_COOKIE = "session";
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -88,21 +89,6 @@ function toUserResponse(user: User) {
     avatarUrl: user.avatarUrl,
   };
 }
-
-/**
- * Derives the current user from the session cookie on every request this
- * plugin is applied to. Downstream handlers read `user`/`session` from
- * context; both are `null` when there is no valid session, so a protected
- * route checks `if (!user) { set.status = 401; return ... }` rather than
- * this plugin throwing.
- */
-const sessionDerive = new Elysia().derive({ as: "scoped" }, async ({ cookie }) => {
-  const token = cookie[SESSION_COOKIE]?.value;
-  if (!token) return { user: null, sessionToken: null };
-  const result = await validateSession(token);
-  if (!result) return { user: null, sessionToken: null };
-  return { user: result.user, sessionToken: token };
-});
 
 export const authRoute = new Elysia({ prefix: "/auth" })
   .use(sessionDerive)

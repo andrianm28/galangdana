@@ -154,11 +154,25 @@ jobs:
         # command sequence, then a real `upload-cover-images.ts` run, then
         # an anonymous curl GET of an uploaded object, all succeeded (see
         # Task 14's report).
+        #
+        # Also creates campaign-documents here (same `mc alias`/`mc mb`
+        # invocation, same job, same step -- just a second target bucket):
+        # apps/api/src/routes/campaign-drafts.ts's presigned-upload flow
+        # defaults to this bucket (MEDIA_S3_PRIVATE_BUCKET, unset in CI) and
+        # campaign-drafts.test.ts does a real PUT against a real presigned
+        # URL into it, so without this the bucket doesn't exist in a fresh
+        # CI run and MinIO 404s the PUT with NoSuchBucket -- this passed
+        # locally only because a developer had created the bucket manually
+        # at some point. Deliberately WITHOUT `mc anonymous set download`:
+        # unlike campaign-media, campaign-documents holds private
+        # evidentiary uploads (medical records, ID cards) and must stay
+        # non-public.
         run: |
           docker run --rm --network host --entrypoint sh minio/mc -c "
             mc alias set local http://localhost:9000 galangdana galangdana-dev-secret &&
             mc mb --ignore-existing local/campaign-media &&
-            mc anonymous set download local/campaign-media
+            mc anonymous set download local/campaign-media &&
+            mc mb --ignore-existing local/campaign-documents
           "
 
       # Task 6's apps/api/src/routes/campaigns.test.ts asserts against the

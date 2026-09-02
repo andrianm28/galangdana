@@ -1,0 +1,948 @@
+{
+  "id": "aa1552d7-5d65-4864-81eb-7aaf46f4918a",
+  "prevId": "d19ed8a1-75db-487f-adf2-5c83eb4c76ea",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.campaign_categories": {
+      "name": "campaign_categories",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_favorite": {
+          "name": "is_favorite",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "campaign_categories_slug_unique": {
+          "name": "campaign_categories_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": ["slug"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.campaigners": {
+      "name": "campaigners",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "type": {
+          "name": "type",
+          "type": "campaigner_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "avatar_url": {
+          "name": "avatar_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.campaigns": {
+      "name": "campaigns",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "short_description": {
+          "name": "short_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "story": {
+          "name": "story",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "cover_media_url": {
+          "name": "cover_media_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "campaigner_id": {
+          "name": "campaigner_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "campaign_currency",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'IDR'"
+        },
+        "type": {
+          "name": "type",
+          "type": "campaign_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'donation'"
+        },
+        "status": {
+          "name": "status",
+          "type": "campaign_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "model": {
+          "name": "model",
+          "type": "campaign_model",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "goal_amount": {
+          "name": "goal_amount",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "collected_amount": {
+          "name": "collected_amount",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "disbursed_amount": {
+          "name": "disbursed_amount",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "donation_count": {
+          "name": "donation_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "campaigns_category_id_campaign_categories_id_fk": {
+          "name": "campaigns_category_id_campaign_categories_id_fk",
+          "tableFrom": "campaigns",
+          "tableTo": "campaign_categories",
+          "columnsFrom": ["category_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "campaigns_campaigner_id_campaigners_id_fk": {
+          "name": "campaigns_campaigner_id_campaigners_id_fk",
+          "tableFrom": "campaigns",
+          "tableTo": "campaigners",
+          "columnsFrom": ["campaigner_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "campaigns_slug_unique": {
+          "name": "campaigns_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": ["slug"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "goal_model_requires_goal_amount": {
+          "name": "goal_model_requires_goal_amount",
+          "value": "(\"campaigns\".\"model\" = 'goal' AND \"campaigns\".\"goal_amount\" IS NOT NULL) OR\n          (\"campaigns\".\"model\" = 'program' AND \"campaigns\".\"goal_amount\" IS NULL AND \"campaigns\".\"expires_at\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avatar_url": {
+          "name": "avatar_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_anonymous": {
+          "name": "default_anonymous",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_phone_unique": {
+          "name": "users_phone_unique",
+          "nullsNotDistinct": false,
+          "columns": ["phone"]
+        },
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": ["email"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sessions": {
+      "name": "sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ip_address": {
+          "name": "ip_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "sessions_user_id_users_id_fk": {
+          "name": "sessions_user_id_users_id_fk",
+          "tableFrom": "sessions",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.otp_challenges": {
+      "name": "otp_challenges",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code_hash": {
+          "name": "code_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "otp_challenges_phone_created_at_idx": {
+          "name": "otp_challenges_phone_created_at_idx",
+          "columns": [
+            {
+              "expression": "phone",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oauth_accounts": {
+      "name": "oauth_accounts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "oauth_provider",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_account_id": {
+          "name": "provider_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "oauth_accounts_provider_account_unique": {
+          "name": "oauth_accounts_provider_account_unique",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "oauth_accounts_user_id_users_id_fk": {
+          "name": "oauth_accounts_user_id_users_id_fk",
+          "tableFrom": "oauth_accounts",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.campaign_drafts": {
+      "name": "campaign_drafts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "track": {
+          "name": "track",
+          "type": "campaign_draft_track",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_step": {
+          "name": "current_step",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'info'"
+        },
+        "answers": {
+          "name": "answers",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "campaign_drafts_user_id_users_id_fk": {
+          "name": "campaign_drafts_user_id_users_id_fk",
+          "tableFrom": "campaign_drafts",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "campaign_drafts_category_id_campaign_categories_id_fk": {
+          "name": "campaign_drafts_category_id_campaign_categories_id_fk",
+          "tableFrom": "campaign_drafts",
+          "tableTo": "campaign_categories",
+          "columnsFrom": ["category_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.campaign_story_answers": {
+      "name": "campaign_story_answers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "draft_id": {
+          "name": "draft_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_number": {
+          "name": "question_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "answer_text": {
+          "name": "answer_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "campaign_story_answers_draft_id_campaign_drafts_id_fk": {
+          "name": "campaign_story_answers_draft_id_campaign_drafts_id_fk",
+          "tableFrom": "campaign_story_answers",
+          "tableTo": "campaign_drafts",
+          "columnsFrom": ["draft_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "campaign_story_answers_draft_id_question_number_unique": {
+          "name": "campaign_story_answers_draft_id_question_number_unique",
+          "nullsNotDistinct": false,
+          "columns": ["draft_id", "question_number"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.patients": {
+      "name": "patients",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "draft_id": {
+          "name": "draft_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "age": {
+          "name": "age",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "illness": {
+          "name": "illness",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hospital_name": {
+          "name": "hospital_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "relationship_to_campaigner": {
+          "name": "relationship_to_campaigner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "patients_draft_id_campaign_drafts_id_fk": {
+          "name": "patients_draft_id_campaign_drafts_id_fk",
+          "tableFrom": "patients",
+          "tableTo": "campaign_drafts",
+          "columnsFrom": ["draft_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "patients_draft_id_unique": {
+          "name": "patients_draft_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["draft_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.beneficiaries": {
+      "name": "beneficiaries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "draft_id": {
+          "name": "draft_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "relationship": {
+          "name": "relationship",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "need_description": {
+          "name": "need_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "beneficiaries_draft_id_campaign_drafts_id_fk": {
+          "name": "beneficiaries_draft_id_campaign_drafts_id_fk",
+          "tableFrom": "beneficiaries",
+          "tableTo": "campaign_drafts",
+          "columnsFrom": ["draft_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "beneficiaries_draft_id_unique": {
+          "name": "beneficiaries_draft_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["draft_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.campaigner_type": {
+      "name": "campaigner_type",
+      "schema": "public",
+      "values": ["individual", "yayasan", "platform"]
+    },
+    "public.campaign_currency": {
+      "name": "campaign_currency",
+      "schema": "public",
+      "values": ["IDR", "USD"]
+    },
+    "public.campaign_model": {
+      "name": "campaign_model",
+      "schema": "public",
+      "values": ["goal", "program"]
+    },
+    "public.campaign_status": {
+      "name": "campaign_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "pending_review",
+        "needs_revision",
+        "active",
+        "paused",
+        "completed",
+        "rejected"
+      ]
+    },
+    "public.campaign_type": {
+      "name": "campaign_type",
+      "schema": "public",
+      "values": ["donation", "zakat", "wakaf"]
+    },
+    "public.oauth_provider": {
+      "name": "oauth_provider",
+      "schema": "public",
+      "values": ["google"]
+    },
+    "public.campaign_draft_track": {
+      "name": "campaign_draft_track",
+      "schema": "public",
+      "values": ["medical", "non_medical"]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

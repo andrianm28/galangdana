@@ -1,4 +1,4 @@
-export type { Currency, Money, MoneyJSON } from "./money.js";
+export type { Currency, Money, MoneyJSON } from "./money.ts";
 export {
   addMoney,
   formatMoney,
@@ -6,5 +6,5 @@ export {
   moneyFromJSON,
   moneyToJSON,
   subtractMoney,
-} from "./money.js";
-export { bigIntSafeJSONStringify } from "./serializer.js";
+} from "./money.ts";
+export { bigIntSafeJSONStringify } from "./serializer.ts";
