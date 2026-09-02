@@ -124,7 +124,7 @@ All 5 pass against the existing (already-correct, per the plan) ownership-check 
 
 ## Commit
 
-Commit SHA: **`21e3d3b`** (see below)
+Commit SHA: **`6975f4c`**
 Message: `fix(api): provision campaign-documents CI bucket, drop userId leak, allow clearing optional draft fields`
 
 ## Deviations
