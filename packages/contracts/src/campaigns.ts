@@ -150,3 +150,120 @@ export const SubmitCampaignResponseSchema = Type.Object({
   status: Type.String(),
 });
 export type SubmitCampaignResponse = Static<typeof SubmitCampaignResponseSchema>;
+
+// ---- Phase 3: admin moderation ----
+
+export const AdminCampaignListItemSchema = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  slug: Type.String(),
+  title: Type.String(),
+  campaignerName: Type.String(),
+  categoryTitle: Type.String(),
+  status: Type.String(),
+  submittedAt: Type.Union([Type.String(), Type.Null()]),
+});
+export type AdminCampaignListItem = Static<typeof AdminCampaignListItemSchema>;
+
+export const AdminCampaignListResponseSchema = Type.Object({
+  campaigns: Type.Array(AdminCampaignListItemSchema),
+});
+
+export const AdminCampaignRevisionSchema = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  field: Type.String(),
+  note: Type.String(),
+  status: Type.String(),
+  createdAt: Type.String(),
+  resolvedAt: Type.Union([Type.String(), Type.Null()]),
+});
+export type AdminCampaignRevision = Static<typeof AdminCampaignRevisionSchema>;
+
+export const AdminCampaignDocumentSchema = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  type: Type.String(),
+  viewUrl: Type.String(),
+  uploadedAt: Type.String(),
+});
+
+export const AdminCampaignDetailResponseSchema = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  slug: Type.String(),
+  title: Type.String(),
+  shortDescription: Type.String(),
+  story: Type.String(),
+  status: Type.String(),
+  model: Type.Union([Type.Literal("goal"), Type.Literal("program")]),
+  goalAmount: Type.Union([MoneyJSONSchema, Type.Null()]),
+  category: CampaignCategorySchema,
+  campaignerName: Type.String(),
+  verification: Type.Object({
+    fullName: Type.String(),
+    nationalId: Type.String(),
+    dateOfBirth: Type.String(),
+    address: Type.String(),
+    city: Type.String(),
+    postalCode: Type.String(),
+    ktpViewUrl: Type.Union([Type.String(), Type.Null()]),
+    selfieViewUrl: Type.Union([Type.String(), Type.Null()]),
+    status: Type.String(),
+  }),
+  documents: Type.Array(AdminCampaignDocumentSchema),
+  revisions: Type.Array(AdminCampaignRevisionSchema),
+});
+export type AdminCampaignDetailResponse = Static<typeof AdminCampaignDetailResponseSchema>;
+
+export const AdminRequestRevisionFieldSchema = Type.Union([
+  Type.Literal("cerita"),
+  Type.Literal("target_donasi"),
+  Type.Literal("kartu_mahasiswa"),
+  Type.Literal("kartu_pelajar"),
+  Type.Literal("tagihan_rumah_sakit"),
+  Type.Literal("tagihan_institusi_pendidikan"),
+  Type.Literal("media_sosial"),
+  Type.Literal("sumber_gambar"),
+]);
+
+export const AdminRequestRevisionBodySchema = Type.Object({
+  items: Type.Array(
+    Type.Object({ field: AdminRequestRevisionFieldSchema, note: Type.String({ minLength: 1 }) }),
+    { minItems: 1 },
+  ),
+});
+
+export const AdminActionResponseSchema = Type.Object({ status: Type.String() });
+
+// ---- Phase 3: campaigner-facing revisions + content edits ----
+
+export const CampaignRevisionListResponseSchema = Type.Object({
+  revisions: Type.Array(AdminCampaignRevisionSchema),
+});
+
+export const SaveCampaignStoryBodySchema = Type.Object({ story: Type.String({ minLength: 1 }) });
+export const SaveCampaignGoalAmountBodySchema = Type.Object({
+  goalAmountStr: Type.String({ pattern: "^\\d+$" }),
+});
+
+export const CampaignDocumentTypeSchema = Type.Union([
+  Type.Literal("kartu_mahasiswa"),
+  Type.Literal("kartu_pelajar"),
+  Type.Literal("tagihan_rumah_sakit"),
+  Type.Literal("tagihan_institusi_pendidikan"),
+  Type.Literal("media_sosial"),
+  Type.Literal("sumber_gambar"),
+]);
+
+export const PresignCampaignDocumentBodySchema = Type.Object({
+  documentType: CampaignDocumentTypeSchema,
+  fileName: Type.String({ minLength: 1 }),
+});
+export const PresignCampaignDocumentResponseSchema = Type.Object({
+  uploadUrl: Type.String(),
+  objectKey: Type.String(),
+  expiresInSeconds: Type.Number(),
+});
+export type PresignCampaignDocumentResponse = Static<typeof PresignCampaignDocumentResponseSchema>;
+
+export const ConfirmCampaignDocumentBodySchema = Type.Object({
+  documentType: CampaignDocumentTypeSchema,
+  objectKey: Type.String(),
+});
