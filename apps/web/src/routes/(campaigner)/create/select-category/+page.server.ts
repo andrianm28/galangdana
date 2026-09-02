@@ -10,5 +10,7 @@ export const load: PageServerLoad = async ({ cookies, url }) => {
 
   const client = createServerApiClient(sessionToken);
   const { data } = await client.categories.get();
-  return { categories: data?.categories ?? [] };
+  // Explicitly type categories to match API response schema
+  const categories: Array<{ id: number; slug: string; title: string }> = data?.categories ?? [];
+  return { categories };
 };

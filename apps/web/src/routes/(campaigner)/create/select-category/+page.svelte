@@ -18,8 +18,11 @@ async function createDraft() {
   submitting = true;
   // Bracket notation required -- Eden Treaty does NOT camelCase a kebab-case
   // route prefix (this plan's Global Constraint). api.campaignDrafts(...) silently 404s.
-  // @ts-expect-error Eden Treaty types don't recognize bracket notation correctly
-  const { data: draft, error: apiError } = await api["campaign-drafts"].post({
+  // The route tree mixes collection-level POST / with dynamic sub-routes /:id/...,
+  // creating an intersection type: both callable (for :id routes) and object with methods
+  // (for / routes). Narrow cast to access the post method on the object portion.
+  // biome-ignore lint/suspicious/noExplicitAny: Route tree intersection requires narrowing
+  const { data: draft, error: apiError } = await (api["campaign-drafts"] as any).post({
     track,
     categoryId,
   });

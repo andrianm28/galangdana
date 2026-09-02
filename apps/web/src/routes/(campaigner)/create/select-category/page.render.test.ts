@@ -18,10 +18,10 @@ describe("select-category page rendering", () => {
   test("renders a track choice and the category list", () => {
     render(Page, {
       props: {
-        data: { categories: CATEGORIES as any },
+        data: { categories: CATEGORIES },
         params: {},
         form: null,
-      } as any,
+      },
     });
     expect(screen.getByText("Bencana Alam")).not.toBeNull();
     expect(screen.getByText("Balita & Anak Sakit")).not.toBeNull();
