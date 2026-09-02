@@ -98,8 +98,9 @@ async function createTestCampaign(token: string) {
       body: JSON.stringify({ draftId: draft.id }),
     }),
   );
+  expect(resp.status).toBe(200);
   const body = (await resp.json()) as { id: string; slug: string };
-  return { id: body.id, slug: body.slug };
+  return { id: body.id, slug: body.slug, draftId: draft.id };
 }
 
 describe("GET /campaigns", () => {
@@ -210,6 +211,7 @@ describe("POST /campaigns", () => {
     expect(row?.title).toBe("Bantu Aldi Sembuh");
     expect(row?.goalAmount).toBe(15000000n);
     expect(row?.story).toBe("Cerita lengkap Aldi.");
+    expect(row?.draftId).toBe(campaign.draftId);
     expect(campaign.slug).toContain("bantu-aldi-sembuh");
   });
 
