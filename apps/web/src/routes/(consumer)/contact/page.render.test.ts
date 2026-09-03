@@ -36,4 +36,28 @@ describe("(consumer) /contact rendering", () => {
     });
     expect(fetchSpy).toHaveBeenCalled();
   });
+
+  test("shows an error message when submission fails", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "validation_failed" }), {
+        status: 422,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    render(Page);
+    await fireEvent.input(screen.getByLabelText("Nama"), { target: { value: "Rina" } });
+    await fireEvent.input(screen.getByLabelText("Email"), {
+      target: { value: "rina@example.test" },
+    });
+    await fireEvent.input(screen.getByLabelText("Pesan"), {
+      target: { value: "Saya butuh bantuan." },
+    });
+    await fireEvent.click(screen.getByText("Kirim"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Gagal mengirim pesan. Periksa kembali isian Anda.")).not.toBeNull();
+    });
+    expect(fetchSpy).toHaveBeenCalled();
+  });
 });
