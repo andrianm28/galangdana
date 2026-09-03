@@ -14,6 +14,7 @@ import {
   PresignCampaignDocumentResponseSchema,
   PresignKycDocumentBodySchema,
   PresignKycDocumentResponseSchema,
+  PublicDisbursementLogResponseSchema,
   SaveCampaignGoalAmountBodySchema,
   SaveCampaignStoryBodySchema,
   SaveKycContactBodySchema,
@@ -29,8 +30,10 @@ import {
   campaigners,
   campaigns,
   db,
+  disbursementRequests,
   individualVerifications,
 } from "@galangdana/db";
+import { moneyToJSON } from "@galangdana/money";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { toCampaignDetail, toCampaignSummary } from "../lib/campaign-response";
@@ -793,4 +796,39 @@ export const campaignsRoute = new Elysia()
       return { campaigns: rows };
     },
     { response: { 200: MyCampaignsResponseSchema, 401: CampaignErrorSchema } },
+  )
+  .get(
+    "/campaigns/:slug/disbursements",
+    async ({ params, set }) => {
+      const [campaign] = await db.select().from(campaigns).where(eq(campaigns.slug, params.slug));
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      const rows = await db
+        .select()
+        .from(disbursementRequests)
+        .where(
+          and(
+            eq(disbursementRequests.campaignId, campaign.id),
+            eq(disbursementRequests.status, "paid"),
+          ),
+        )
+        .orderBy(desc(disbursementRequests.paidAt));
+      return {
+        disbursements: rows.map((row) => ({
+          // biome-ignore lint/style/noNonNullAssertion: status "paid" implies these are set
+          type: row.type!,
+          // biome-ignore lint/style/noNonNullAssertion: status "paid" implies these are set
+          amount: moneyToJSON({ amount: row.amount!, currency: row.currency! }),
+          narrative: row.narrative ?? "",
+          // biome-ignore lint/style/noNonNullAssertion: status "paid" implies paidAt is set
+          paidAt: row.paidAt!.toISOString(),
+        })),
+      };
+    },
+    {
+      params: t.Object({ slug: t.String() }),
+      response: { 200: PublicDisbursementLogResponseSchema, 404: CampaignErrorSchema },
+    },
   );

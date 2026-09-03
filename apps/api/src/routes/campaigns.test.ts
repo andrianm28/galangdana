@@ -6,6 +6,7 @@ import {
   campaigners,
   campaigns,
   db,
+  disbursementRequests,
   individualVerifications,
   sessions,
   users,
@@ -1041,5 +1042,139 @@ describe("GET /campaigns/mine", () => {
   test("401s for an unauthenticated request", async () => {
     const resp = await app.handle(new Request("http://localhost/campaigns/mine"));
     expect(resp.status).toBe(401);
+  });
+});
+
+describe("GET /campaigns/:slug/disbursements", () => {
+  test("returns 404 for a non-existent campaign slug", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/campaigns/does-not-exist/disbursements"),
+    );
+    expect(resp.status).toBe(404);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("campaign_not_found");
+  });
+
+  test("returns only paid disbursements with correct fields and no bank account details", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+
+    // Create test disbursements with different statuses
+    const campaignIdForDisbursements = campaign.id;
+    const now = new Date();
+
+    await db.insert(disbursementRequests).values([
+      {
+        id: "11111111-1111-1111-1111-111111111111",
+        campaignId: campaignIdForDisbursements,
+        bankAccountId: null,
+        type: "partial",
+        amount: 1000000n,
+        currency: "IDR",
+        narrative: "First disbursement",
+        status: "paid",
+        paidAt: now,
+        createdAt: new Date(now.getTime() - 100000),
+      },
+      {
+        id: "22222222-2222-2222-2222-222222222222",
+        campaignId: campaignIdForDisbursements,
+        bankAccountId: null,
+        type: "partial",
+        amount: 500000n,
+        currency: "IDR",
+        narrative: "Draft disbursement",
+        status: "draft",
+        paidAt: null,
+        createdAt: new Date(now.getTime() - 50000),
+      },
+      {
+        id: "33333333-3333-3333-3333-333333333333",
+        campaignId: campaignIdForDisbursements,
+        bankAccountId: null,
+        type: "final",
+        amount: 750000n,
+        currency: "IDR",
+        narrative: "Second disbursement",
+        status: "paid",
+        paidAt: new Date(now.getTime() + 50000),
+        createdAt: new Date(now.getTime()),
+      },
+      {
+        id: "44444444-4444-4444-4444-444444444444",
+        campaignId: campaignIdForDisbursements,
+        bankAccountId: null,
+        type: "partial",
+        amount: 250000n,
+        currency: "IDR",
+        narrative: "Approved but not paid",
+        status: "approved",
+        paidAt: null,
+        createdAt: new Date(now.getTime() + 10000),
+      },
+    ]);
+
+    const resp = await app.handle(
+      new Request(`http://localhost/campaigns/${campaign.slug}/disbursements`),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      disbursements: Array<{
+        type: string;
+        amount: { amount: string; currency: string };
+        narrative: string;
+        paidAt: string;
+      }>;
+    };
+
+    // Should only have 2 paid disbursements
+    expect(body.disbursements).toHaveLength(2);
+
+    // Verify they're sorted by paidAt descending (paid-2 first, then paid-1)
+    expect(body.disbursements[0]?.type).toBe("final");
+    expect(body.disbursements[0]?.narrative).toBe("Second disbursement");
+    expect(BigInt(body.disbursements[0]?.amount.amount ?? "0")).toBe(750000n);
+    expect(body.disbursements[0]?.amount.currency).toBe("IDR");
+
+    expect(body.disbursements[1]?.type).toBe("partial");
+    expect(body.disbursements[1]?.narrative).toBe("First disbursement");
+    expect(BigInt(body.disbursements[1]?.amount.amount ?? "0")).toBe(1000000n);
+    expect(body.disbursements[1]?.amount.currency).toBe("IDR");
+
+    // Belt-and-suspenders privacy check: confirm bankAccountId never appears anywhere
+    // in the response body (should not be in response schema at all)
+    const responseStr = JSON.stringify(body);
+    expect(responseStr).not.toContain("bankAccountId");
+  });
+
+  test("returns empty disbursements array when campaign has no paid disbursements", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const campaignIdForDisbursements = campaign.id;
+
+    // Create only draft disbursements
+    await db.insert(disbursementRequests).values([
+      {
+        id: "66666666-6666-6666-6666-666666666666",
+        campaignId: campaignIdForDisbursements,
+        bankAccountId: null,
+        type: "partial",
+        amount: 1000000n,
+        currency: "IDR",
+        narrative: "Never paid",
+        status: "draft",
+        paidAt: null,
+        createdAt: new Date(),
+      },
+    ]);
+
+    const resp = await app.handle(
+      new Request(`http://localhost/campaigns/${campaign.slug}/disbursements`),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { disbursements: Array<unknown> };
+    expect(body.disbursements).toHaveLength(0);
+
+    // Still verify no account details leak even with empty results
+    const responseStr = JSON.stringify(body);
+    expect(responseStr).not.toContain("bankAccountId");
   });
 });
