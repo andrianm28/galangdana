@@ -55,6 +55,7 @@ export type {
   AdminCampaignRevision,
   CampaignDetailResponse,
   CampaignListResponse,
+  CampaignRevisionListResponse,
   CampaignSummaryResponse,
   KycStatusResponse,
   MoneyJSONResponse,

@@ -237,6 +237,7 @@ export const AdminActionResponseSchema = Type.Object({ status: Type.String() });
 export const CampaignRevisionListResponseSchema = Type.Object({
   revisions: Type.Array(AdminCampaignRevisionSchema),
 });
+export type CampaignRevisionListResponse = Static<typeof CampaignRevisionListResponseSchema>;
 
 export const SaveCampaignStoryBodySchema = Type.Object({ story: Type.String({ minLength: 1 }) });
 export const SaveCampaignGoalAmountBodySchema = Type.Object({
