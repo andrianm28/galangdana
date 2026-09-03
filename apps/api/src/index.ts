@@ -1,6 +1,7 @@
 import { cors } from "@elysiajs/cors";
 import { Elysia } from "elysia";
 import { withApiResponseMapping } from "./response-mapper";
+import { adminRoute } from "./routes/admin";
 import { authRoute } from "./routes/auth";
 import { campaignDraftsRoute } from "./routes/campaign-drafts";
 import { campaignsRoute } from "./routes/campaigns";
@@ -30,7 +31,8 @@ export const app = withApiResponseMapping(new Elysia())
   .use(campaignsRoute)
   .use(categoriesRoute)
   .use(campaignDraftsRoute)
-  .use(searchRoute);
+  .use(searchRoute)
+  .use(adminRoute);
 
 export type App = typeof app;
 
