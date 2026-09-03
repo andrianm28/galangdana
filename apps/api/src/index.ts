@@ -3,6 +3,7 @@ import { Elysia } from "elysia";
 import { withApiResponseMapping } from "./response-mapper";
 import { adminRoute } from "./routes/admin";
 import { authRoute } from "./routes/auth";
+import { bankAccountsRoute } from "./routes/bank-accounts";
 import { campaignDraftsRoute } from "./routes/campaign-drafts";
 import { campaignsRoute } from "./routes/campaigns";
 import { categoriesRoute } from "./routes/categories";
@@ -36,7 +37,8 @@ export const app = withApiResponseMapping(new Elysia())
   .use(searchRoute)
   .use(adminRoute)
   .use(helpRoute)
-  .use(donationsRoute);
+  .use(donationsRoute)
+  .use(bankAccountsRoute);
 
 export type App = typeof app;
 
