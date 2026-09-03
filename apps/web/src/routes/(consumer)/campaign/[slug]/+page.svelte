@@ -68,4 +68,11 @@ const daysLeft = $derived.by(() => {
     <h2 class="mb-2 text-lg font-semibold">Cerita Campaign</h2>
     <p class="whitespace-pre-line text-sm leading-relaxed">{campaign.story}</p>
   </div>
+
+  <a
+    href="/campaign/{campaign.slug}/pencairan-dana"
+    class="font-sans text-sm font-medium text-primary underline-offset-2 hover:underline"
+  >
+    Riwayat Pencairan Dana
+  </a>
 </div>

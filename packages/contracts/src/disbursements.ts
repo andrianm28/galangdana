@@ -108,7 +108,11 @@ export const AdminDisbursementDetailSchema = Type.Object({
     accountHolderName: Type.String(),
     verifiedAt: Type.Union([Type.String(), Type.Null()]),
   }),
-  type: DisbursementTypeSchema,
+  // Nullable for the same reason as AdminDisbursementListItemSchema.type
+  // above: this endpoint has no status filter either, and a `draft`
+  // disbursement with a bank account attached but no detail-step
+  // completion yet would otherwise crash response validation.
+  type: Type.Union([DisbursementTypeSchema, Type.Null()]),
   amount: MoneyJSONSchema,
   narrative: Type.String(),
   proofViewUrl: Type.Union([Type.String(), Type.Null()]),

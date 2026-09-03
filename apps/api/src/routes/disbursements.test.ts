@@ -829,6 +829,51 @@ describe("Disbursement OTP request/verify + submit", () => {
     expect(afterSubmit?.status).toBe("requested");
   });
 
+  test("otp/request rechecks the withdrawable balance: two drafts each saved with the full balance -- the first succeeds, the second is rejected", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+
+    // Both drafts are independently saved with the FULL withdrawable
+    // amount -- allowed, since neither draft counts toward
+    // pendingDisbursementsAmount until it leaves `draft` (see the
+    // "withdrawable balance across two in-flight disbursement requests"
+    // describe block above, which proves the detail-save step alone lets
+    // this happen).
+    const id1 = await makeOtpReadyDraft(campaign.id, withdrawable);
+    const id2 = await makeOtpReadyDraft(campaign.id, withdrawable);
+
+    const firstResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id1}/otp/request`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(firstResp.status).toBe(200);
+    const [afterFirst] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id1));
+    expect(afterFirst?.status).toBe("otp_pending");
+
+    // id1 is now otp_pending and correctly counts against the pending sum,
+    // so id2's identical amount now overdraws the balance -- this is the
+    // check that closes the actual double-disbursement scenario.
+    const secondResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id2}/otp/request`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(secondResp.status).toBe(422);
+    const secondBody = (await secondResp.json()) as { error: string };
+    expect(secondBody.error).toBe("amount_exceeds_withdrawable_balance");
+
+    const [afterSecond] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id2));
+    expect(afterSecond?.status).toBe("draft");
+  });
+
   test("otp/verify with an incorrect code does not advance past otp_pending", async () => {
     const campaign = await createTestCampaign(testCampaignerId, "active");
     await createPaidDonation(campaign.id, "500000");
@@ -1088,6 +1133,38 @@ describe("GET /admin/disbursements/:id", () => {
     expect(body.bankAccount.bankName).toBe("Bank Central Asia");
     expect(body.status).toBe("requested");
     expect(body.proofViewUrl).toStartWith("http");
+  });
+
+  test("returns 200 with type: null instead of crashing, for a draft disbursement that has a bank account but no detail saved yet", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    const [bankAccount] = await db
+      .insert(bankAccounts)
+      .values({
+        campaignerId: testCampaignerId,
+        bankCode: "bca",
+        bankName: "Bank Central Asia",
+        accountNumber: `admin-detail-null-type-${Date.now()}`,
+        accountHolderName: "Test Campaigner",
+      })
+      .returning();
+    if (!bankAccount) throw new Error("bank account insert failed");
+    const bankResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/bank-account`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bankAccountId: bankAccount.id }),
+      }),
+    );
+    if (bankResp.status !== 200) throw new Error(`bank-account save failed: ${bankResp.status}`);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}`, ADMIN_TOKEN),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { type: string | null; status: string };
+    expect(body.type).toBeNull();
+    expect(body.status).toBe("draft");
   });
 });
 

@@ -397,6 +397,19 @@ export const disbursementsRoute = new Elysia()
         set.status = 422;
         return { error: "disbursement_incomplete" };
       }
+      // Re-check the withdrawable balance here, immediately before the
+      // transition that reserves funds against the pool. The detail-save
+      // check (PATCH .../detail) only holds at save time -- a campaigner
+      // can save the full withdrawable amount on two separate drafts (each
+      // correctly excluded from computeWithdrawableAmount while still
+      // `draft`), then walk both through this route. This disbursement is
+      // still `draft` here, so its own amount is not yet counted in the
+      // pending sum -- no self-subtraction needed.
+      const withdrawable = await computeWithdrawableAmount(row.campaign.id);
+      if (row.disbursement.amount > withdrawable) {
+        set.status = 422;
+        return { error: "amount_exceeds_withdrawable_balance" };
+      }
       if (!user.phone) {
         set.status = 422;
         return { error: "no_phone_on_file" };
@@ -601,8 +614,7 @@ export const disbursementsRoute = new Elysia()
           accountHolderName: row.bankAccount.accountHolderName,
           verifiedAt: row.bankAccount.verifiedAt?.toISOString() ?? null,
         },
-        // biome-ignore lint/style/noNonNullAssertion: reached admin queue implies detail filled
-        type: row.disbursement.type!,
+        type: row.disbursement.type,
         amount: moneyToJSON({
           amount: row.disbursement.amount ?? 0n,
           currency: row.disbursement.currency ?? "IDR",

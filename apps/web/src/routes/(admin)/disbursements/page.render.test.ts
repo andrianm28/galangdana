@@ -148,6 +148,47 @@ describe("(admin) /disbursements rendering", () => {
     );
   });
 
+  test("clicking Lihat Detail fetches and reveals the bank account and a proof link", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: REQUESTED_DISBURSEMENT.id,
+          campaignId: REQUESTED_DISBURSEMENT.campaignId,
+          campaignTitle: REQUESTED_DISBURSEMENT.campaignTitle,
+          bankAccount: {
+            bankName: "Bank Central Asia",
+            accountNumber: "1234567890",
+            accountHolderName: "Aldi Setiawan",
+            verifiedAt: null,
+          },
+          type: "partial",
+          amount: REQUESTED_DISBURSEMENT.amount,
+          narrative: "Biaya operasi jantung",
+          proofViewUrl: "https://minio.test/proof/bukti.jpg",
+          status: "requested",
+          createdAt: REQUESTED_DISBURSEMENT.createdAt,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    render(Page, {
+      props: { params: {}, form: null, data: { disbursements: [REQUESTED_DISBURSEMENT] } },
+    });
+    await fireEvent.click(screen.getByText("Lihat Detail"));
+
+    await waitFor(() => {
+      expect(screen.getByText("1234567890")).not.toBeNull();
+    });
+    expect(screen.getByText("Bank Central Asia")).not.toBeNull();
+    expect(screen.getByText("Aldi Setiawan")).not.toBeNull();
+    const proofLink = screen.getByText("Lihat Bukti Kebutuhan Dana");
+    expect(proofLink.getAttribute("href")).toBe("https://minio.test/proof/bukti.jpg");
+    expect(fetchSpy.mock.calls[0]?.[0]?.toString()).toContain(
+      `/admin/disbursements/${REQUESTED_DISBURSEMENT.id}`,
+    );
+  });
+
   test("when approve API fails, error message renders and row stays in list", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ error: "invalid_disbursement_status" }), {

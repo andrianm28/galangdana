@@ -18,7 +18,10 @@ async function requestCode() {
   const { error: apiError } = await disbursementClient.otp.request.post();
   submitting = false;
   if (apiError) {
-    error = "Gagal mengirim kode OTP.";
+    error =
+      apiError.value?.error === "amount_exceeds_withdrawable_balance"
+        ? "Saldo yang dapat dicairkan sudah tidak mencukupi untuk permintaan ini."
+        : "Gagal mengirim kode OTP.";
     return;
   }
   sent = true;

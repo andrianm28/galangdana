@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   campaignCategories,
   campaignDocuments,
@@ -35,6 +35,27 @@ beforeAll(async () => {
     .from(campaigners)
     .where(inArray(campaigners.userId, [TEST_USER_ID, OTHER_USER_ID]));
   if (staleCampaigners.length > 0) {
+    const staleCampaignRows = await db
+      .select({ id: campaigns.id })
+      .from(campaigns)
+      .where(
+        inArray(
+          campaigns.campaignerId,
+          staleCampaigners.map((c) => c.id),
+        ),
+      );
+    // disbursement_requests.campaign_id has no cascade either -- a prior
+    // run of the "GET /campaigns/:slug/disbursements" tests below leaves
+    // disbursement_requests rows referencing these stale campaigns, which
+    // must be cleared before the campaigns themselves can be deleted.
+    if (staleCampaignRows.length > 0) {
+      await db.delete(disbursementRequests).where(
+        inArray(
+          disbursementRequests.campaignId,
+          staleCampaignRows.map((c) => c.id),
+        ),
+      );
+    }
     await db.delete(campaigns).where(
       inArray(
         campaigns.campaignerId,
@@ -1046,6 +1067,16 @@ describe("GET /campaigns/mine", () => {
 });
 
 describe("GET /campaigns/:slug/disbursements", () => {
+  const disbursementIds: string[] = [];
+
+  afterAll(async () => {
+    if (disbursementIds.length > 0) {
+      await db
+        .delete(disbursementRequests)
+        .where(inArray(disbursementRequests.id, disbursementIds));
+    }
+  });
+
   test("returns 404 for a non-existent campaign slug", async () => {
     const resp = await app.handle(
       new Request("http://localhost/campaigns/does-not-exist/disbursements"),
@@ -1062,56 +1093,60 @@ describe("GET /campaigns/:slug/disbursements", () => {
     const campaignIdForDisbursements = campaign.id;
     const now = new Date();
 
-    await db.insert(disbursementRequests).values([
-      {
-        id: "11111111-1111-1111-1111-111111111111",
-        campaignId: campaignIdForDisbursements,
-        bankAccountId: null,
-        type: "partial",
-        amount: 1000000n,
-        currency: "IDR",
-        narrative: "First disbursement",
-        status: "paid",
-        paidAt: now,
-        createdAt: new Date(now.getTime() - 100000),
-      },
-      {
-        id: "22222222-2222-2222-2222-222222222222",
-        campaignId: campaignIdForDisbursements,
-        bankAccountId: null,
-        type: "partial",
-        amount: 500000n,
-        currency: "IDR",
-        narrative: "Draft disbursement",
-        status: "draft",
-        paidAt: null,
-        createdAt: new Date(now.getTime() - 50000),
-      },
-      {
-        id: "33333333-3333-3333-3333-333333333333",
-        campaignId: campaignIdForDisbursements,
-        bankAccountId: null,
-        type: "final",
-        amount: 750000n,
-        currency: "IDR",
-        narrative: "Second disbursement",
-        status: "paid",
-        paidAt: new Date(now.getTime() + 50000),
-        createdAt: new Date(now.getTime()),
-      },
-      {
-        id: "44444444-4444-4444-4444-444444444444",
-        campaignId: campaignIdForDisbursements,
-        bankAccountId: null,
-        type: "partial",
-        amount: 250000n,
-        currency: "IDR",
-        narrative: "Approved but not paid",
-        status: "approved",
-        paidAt: null,
-        createdAt: new Date(now.getTime() + 10000),
-      },
-    ]);
+    const inserted = await db
+      .insert(disbursementRequests)
+      .values([
+        {
+          id: crypto.randomUUID(),
+          campaignId: campaignIdForDisbursements,
+          bankAccountId: null,
+          type: "partial",
+          amount: 1000000n,
+          currency: "IDR",
+          narrative: "First disbursement",
+          status: "paid",
+          paidAt: now,
+          createdAt: new Date(now.getTime() - 100000),
+        },
+        {
+          id: crypto.randomUUID(),
+          campaignId: campaignIdForDisbursements,
+          bankAccountId: null,
+          type: "partial",
+          amount: 500000n,
+          currency: "IDR",
+          narrative: "Draft disbursement",
+          status: "draft",
+          paidAt: null,
+          createdAt: new Date(now.getTime() - 50000),
+        },
+        {
+          id: crypto.randomUUID(),
+          campaignId: campaignIdForDisbursements,
+          bankAccountId: null,
+          type: "final",
+          amount: 750000n,
+          currency: "IDR",
+          narrative: "Second disbursement",
+          status: "paid",
+          paidAt: new Date(now.getTime() + 50000),
+          createdAt: new Date(now.getTime()),
+        },
+        {
+          id: crypto.randomUUID(),
+          campaignId: campaignIdForDisbursements,
+          bankAccountId: null,
+          type: "partial",
+          amount: 250000n,
+          currency: "IDR",
+          narrative: "Approved but not paid",
+          status: "approved",
+          paidAt: null,
+          createdAt: new Date(now.getTime() + 10000),
+        },
+      ])
+      .returning();
+    disbursementIds.push(...inserted.map((row) => row.id));
 
     const resp = await app.handle(
       new Request(`http://localhost/campaigns/${campaign.slug}/disbursements`),
@@ -1151,20 +1186,24 @@ describe("GET /campaigns/:slug/disbursements", () => {
     const campaignIdForDisbursements = campaign.id;
 
     // Create only draft disbursements
-    await db.insert(disbursementRequests).values([
-      {
-        id: "66666666-6666-6666-6666-666666666666",
-        campaignId: campaignIdForDisbursements,
-        bankAccountId: null,
-        type: "partial",
-        amount: 1000000n,
-        currency: "IDR",
-        narrative: "Never paid",
-        status: "draft",
-        paidAt: null,
-        createdAt: new Date(),
-      },
-    ]);
+    const inserted = await db
+      .insert(disbursementRequests)
+      .values([
+        {
+          id: crypto.randomUUID(),
+          campaignId: campaignIdForDisbursements,
+          bankAccountId: null,
+          type: "partial",
+          amount: 1000000n,
+          currency: "IDR",
+          narrative: "Never paid",
+          status: "draft",
+          paidAt: null,
+          createdAt: new Date(),
+        },
+      ])
+      .returning();
+    disbursementIds.push(...inserted.map((row) => row.id));
 
     const resp = await app.handle(
       new Request(`http://localhost/campaigns/${campaign.slug}/disbursements`),

@@ -2,10 +2,10 @@ import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { campaigners } from "./campaigners";
 
 /**
- * A campaigner's payout destination. verifiedAt is set by an admin
- * action (see disbursements.ts Task 8) -- there is no automated
- * real-time account-name-lookup in this slice, mirroring how
- * individual_verifications is already reviewed manually in this
+ * A campaigner's payout destination. verifiedAt is intended to be set by
+ * an admin action, but no such endpoint exists yet in this slice -- this
+ * column is write-never for now, deferred rather than built here. Mirrors
+ * how individual_verifications is already reviewed manually in this
  * codebase, not via a third-party API.
  */
 export const bankAccounts = pgTable("bank_accounts", {
