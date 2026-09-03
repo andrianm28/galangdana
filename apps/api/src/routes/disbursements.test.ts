@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
   bankAccounts,
   campaignCategories,
@@ -7,6 +7,7 @@ import {
   db,
   disbursementRequests,
   donations,
+  otpChallenges,
   payments,
   sessions,
   users,
@@ -14,8 +15,34 @@ import {
 import { MockPaymentProvider } from "@galangdana/payments";
 import { eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
+import { requestOtp } from "../auth/otp";
+import type { SmsProvider } from "../auth/sms-provider";
+import { redis } from "../lib/redis-client";
 import { computeWithdrawableAmount, disbursementsRoute } from "./disbursements";
 import { donationsRoute } from "./donations";
+
+class CapturingSmsProvider implements SmsProvider {
+  lastCode: string | null = null;
+  async sendOtp(_phone: string, code: string): Promise<void> {
+    this.lastCode = code;
+  }
+}
+
+// requestOtp/verifyOtp go through the real route with the default
+// ConsoleSmsProvider (never a test double), so the only way to learn the
+// actual code a test needs to verify is to request a second, fresher
+// challenge directly through the OTP module with a capturing provider --
+// the same workaround routes/auth.test.ts uses for the login OTP route.
+// verifyOtp always picks the LATEST unconsumed challenge for the given
+// phone+purpose, so this fresh code is the one that will be checked.
+async function requestFreshOtpCode(phone: string, purpose: "login" | "disbursement") {
+  const sms = new CapturingSmsProvider();
+  const result = await requestOtp(phone, purpose, sms);
+  if (!result.sent || !sms.lastCode) {
+    throw new Error(`requestOtp failed to send a code: ${JSON.stringify(result)}`);
+  }
+  return sms.lastCode;
+}
 
 // The withdrawable-balance tests need a real paid donation, which only
 // exists after going through POST /donations + POST /payments/webhook (both
@@ -27,6 +54,7 @@ const TEST_USER_ID = "44444444-5555-6666-7777-cccccccccc01";
 const OTHER_USER_ID = "44444444-5555-6666-7777-cccccccccc02";
 const TEST_TOKEN = "disbursements-test-token";
 const OTHER_TOKEN = "disbursements-other-token";
+const TEST_USER_PHONE = "+6281199990601";
 
 let categoryId: number;
 let testCampaignerId: string;
@@ -47,7 +75,7 @@ function authedRequest(url: string, token: string, init: RequestInit = {}) {
 beforeAll(async () => {
   await db.delete(users).where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID]));
   await db.insert(users).values([
-    { id: TEST_USER_ID, phone: "+6281199990601" },
+    { id: TEST_USER_ID, phone: TEST_USER_PHONE },
     { id: OTHER_USER_ID, phone: "+6281199990602" },
   ]);
   await db.insert(sessions).values([
@@ -96,6 +124,8 @@ afterAll(async () => {
   if (testCampaignerId) await db.delete(campaigners).where(eq(campaigners.id, testCampaignerId));
   if (otherCampaignerId) await db.delete(campaigners).where(eq(campaigners.id, otherCampaignerId));
   await db.delete(users).where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID]));
+  await db.delete(otpChallenges).where(eq(otpChallenges.phone, TEST_USER_PHONE));
+  await redis.del(`otp:ratelimit:${TEST_USER_PHONE}`);
 });
 
 async function createTestCampaign(campaignerId: string, status: "draft" | "active" = "active") {
@@ -574,5 +604,238 @@ describe("GET /disbursements/:id", () => {
     expect(body.id).toBe(id);
     expect(body.status).toBe("draft");
     expect(body.campaignId).toBe(campaign.id);
+  });
+});
+
+async function makeOtpReadyDraft(campaignId: string, amount: bigint) {
+  const id = await createDraftDisbursement(campaignId, TEST_TOKEN);
+  const [bankAccount] = await db
+    .insert(bankAccounts)
+    .values({
+      campaignerId: testCampaignerId,
+      bankCode: "bca",
+      bankName: "Bank Central Asia",
+      accountNumber: `otp-flow-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      accountHolderName: "Test Campaigner",
+    })
+    .returning();
+  if (!bankAccount) throw new Error("bank account insert failed");
+  const bankResp = await app.handle(
+    authedRequest(`http://localhost/disbursements/${id}/bank-account`, TEST_TOKEN, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bankAccountId: bankAccount.id }),
+    }),
+  );
+  if (bankResp.status !== 200) throw new Error(`bank-account save failed: ${bankResp.status}`);
+  const detailResp = await app.handle(
+    authedRequest(`http://localhost/disbursements/${id}/detail`, TEST_TOKEN, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        type: "partial",
+        amountStr: amount.toString(),
+        narrative: "OTP flow test",
+      }),
+    }),
+  );
+  if (detailResp.status !== 200) throw new Error(`detail save failed: ${detailResp.status}`);
+  return id;
+}
+
+describe("Disbursement OTP request/verify + submit", () => {
+  // Every test below either calls the /otp/request route or requestOtp
+  // directly (to capture a real code) against the same fixed
+  // TEST_USER_PHONE, all sharing the 3-per-hour otp:ratelimit Redis
+  // bucket -- reset before each test so tests don't interfere with each
+  // other, and reruns of this suite within the same hour don't
+  // eventually flip a genuinely valid request into a 429 (the same
+  // fixed-value test-idempotency class already handled in auth.test.ts
+  // and otp.test.ts).
+  beforeEach(async () => {
+    await redis.del(`otp:ratelimit:${TEST_USER_PHONE}`);
+  });
+
+  test("full happy path: create -> bank account -> detail -> proof -> otp/request -> otp/verify -> submit", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await makeOtpReadyDraft(campaign.id, withdrawable);
+
+    const presignResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/proof/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "bukti-transfer.jpg" }),
+      }),
+    );
+    expect(presignResp.status).toBe(200);
+    const { uploadUrl, objectKey } = (await presignResp.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+    const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake proof bytes" });
+    expect(putResp.ok).toBe(true);
+    const confirmResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/proof/confirm`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ objectKey }),
+      }),
+    );
+    expect(confirmResp.status).toBe(200);
+
+    const otpRequestResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/otp/request`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(otpRequestResp.status).toBe(200);
+    const otpRequestBody = (await otpRequestResp.json()) as { sent: boolean };
+    expect(otpRequestBody.sent).toBe(true);
+    const [afterRequest] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(afterRequest?.status).toBe("otp_pending");
+
+    const code = await requestFreshOtpCode(TEST_USER_PHONE, "disbursement");
+    const otpVerifyResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/otp/verify`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code }),
+      }),
+    );
+    expect(otpVerifyResp.status).toBe(200);
+    const otpVerifyBody = (await otpVerifyResp.json()) as { verified: boolean };
+    expect(otpVerifyBody.verified).toBe(true);
+    const [afterVerify] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(afterVerify?.status).toBe("otp_pending");
+    expect(afterVerify?.otpVerifiedAt).not.toBeNull();
+
+    const submitResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/submit`, TEST_TOKEN, { method: "POST" }),
+    );
+    expect(submitResp.status).toBe(200);
+    const submitBody = (await submitResp.json()) as { status: string };
+    expect(submitBody.status).toBe("requested");
+    const [afterSubmit] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(afterSubmit?.status).toBe("requested");
+  });
+
+  test("otp/verify with an incorrect code does not advance past otp_pending", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await makeOtpReadyDraft(campaign.id, withdrawable);
+
+    const otpRequestResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/otp/request`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(otpRequestResp.status).toBe(200);
+
+    const verifyResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/otp/verify`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: "000000" }),
+      }),
+    );
+    expect(verifyResp.status).toBe(422);
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.status).toBe("otp_pending");
+    expect(row?.otpVerifiedAt).toBeNull();
+  });
+
+  test("submit without a prior otp/verify 409s and does not advance status", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    // Skip the real otp/request flow (no rate-limit slot needed) -- only
+    // the status transition matters for this test, matching the
+    // precedent set by the other describe blocks above that simulate a
+    // concurrent transition via a direct db.update.
+    await db
+      .update(disbursementRequests)
+      .set({ status: "otp_pending" })
+      .where(eq(disbursementRequests.id, id));
+
+    const submitResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/submit`, TEST_TOKEN, { method: "POST" }),
+    );
+    expect(submitResp.status).toBe(409);
+    const body = (await submitResp.json()) as { error: string };
+    expect(body.error).toBe("otp_not_verified");
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.status).toBe("otp_pending");
+  });
+
+  test("otp/request on an incomplete draft 422s instead of crashing", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/otp/request`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(422);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("disbursement_incomplete");
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.status).toBe("draft");
+  });
+
+  test("a login-purpose OTP challenge cannot satisfy this disbursement's otp/verify", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    // As above: only the otp_pending status matters for this test, so it
+    // is set directly rather than via a real /otp/request call.
+    await db
+      .update(disbursementRequests)
+      .set({ status: "otp_pending" })
+      .where(eq(disbursementRequests.id, id));
+
+    // An OTP challenge for the SAME phone but the "login" purpose,
+    // completely unrelated to this disbursement -- re-verifies Task 3's
+    // purpose-isolation guarantee holds through this route too, not just
+    // at the otp.ts unit level.
+    const loginCode = await requestFreshOtpCode(TEST_USER_PHONE, "login");
+
+    const verifyResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/otp/verify`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: loginCode }),
+      }),
+    );
+    expect(verifyResp.status).toBe(422);
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.status).toBe("otp_pending");
+    expect(row?.otpVerifiedAt).toBeNull();
   });
 });

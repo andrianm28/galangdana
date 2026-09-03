@@ -1,12 +1,16 @@
 import {
   ConfirmDisbursementProofBodySchema,
   CreateDisbursementResponseSchema,
+  DisbursementActionResponseSchema,
   DisbursementDetailSchema,
   DisbursementErrorSchema,
   PresignDisbursementProofBodySchema,
   PresignDisbursementProofResponseSchema,
+  RequestDisbursementOtpResponseSchema,
   SaveDisbursementBankAccountBodySchema,
   SaveDisbursementDetailBodySchema,
+  VerifyDisbursementOtpBodySchema,
+  VerifyDisbursementOtpResponseSchema,
 } from "@galangdana/contracts";
 import {
   bankAccounts,
@@ -19,6 +23,7 @@ import {
 import { moneyToJSON } from "@galangdana/money";
 import { and, eq, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
+import { requestOtp, verifyOtp } from "../auth/otp";
 import { extractDocumentExtension, privateDocumentsS3 } from "../lib/media-s3";
 import { sessionDerive } from "../lib/session";
 
@@ -353,6 +358,147 @@ export const disbursementsRoute = new Elysia()
         200: DisbursementDetailSchema,
         401: DisbursementErrorSchema,
         404: DisbursementErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/disbursements/:id/otp/request",
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const row = await findOwnedDisbursement(params.id, user.id);
+      if (!row) {
+        set.status = 404;
+        return { error: "disbursement_not_found" };
+      }
+      if (row.disbursement.status !== "draft") {
+        set.status = 409;
+        return { error: "disbursement_not_editable" };
+      }
+      if (!row.disbursement.bankAccountId || !row.disbursement.amount || !row.disbursement.type) {
+        set.status = 422;
+        return { error: "disbursement_incomplete" };
+      }
+      if (!user.phone) {
+        set.status = 422;
+        return { error: "no_phone_on_file" };
+      }
+      const otpResult = await requestOtp(user.phone, "disbursement");
+      if (!otpResult.sent) {
+        set.status = 422;
+        return { error: otpResult.reason ?? "otp_send_failed" };
+      }
+      const transitioned = await db
+        .update(disbursementRequests)
+        .set({ status: "otp_pending", updatedAt: new Date() })
+        .where(
+          and(
+            eq(disbursementRequests.id, row.disbursement.id),
+            eq(disbursementRequests.status, "draft"),
+          ),
+        )
+        .returning();
+      if (transitioned.length === 0) {
+        set.status = 409;
+        return { error: "disbursement_not_editable" };
+      }
+      return { sent: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: {
+        200: RequestDisbursementOtpResponseSchema,
+        401: DisbursementErrorSchema,
+        404: DisbursementErrorSchema,
+        409: DisbursementErrorSchema,
+        422: DisbursementErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/disbursements/:id/otp/verify",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const row = await findOwnedDisbursement(params.id, user.id);
+      if (!row) {
+        set.status = 404;
+        return { error: "disbursement_not_found" };
+      }
+      if (row.disbursement.status !== "otp_pending") {
+        set.status = 409;
+        return { error: "otp_not_requested" };
+      }
+      if (!user.phone) {
+        set.status = 422;
+        return { error: "no_phone_on_file" };
+      }
+      const result = await verifyOtp(user.phone, body.code, "disbursement");
+      if (!result.success) {
+        set.status = 422;
+        return { error: result.reason ?? "otp_verification_failed" };
+      }
+      await db
+        .update(disbursementRequests)
+        .set({ otpVerifiedAt: new Date(), updatedAt: new Date() })
+        .where(eq(disbursementRequests.id, row.disbursement.id));
+      return { verified: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: VerifyDisbursementOtpBodySchema,
+      response: {
+        200: VerifyDisbursementOtpResponseSchema,
+        401: DisbursementErrorSchema,
+        404: DisbursementErrorSchema,
+        409: DisbursementErrorSchema,
+        422: DisbursementErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/disbursements/:id/submit",
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const row = await findOwnedDisbursement(params.id, user.id);
+      if (!row) {
+        set.status = 404;
+        return { error: "disbursement_not_found" };
+      }
+      if (row.disbursement.status !== "otp_pending" || !row.disbursement.otpVerifiedAt) {
+        set.status = 409;
+        return { error: "otp_not_verified" };
+      }
+      const transitioned = await db
+        .update(disbursementRequests)
+        .set({ status: "requested", updatedAt: new Date() })
+        .where(
+          and(
+            eq(disbursementRequests.id, row.disbursement.id),
+            eq(disbursementRequests.status, "otp_pending"),
+          ),
+        )
+        .returning();
+      if (transitioned.length === 0) {
+        set.status = 409;
+        return { error: "otp_not_verified" };
+      }
+      return { status: "requested" as const };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: {
+        200: DisbursementActionResponseSchema,
+        401: DisbursementErrorSchema,
+        404: DisbursementErrorSchema,
+        409: DisbursementErrorSchema,
       },
     },
   );
