@@ -99,10 +99,18 @@ export const campaignsRoute = new Elysia()
       // last, since "urgency" has no meaning without a deadline. NULLS
       // LAST is Postgres's default for ASC, but stated explicitly here so
       // the intent survives a future sort-expression refactor.
+      //
+      // `campaigns.id` as a secondary key makes both orderings fully
+      // deterministic: without it, two rows with an equal (or equal-at-
+      // storage-precision) primary sort value have no guaranteed relative
+      // order, which surfaced as real, intermittent CI failures once the
+      // test suite grew large enough to produce near-simultaneous
+      // `publishedAt` timestamps across different test files sharing one
+      // database.
       const orderBy =
         query.sort === "urgent"
-          ? [sql`${campaigns.expiresAt} ASC NULLS LAST`]
-          : [desc(campaigns.publishedAt)];
+          ? [sql`${campaigns.expiresAt} ASC NULLS LAST`, campaigns.id]
+          : [desc(campaigns.publishedAt), campaigns.id];
 
       const whereClause = and(...conditions);
 
