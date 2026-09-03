@@ -3,6 +3,7 @@ import { db } from "../client";
 import { campaigners } from "../schema/campaigners";
 import { campaigns } from "../schema/campaigns";
 import { campaignCategories } from "../schema/categories";
+import { seedAllocationPolicies } from "./allocation-policies.seed";
 import { CAMPAIGNER_SEED_DATA } from "./campaigners.seed";
 import { CAMPAIGN_SEED_DATA } from "./campaigns.seed";
 import { CATEGORY_SEED_DATA } from "./categories.seed";
@@ -13,6 +14,8 @@ async function runSeed() {
     .values(CATEGORY_SEED_DATA)
     .onConflictDoNothing({ target: campaignCategories.id });
   console.log(`Seeded ${CATEGORY_SEED_DATA.length} categories.`);
+
+  await seedAllocationPolicies();
 
   // Campaigners have no natural unique business key to conflict-detect on
   // (displayName isn't declared unique at the schema level -- two real
