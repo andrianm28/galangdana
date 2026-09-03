@@ -607,8 +607,7 @@ describe("GET /disbursements/:id", () => {
   });
 });
 
-async function makeOtpReadyDraft(campaignId: string, amount: bigint) {
-  const id = await createDraftDisbursement(campaignId, TEST_TOKEN);
+async function saveBankAndDetail(id: string, amount: bigint) {
   const [bankAccount] = await db
     .insert(bankAccounts)
     .values({
@@ -640,6 +639,43 @@ async function makeOtpReadyDraft(campaignId: string, amount: bigint) {
     }),
   );
   if (detailResp.status !== 200) throw new Error(`detail save failed: ${detailResp.status}`);
+}
+
+async function uploadProof(id: string) {
+  const presignResp = await app.handle(
+    authedRequest(`http://localhost/disbursements/${id}/proof/presign`, TEST_TOKEN, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fileName: "bukti-transfer.jpg" }),
+    }),
+  );
+  if (presignResp.status !== 200) throw new Error(`proof presign failed: ${presignResp.status}`);
+  const { uploadUrl, objectKey } = (await presignResp.json()) as {
+    uploadUrl: string;
+    objectKey: string;
+  };
+  const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake proof bytes" });
+  if (!putResp.ok) throw new Error(`proof PUT failed: ${putResp.status}`);
+  const confirmResp = await app.handle(
+    authedRequest(`http://localhost/disbursements/${id}/proof/confirm`, TEST_TOKEN, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ objectKey }),
+    }),
+  );
+  if (confirmResp.status !== 200) throw new Error(`proof confirm failed: ${confirmResp.status}`);
+  return objectKey;
+}
+
+// "OTP ready" means complete enough for otp/request to accept it: bank
+// account, amount/type, AND proof all set -- otp/request's completeness
+// check requires all four (proofObjectKey included, so a disbursement can
+// never reach Task 8's admin approval queue without proof-of-need on
+// file).
+async function makeOtpReadyDraft(campaignId: string, amount: bigint) {
+  const id = await createDraftDisbursement(campaignId, TEST_TOKEN);
+  await saveBankAndDetail(id, amount);
+  await uploadProof(id);
   return id;
 }
 
@@ -660,30 +696,15 @@ describe("Disbursement OTP request/verify + submit", () => {
     const campaign = await createTestCampaign(testCampaignerId, "active");
     await createPaidDonation(campaign.id, "500000");
     const withdrawable = await computeWithdrawableAmount(campaign.id);
+    // makeOtpReadyDraft below covers the create -> bank account -> detail
+    // -> proof steps (a real presign -> MinIO PUT -> confirm round trip,
+    // same as the dedicated proof/presign+confirm describe block above).
     const id = await makeOtpReadyDraft(campaign.id, withdrawable);
-
-    const presignResp = await app.handle(
-      authedRequest(`http://localhost/disbursements/${id}/proof/presign`, TEST_TOKEN, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fileName: "bukti-transfer.jpg" }),
-      }),
-    );
-    expect(presignResp.status).toBe(200);
-    const { uploadUrl, objectKey } = (await presignResp.json()) as {
-      uploadUrl: string;
-      objectKey: string;
-    };
-    const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake proof bytes" });
-    expect(putResp.ok).toBe(true);
-    const confirmResp = await app.handle(
-      authedRequest(`http://localhost/disbursements/${id}/proof/confirm`, TEST_TOKEN, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ objectKey }),
-      }),
-    );
-    expect(confirmResp.status).toBe(200);
+    const [afterProof] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(afterProof?.proofObjectKey).toStartWith(`disbursements/${id}/proof/`);
 
     const otpRequestResp = await app.handle(
       authedRequest(`http://localhost/disbursements/${id}/otp/request`, TEST_TOKEN, {
@@ -804,6 +825,30 @@ describe("Disbursement OTP request/verify + submit", () => {
       .from(disbursementRequests)
       .where(eq(disbursementRequests.id, id));
     expect(row?.status).toBe("draft");
+  });
+
+  test("otp/request 422s when bank account and detail are set but proof has not been uploaded", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    await saveBankAndDetail(id, withdrawable);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/otp/request`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(422);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("disbursement_incomplete");
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.status).toBe("draft");
+    expect(row?.proofObjectKey).toBeNull();
   });
 
   test("a login-purpose OTP challenge cannot satisfy this disbursement's otp/verify", async () => {

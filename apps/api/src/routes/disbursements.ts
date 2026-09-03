@@ -377,7 +377,12 @@ export const disbursementsRoute = new Elysia()
         set.status = 409;
         return { error: "disbursement_not_editable" };
       }
-      if (!row.disbursement.bankAccountId || !row.disbursement.amount || !row.disbursement.type) {
+      if (
+        !row.disbursement.bankAccountId ||
+        !row.disbursement.amount ||
+        !row.disbursement.type ||
+        !row.disbursement.proofObjectKey
+      ) {
         set.status = 422;
         return { error: "disbursement_incomplete" };
       }
