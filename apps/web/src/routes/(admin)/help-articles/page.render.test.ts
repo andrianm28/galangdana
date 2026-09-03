@@ -50,4 +50,70 @@ describe("(admin) /help-articles rendering", () => {
     });
     expect(fetchSpy).toHaveBeenCalled();
   });
+
+  test("shows error when article creation fails", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "Failed to create article" }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    render(Page, { props: { params: {}, form: null, data: { articles: [SAMPLE_ARTICLE] } } });
+    await fireEvent.input(screen.getByLabelText("Slug"), { target: { value: "cara-daftar" } });
+    await fireEvent.input(screen.getByLabelText("Pertanyaan"), {
+      target: { value: "Bagaimana cara mendaftar?" },
+    });
+    await fireEvent.input(screen.getByLabelText("Jawaban"), {
+      target: { value: "Klik tombol daftar di halaman utama." },
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Tambah Artikel" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Gagal menambahkan artikel.")).not.toBeNull();
+    });
+    expect(screen.getByText("Bagaimana cara berdonasi?")).not.toBeNull();
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  test("deletes an article successfully", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    render(Page, { props: { params: {}, form: null, data: { articles: [SAMPLE_ARTICLE] } } });
+    expect(screen.getByText("Bagaimana cara berdonasi?")).not.toBeNull();
+
+    const deleteButton = screen.getByRole("button", { name: "Hapus" });
+    await fireEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Bagaimana cara berdonasi?")).toBeNull();
+    });
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  test("shows error when article deletion fails", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "Failed to delete article" }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    render(Page, { props: { params: {}, form: null, data: { articles: [SAMPLE_ARTICLE] } } });
+    expect(screen.getByText("Bagaimana cara berdonasi?")).not.toBeNull();
+
+    const deleteButton = screen.getByRole("button", { name: "Hapus" });
+    await fireEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("Gagal menghapus artikel.")).not.toBeNull();
+    });
+    expect(screen.getByText("Bagaimana cara berdonasi?")).not.toBeNull();
+    expect(fetchSpy).toHaveBeenCalled();
+  });
 });
