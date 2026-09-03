@@ -6,8 +6,11 @@ import {
   db,
   donations,
   idempotencyKeys,
+  notificationsOutbox,
+  paymentEvents,
   payments,
 } from "@galangdana/db";
+import { MockPaymentProvider } from "@galangdana/payments";
 import { eq } from "drizzle-orm";
 import { donationsRoute } from "./donations";
 
@@ -196,5 +199,132 @@ describe("POST /donations", () => {
       }),
     );
     expect(retryResp.status).toBe(200);
+  });
+});
+
+describe("POST /payments/webhook", () => {
+  async function createTestDonation(amountStr: string) {
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ campaignId: campaign.id, amountStr }),
+      }),
+    );
+    const body = (await resp.json()) as { donationId: string; vaNumber: string };
+    const [payment] = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.donationId, body.donationId));
+    if (!payment) throw new Error("payment row missing");
+    return { campaign, donationId: body.donationId, providerOrderId: payment.providerOrderId };
+  }
+
+  test("a valid webhook marks the donation paid and increments campaign totals", async () => {
+    const { campaign, donationId, providerOrderId } = await createTestDonation("50000");
+    const provider = new MockPaymentProvider({
+      serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+    });
+    const payload = await provider.simulateWebhookPayload(providerOrderId, 50000n);
+
+    const [campaignBefore] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+
+    const resp = await app.handle(
+      new Request("http://localhost/payments/webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donation?.status).toBe("paid");
+    expect(donation?.paidAt).not.toBeNull();
+
+    const [campaignAfter] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(campaignAfter?.collectedAmount).toBe((campaignBefore?.collectedAmount ?? 0n) + 50000n);
+    expect(campaignAfter?.donationCount).toBe((campaignBefore?.donationCount ?? 0) + 1);
+  });
+
+  test("a duplicate webhook delivery is a 200 no-op, not a double-processed donation", async () => {
+    const { campaign, donationId, providerOrderId } = await createTestDonation("30000");
+    const provider = new MockPaymentProvider({
+      serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+    });
+    const payload = await provider.simulateWebhookPayload(providerOrderId, 30000n);
+
+    const first = await app.handle(
+      new Request("http://localhost/payments/webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    expect(first.status).toBe(200);
+    const [campaignAfterFirst] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, campaign.id));
+
+    // Same exact payload delivered again (a real provider's documented retry behavior).
+    const second = await app.handle(
+      new Request("http://localhost/payments/webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    expect(second.status).toBe(200);
+
+    const [campaignAfterSecond] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, campaign.id));
+    expect(campaignAfterSecond?.collectedAmount).toBe(campaignAfterFirst?.collectedAmount);
+    expect(campaignAfterSecond?.donationCount).toBe(campaignAfterFirst?.donationCount);
+    const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donation?.status).toBe("paid"); // still paid, not re-processed into some other state
+  });
+
+  test("a bad signature is rejected with 401 and never touches the donation", async () => {
+    const { donationId, providerOrderId } = await createTestDonation("40000");
+    const provider = new MockPaymentProvider({ serverKey: "wrong-key-entirely" });
+    const payload = await provider.simulateWebhookPayload(providerOrderId, 40000n);
+
+    const resp = await app.handle(
+      new Request("http://localhost/payments/webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    expect(resp.status).toBe(401);
+
+    const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donation?.status).toBe("pending");
+  });
+
+  test("enqueues one notifications_outbox row on a successful paid transition", async () => {
+    const { donationId, providerOrderId } = await createTestDonation("60000");
+    const provider = new MockPaymentProvider({
+      serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+    });
+    const payload = await provider.simulateWebhookPayload(providerOrderId, 60000n);
+    await app.handle(
+      new Request("http://localhost/payments/webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    const outboxRows = await db
+      .select()
+      .from(notificationsOutbox)
+      .where(eq(notificationsOutbox.template, "donation_receipt"));
+    expect(
+      outboxRows.some((r) => (r.payload as { donationId?: string }).donationId === donationId),
+    ).toBe(true);
   });
 });
