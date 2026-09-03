@@ -104,3 +104,11 @@ export type {
   HelpArticleResponse,
   SubmitSupportTicketResponse,
 } from "./help";
+export {
+  CreateDonationBodySchema,
+  CreateDonationResponseSchema,
+  DonationStatusSchema,
+  GetDonationResponseSchema,
+  PaymentErrorSchema,
+} from "./payments";
+export type { CreateDonationResponse, GetDonationResponse } from "./payments";
