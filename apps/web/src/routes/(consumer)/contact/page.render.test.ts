@@ -7,7 +7,7 @@ import Page from "./+page.svelte";
 
 describe("(consumer) /contact rendering", () => {
   test("shows the contact form", () => {
-    render(Page, { props: { params: {}, data: {} } });
+    render(Page);
     expect(screen.getByLabelText("Nama")).not.toBeNull();
     expect(screen.getByLabelText("Email")).not.toBeNull();
     expect(screen.getByLabelText("Pesan")).not.toBeNull();
@@ -21,7 +21,7 @@ describe("(consumer) /contact rendering", () => {
       }),
     );
 
-    render(Page, { props: { params: {}, data: {} } });
+    render(Page);
     await fireEvent.input(screen.getByLabelText("Nama"), { target: { value: "Rina" } });
     await fireEvent.input(screen.getByLabelText("Email"), {
       target: { value: "rina@example.test" },
