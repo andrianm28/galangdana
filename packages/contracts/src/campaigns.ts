@@ -96,8 +96,6 @@ export const CreateCampaignFromDraftResponseSchema = Type.Object({
   slug: Type.String(),
 });
 
-export const CampaignErrorSchema2c = Type.Object({ error: Type.String() });
-
 export const SaveKycIdentityBodySchema = Type.Object({
   fullName: Type.String({ minLength: 1 }),
   nationalId: Type.String({ minLength: 16, maxLength: 16 }),
@@ -244,7 +242,7 @@ export const SaveCampaignGoalAmountBodySchema = Type.Object({
   goalAmountStr: Type.String({ pattern: "^\\d+$" }),
 });
 
-export const CampaignDocumentTypeSchema = Type.Union([
+export const CampaignRevisionDocumentTypeSchema = Type.Union([
   Type.Literal("kartu_mahasiswa"),
   Type.Literal("kartu_pelajar"),
   Type.Literal("tagihan_rumah_sakit"),
@@ -254,7 +252,7 @@ export const CampaignDocumentTypeSchema = Type.Union([
 ]);
 
 export const PresignCampaignDocumentBodySchema = Type.Object({
-  documentType: CampaignDocumentTypeSchema,
+  documentType: CampaignRevisionDocumentTypeSchema,
   fileName: Type.String({ minLength: 1 }),
 });
 export const PresignCampaignDocumentResponseSchema = Type.Object({
@@ -265,7 +263,7 @@ export const PresignCampaignDocumentResponseSchema = Type.Object({
 export type PresignCampaignDocumentResponse = Static<typeof PresignCampaignDocumentResponseSchema>;
 
 export const ConfirmCampaignDocumentBodySchema = Type.Object({
-  documentType: CampaignDocumentTypeSchema,
+  documentType: CampaignRevisionDocumentTypeSchema,
   objectKey: Type.String(),
 });
 

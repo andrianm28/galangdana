@@ -24,7 +24,6 @@ export {
   CampaignDetailSchema,
   CampaignerSchema,
   CampaignErrorSchema,
-  CampaignErrorSchema2c,
   CampaignListQuerySchema,
   CampaignListResponseSchema,
   CampaignRevisionListResponseSchema,

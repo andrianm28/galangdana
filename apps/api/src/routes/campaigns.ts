@@ -1,7 +1,6 @@
 import {
   CampaignDetailSchema,
   CampaignErrorSchema,
-  CampaignErrorSchema2c,
   CampaignListQuerySchema,
   CampaignListResponseSchema,
   CampaignRevisionListResponseSchema,
@@ -224,10 +223,10 @@ export const campaignsRoute = new Elysia()
       body: CreateCampaignFromDraftBodySchema,
       response: {
         200: CreateCampaignFromDraftResponseSchema,
-        400: CampaignErrorSchema2c,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        500: CampaignErrorSchema2c,
+        400: CampaignErrorSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        500: CampaignErrorSchema,
       },
     },
   )
@@ -295,9 +294,9 @@ export const campaignsRoute = new Elysia()
       body: SaveKycIdentityBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   )
@@ -346,9 +345,9 @@ export const campaignsRoute = new Elysia()
       body: SaveKycContactBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   )
@@ -384,9 +383,9 @@ export const campaignsRoute = new Elysia()
       body: PresignKycDocumentBodySchema,
       response: {
         200: PresignKycDocumentResponseSchema,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        422: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        422: CampaignErrorSchema,
       },
     },
   )
@@ -437,10 +436,10 @@ export const campaignsRoute = new Elysia()
       body: ConfirmKycDocumentBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
-        400: CampaignErrorSchema2c,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        400: CampaignErrorSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   )
@@ -487,8 +486,8 @@ export const campaignsRoute = new Elysia()
       params: t.Object({ slug: t.String() }),
       response: {
         200: KycStatusSchema,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
       },
     },
   )
@@ -550,10 +549,10 @@ export const campaignsRoute = new Elysia()
       params: t.Object({ id: t.String() }),
       response: {
         200: SubmitCampaignResponseSchema,
-        400: CampaignErrorSchema2c,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        400: CampaignErrorSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   )
@@ -596,8 +595,8 @@ export const campaignsRoute = new Elysia()
       params: t.Object({ slug: t.String() }),
       response: {
         200: CampaignRevisionListResponseSchema,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
       },
     },
   )
@@ -630,9 +629,9 @@ export const campaignsRoute = new Elysia()
       body: SaveCampaignStoryBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   )
@@ -665,9 +664,9 @@ export const campaignsRoute = new Elysia()
       body: SaveCampaignGoalAmountBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   )
@@ -707,10 +706,10 @@ export const campaignsRoute = new Elysia()
       body: PresignCampaignDocumentBodySchema,
       response: {
         200: PresignCampaignDocumentResponseSchema,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
-        422: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
+        422: CampaignErrorSchema,
       },
     },
   )
@@ -747,10 +746,10 @@ export const campaignsRoute = new Elysia()
       body: ConfirmCampaignDocumentBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
-        400: CampaignErrorSchema2c,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        400: CampaignErrorSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   )
@@ -781,5 +780,5 @@ export const campaignsRoute = new Elysia()
 
       return { campaigns: rows };
     },
-    { response: { 200: MyCampaignsResponseSchema, 401: CampaignErrorSchema2c } },
+    { response: { 200: MyCampaignsResponseSchema, 401: CampaignErrorSchema } },
   );
