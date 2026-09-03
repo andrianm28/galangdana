@@ -52,12 +52,17 @@ let goalAmountValue = $state("");
 let saving = $state<string | null>(null);
 let submitting = $state(false);
 let error = $state<string | null>(null);
-let selectedFile = $state<File | null>(null);
+const selectedFiles = $state<Record<string, File | null>>({});
+let savedField = $state<string | null>(null);
 
 async function saveStory() {
-  if (!storyValue.trim()) return;
+  if (!storyValue.trim()) {
+    error = "Cerita tidak boleh kosong.";
+    return;
+  }
   saving = "cerita";
   error = null;
+  savedField = null;
   // The campaignClient() cast above erases this whole chain to `any` --
   // re-establish the real response shape (matching PUT /campaigns/:id/story's
   // actual `response: { 200, 401, 404, 409 }` map in apps/api/src/routes/campaigns.ts)
@@ -71,7 +76,11 @@ async function saveStory() {
     409: { error: string };
   }>;
   saving = null;
-  if (apiError) error = "Gagal menyimpan cerita.";
+  if (apiError) {
+    error = "Gagal menyimpan cerita.";
+    return;
+  }
+  savedField = "cerita";
 }
 
 async function saveGoalAmount() {
@@ -81,6 +90,7 @@ async function saveGoalAmount() {
   }
   saving = "target_donasi";
   error = null;
+  savedField = null;
   // Same narrowing as saveStory(), matching PUT /campaigns/:id/goal-amount's
   // actual `response: { 200, 401, 404, 409 }` map.
   const { error: apiError } = (await campaignClient(data.campaignId)["goal-amount"].put({
@@ -92,16 +102,22 @@ async function saveGoalAmount() {
     409: { error: string };
   }>;
   saving = null;
-  if (apiError) error = "Gagal menyimpan target donasi.";
+  if (apiError) {
+    error = "Gagal menyimpan target donasi.";
+    return;
+  }
+  savedField = "target_donasi";
 }
 
 async function uploadDocument(documentType: string) {
+  const selectedFile = selectedFiles[documentType];
   if (!selectedFile) {
     error = "Pilih file terlebih dahulu.";
     return;
   }
   saving = documentType;
   error = null;
+  savedField = null;
 
   // Same narrowing as saveStory(), matching POST /campaigns/:id/documents/presign's
   // actual `response: { 200, 401, 404, 409, 422 }` map, so `presign`/`presignError`
@@ -148,7 +164,8 @@ async function uploadDocument(documentType: string) {
     error = "Gagal menyimpan dokumen.";
     return;
   }
-  selectedFile = null;
+  selectedFiles[documentType] = null;
+  savedField = documentType;
 }
 
 async function resubmit() {
@@ -170,7 +187,7 @@ async function resubmit() {
     error = "Gagal mengajukan ulang campaign.";
     return;
   }
-  await goto("/dashboard");
+  await goto("/dashboard/campaigns");
 }
 </script>
 
@@ -206,6 +223,9 @@ async function resubmit() {
         >
           Simpan Cerita
         </button>
+        {#if savedField === "cerita"}
+          <span class="ml-2 font-sans text-xs font-medium text-success">Tersimpan</span>
+        {/if}
       {:else if revision.field === "target_donasi"}
         <label for="goal-input" class="mb-1 block font-sans text-sm font-medium text-neutral-900">
           Target donasi baru (Rp)
@@ -225,11 +245,15 @@ async function resubmit() {
         >
           Simpan Target
         </button>
+        {#if savedField === "target_donasi"}
+          <span class="ml-2 font-sans text-xs font-medium text-success">Tersimpan</span>
+        {/if}
       {:else if DOCUMENT_FIELDS.has(revision.field)}
         <input
           type="file"
           accept=".jpg,.jpeg,.png,.pdf"
-          onchange={(e) => (selectedFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null)}
+          onchange={(e) =>
+            (selectedFiles[revision.field] = (e.currentTarget as HTMLInputElement).files?.[0] ?? null)}
         />
         <button
           type="button"
@@ -239,6 +263,9 @@ async function resubmit() {
         >
           Unggah
         </button>
+        {#if savedField === revision.field}
+          <span class="ml-2 font-sans text-xs font-medium text-success">Tersimpan</span>
+        {/if}
       {/if}
     </div>
   {/each}
