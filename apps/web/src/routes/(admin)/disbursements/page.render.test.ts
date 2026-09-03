@@ -48,7 +48,7 @@ describe("(admin) /disbursements rendering", () => {
     expect(screen.queryByText("Tolak")).toBeNull();
   });
 
-  test("clicking Approve calls the approve endpoint and removes the row", async () => {
+  test("clicking Approve calls the approve endpoint and updates the row in place, showing Pay instead of removing it", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ status: "approved" }), {
         status: 200,
@@ -62,11 +62,29 @@ describe("(admin) /disbursements rendering", () => {
     await fireEvent.click(screen.getByText("Setujui"));
 
     await waitFor(() => {
-      expect(screen.queryByText("Bantu Aldi Sembuh")).toBeNull();
+      expect(screen.getByText("Bayar")).not.toBeNull();
     });
+    // Same row, not removed and re-added -- still shows its campaign title,
+    // and now offers Pay instead of Approve/Reject.
+    expect(screen.getByText("Bantu Aldi Sembuh")).not.toBeNull();
+    expect(screen.queryByText("Setujui")).toBeNull();
+    expect(screen.queryByText("Tolak")).toBeNull();
     expect(fetchSpy.mock.calls[0]?.[0]?.toString()).toContain(
       `/admin/disbursements/${REQUESTED_DISBURSEMENT.id}/approve`,
     );
+  });
+
+  test("renders a requested row and an approved row together, each with its own contextual actions", () => {
+    render(Page, {
+      props: {
+        params: {},
+        form: null,
+        data: { disbursements: [REQUESTED_DISBURSEMENT, APPROVED_DISBURSEMENT] },
+      },
+    });
+    expect(screen.getByText("Setujui")).not.toBeNull();
+    expect(screen.getByText("Tolak")).not.toBeNull();
+    expect(screen.getByText("Bayar")).not.toBeNull();
   });
 
   test("clicking Reject prompts for and sends a reason", async () => {

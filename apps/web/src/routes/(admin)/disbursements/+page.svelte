@@ -21,7 +21,12 @@ async function approve(id: string) {
     error = "Gagal menyetujui pencairan.";
     return;
   }
-  disbursements = disbursements.filter((d) => d.id !== id);
+  // Unlike reject/pay, an approved row must stay visible with its status
+  // updated in place -- it's still one of the two statuses this page shows,
+  // and now needs its Pay button instead of being discarded.
+  disbursements = disbursements.map((d) =>
+    d.id === id ? { ...d, status: "approved" as const } : d,
+  );
 }
 
 async function reject(id: string) {
@@ -69,12 +74,24 @@ async function pay(id: string) {
               </p>
             </div>
             <div class="flex shrink-0 gap-2">
+              <!--
+                Three independent {#if} blocks, not one {#if}/{:else if}
+                chain: empirically (see this route's fix report), Svelte
+                5.57's else-if reconciliation reuses a Button component
+                instance positionally across branches with different child
+                counts here, leaving a stale "Tolak" button on-screen after
+                an in-place status change to "approved" instead of removing
+                it. Independent ifs sidestep that reuse entirely.
+              -->
               {#if disbursement.status === "requested"}
                 <Button variant="danger" size="sm" onclick={() => reject(disbursement.id)}>
                   Tolak
                 </Button>
+              {/if}
+              {#if disbursement.status === "requested"}
                 <Button size="sm" onclick={() => approve(disbursement.id)}>Setujui</Button>
-              {:else if disbursement.status === "approved"}
+              {/if}
+              {#if disbursement.status === "approved"}
                 <Button size="sm" onclick={() => pay(disbursement.id)}>Bayar</Button>
               {/if}
             </div>
