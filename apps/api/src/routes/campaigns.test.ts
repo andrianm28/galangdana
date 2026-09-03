@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import {
   campaignCategories,
+  campaignRevisions,
   campaigners,
   campaigns,
   db,
@@ -748,6 +749,47 @@ describe("POST /campaigns/:id/submit", () => {
       }),
     );
     expect(resp.status).toBe(404);
+  });
+
+  test("resubmitting after needs_revision sets submittedAt and resolves open revisions", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await fillKycIdentityAndContact(campaign.id, TEST_TOKEN);
+    await uploadKycDocuments(campaign.id, TEST_TOKEN);
+    await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+
+    // Simulate an admin request-revision (direct DB write -- this test
+    // file has no admin auth helper, and doesn't need one just to set up
+    // this scenario).
+    await db
+      .update(campaigns)
+      .set({ status: "needs_revision" })
+      .where(eq(campaigns.id, campaign.id));
+    const [openRevision] = await db
+      .insert(campaignRevisions)
+      .values({ campaignId: campaign.id, field: "cerita", note: "Perlu detail lebih." })
+      .returning();
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.status).toBe("pending_review");
+    expect(row?.submittedAt).not.toBeNull();
+
+    const [resolvedRevision] = await db
+      .select()
+      .from(campaignRevisions)
+      .where(eq(campaignRevisions.id, openRevision?.id ?? ""));
+    expect(resolvedRevision?.status).toBe("resolved");
+    expect(resolvedRevision?.resolvedAt).not.toBeNull();
   });
 });
 

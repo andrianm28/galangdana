@@ -17,6 +17,7 @@ import {
 import {
   campaignCategories,
   campaignDrafts,
+  campaignRevisions,
   campaignStoryAnswers,
   campaigners,
   campaigns,
@@ -522,10 +523,17 @@ export const campaignsRoute = new Elysia()
         return { error: "kyc_incomplete" };
       }
 
+      const now = new Date();
       await db
         .update(campaigns)
-        .set({ status: "pending_review", updatedAt: new Date() })
+        .set({ status: "pending_review", submittedAt: now, updatedAt: now })
         .where(eq(campaigns.id, campaign.id));
+      await db
+        .update(campaignRevisions)
+        .set({ status: "resolved", resolvedAt: now })
+        .where(
+          and(eq(campaignRevisions.campaignId, campaign.id), eq(campaignRevisions.status, "open")),
+        );
 
       return { status: "pending_review" };
     },
