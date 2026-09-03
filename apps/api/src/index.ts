@@ -6,6 +6,7 @@ import { authRoute } from "./routes/auth";
 import { campaignDraftsRoute } from "./routes/campaign-drafts";
 import { campaignsRoute } from "./routes/campaigns";
 import { categoriesRoute } from "./routes/categories";
+import { donationsRoute } from "./routes/donations";
 import { healthRoute } from "./routes/health";
 import { helpRoute } from "./routes/help";
 import { searchRoute } from "./routes/search";
@@ -34,7 +35,8 @@ export const app = withApiResponseMapping(new Elysia())
   .use(campaignDraftsRoute)
   .use(searchRoute)
   .use(adminRoute)
-  .use(helpRoute);
+  .use(helpRoute)
+  .use(donationsRoute);
 
 export type App = typeof app;
 

@@ -19,6 +19,7 @@
         "@galangdana/db": "workspace:*",
         "@galangdana/media": "workspace:*",
         "@galangdana/money": "workspace:*",
+        "@galangdana/payments": "workspace:*",
         "@galangdana/search": "workspace:*",
         "drizzle-orm": "^0.36.4",
         "elysia": "1.1.26",
@@ -77,6 +78,10 @@
     },
     "packages/money": {
       "name": "@galangdana/money",
+      "version": "0.0.0",
+    },
+    "packages/payments": {
+      "name": "@galangdana/payments",
       "version": "0.0.0",
     },
     "packages/search": {
@@ -201,6 +206,8 @@
     "@galangdana/media": ["@galangdana/media@workspace:packages/media"],
 
     "@galangdana/money": ["@galangdana/money@workspace:packages/money"],
+
+    "@galangdana/payments": ["@galangdana/payments@workspace:packages/payments"],
 
     "@galangdana/search": ["@galangdana/search@workspace:packages/search"],
 
