@@ -59,6 +59,7 @@ export class MockPaymentProvider implements PaymentProvider {
   async simulateWebhookPayload(
     orderId: string,
     grossAmount: bigint,
+    transactionStatus = "settlement",
   ): Promise<Record<string, unknown>> {
     const statusCode = "200";
     const grossAmountStr = `${grossAmount.toString()}.00`;
@@ -70,7 +71,7 @@ export class MockPaymentProvider implements PaymentProvider {
       order_id: orderId,
       status_code: statusCode,
       gross_amount: grossAmountStr,
-      transaction_status: "settlement",
+      transaction_status: transactionStatus,
       transaction_id: `evt-${orderId}-${Date.now()}`,
       signature_key: signature,
     };

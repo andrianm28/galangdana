@@ -428,4 +428,61 @@ describe("POST /payments/webhook", () => {
       outboxRows.some((r) => (r.payload as { donationId?: string }).donationId === donationId),
     ).toBe(true);
   });
+
+  test("an 'expire' webhook transitions a pending donation's status to expired", async () => {
+    const { donationId, providerOrderId } = await createTestDonation("35000");
+    const provider = new MockPaymentProvider({
+      serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+    });
+    const payload = await provider.simulateWebhookPayload(providerOrderId, 35000n, "expire");
+
+    const resp = await app.handle(
+      new Request("http://localhost/payments/webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donation?.status).toBe("expired");
+    const [payment] = await db.select().from(payments).where(eq(payments.donationId, donationId));
+    expect(payment?.status).toBe("expired");
+  });
+
+  test("a delayed 'expire' webhook arriving after the donation is already paid does not regress its status", async () => {
+    const { donationId, providerOrderId } = await createTestDonation("45000");
+    const provider = new MockPaymentProvider({
+      serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+    });
+
+    const paidPayload = await provider.simulateWebhookPayload(providerOrderId, 45000n);
+    const paidResp = await app.handle(
+      new Request("http://localhost/payments/webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(paidPayload),
+      }),
+    );
+    expect(paidResp.status).toBe(200);
+
+    // A different transaction_id (simulateWebhookPayload generates a fresh
+    // one via Date.now() each call), so this survives the payment_events
+    // dedup guard and reaches the status-transition logic.
+    const expirePayload = await provider.simulateWebhookPayload(providerOrderId, 45000n, "expire");
+    const expireResp = await app.handle(
+      new Request("http://localhost/payments/webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(expirePayload),
+      }),
+    );
+    expect(expireResp.status).toBe(200);
+
+    const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donation?.status).toBe("paid");
+    const [payment] = await db.select().from(payments).where(eq(payments.donationId, donationId));
+    expect(payment?.status).toBe("paid");
+  });
 });

@@ -17,7 +17,7 @@ import {
 import { moneyToJSON } from "@galangdana/money";
 import { MockPaymentProvider } from "@galangdana/payments";
 import type { Static } from "@sinclair/typebox";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { sessionDerive } from "../lib/session";
 
@@ -207,20 +207,37 @@ export const donationsRoute = new Elysia()
           throw err;
         }
 
-        if (event.status !== "paid") {
-          await tx
-            .update(payments)
-            .set({ status: event.status, updatedAt: new Date() })
-            .where(eq(payments.providerOrderId, event.providerOrderId));
-          return { alreadyProcessed: false as const, paid: false as const };
-        }
-
         const [payment] = await tx
           .select()
           .from(payments)
           .where(eq(payments.providerOrderId, event.providerOrderId));
         if (!payment) {
           throw new Error(`webhook for unknown providerOrderId: ${event.providerOrderId}`);
+        }
+
+        if (event.status !== "paid") {
+          const now = new Date();
+          // Guarded the same way as the "paid" branch below: only transition
+          // a donation that's still pending, so a delayed/out-of-order
+          // expired/failed event (a different providerEventId, so it
+          // survives the dedup guard above) can never regress a donation
+          // that a prior "paid" delivery already settled.
+          const updatedDonations = await tx
+            .update(donations)
+            .set({ status: event.status, updatedAt: now })
+            .where(and(eq(donations.id, payment.donationId), eq(donations.status, "pending")))
+            .returning();
+          if (updatedDonations.length === 0) {
+            return { alreadyProcessed: true as const };
+          }
+
+          await tx
+            .update(payments)
+            .set({ status: event.status, updatedAt: now })
+            .where(
+              and(eq(payments.providerOrderId, event.providerOrderId), ne(payments.status, "paid")),
+            );
+          return { alreadyProcessed: false as const, paid: false as const };
         }
 
         const now = new Date();
