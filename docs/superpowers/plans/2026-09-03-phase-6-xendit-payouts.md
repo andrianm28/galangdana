@@ -296,21 +296,41 @@ Add the missing `eq` import from `drizzle-orm` at the top. Adjust the exact `db`
 
 - [ ] **Step 7: Write `packages/db/src/__tests__/disbursement-requests.test.ts`**
 
+**Cleanup is required, not optional.** This codebase has a known, documented cross-test-isolation gap (see project history: `campaigns.test.ts`'s `sort=newest`/`sort=urgent`/cover-image tests already leak real `active`-status campaigns from OTHER test files' fixtures into their own count/order assertions). A test in this file that inserts a real `active`-status `campaigns` row and never deletes it would add a NEW source of exactly that same pollution. Every row this test inserts (`users`, `campaigners`, `campaigns`, `disbursementRequests`) must be deleted in an `afterAll`.
+
 ```typescript
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
 import { db } from "../client";
 import { campaignCategories, campaigners, campaigns, disbursementRequests, users } from "../schema";
 
 describe("disbursement_requests", () => {
+  let userId: string;
+  let campaignerId: string;
+  let campaignId: string;
+
+  afterAll(async () => {
+    if (campaignId) {
+      await db.delete(disbursementRequests).where(eq(disbursementRequests.campaignId, campaignId));
+      await db.delete(campaigns).where(eq(campaigns.id, campaignId));
+    }
+    if (campaignerId) await db.delete(campaigners).where(eq(campaigners.id, campaignerId));
+    if (userId) await db.delete(users).where(eq(users.id, userId));
+  });
+
   test("a row can be created in draft status with nullable fields unset", async () => {
     const [user] = await db
       .insert(users)
       .values({ phone: `+62812${Date.now()}` })
       .returning();
+    // biome-ignore lint/style/noNonNullAssertion: inserted above
+    userId = user!.id;
     const [campaigner] = await db
       .insert(campaigners)
-      .values({ type: "individual", displayName: "Test", userId: user?.id })
+      .values({ type: "individual", displayName: "Test", userId })
       .returning();
+    // biome-ignore lint/style/noNonNullAssertion: inserted above
+    campaignerId = campaigner!.id;
     const [category] = await db.select().from(campaignCategories).limit(1);
     const [campaign] = await db
       .insert(campaigns)
@@ -323,14 +343,13 @@ describe("disbursement_requests", () => {
         goalAmount: 1_000_000n,
         status: "active",
         categoryId: category?.id,
-        campaignerId: campaigner?.id,
+        campaignerId,
       })
       .returning();
+    // biome-ignore lint/style/noNonNullAssertion: inserted above
+    campaignId = campaign!.id;
 
-    const [row] = await db
-      .insert(disbursementRequests)
-      .values({ campaignId: campaign?.id ?? "" })
-      .returning();
+    const [row] = await db.insert(disbursementRequests).values({ campaignId }).returning();
 
     expect(row?.status).toBe("draft");
     expect(row?.amount).toBeNull();
@@ -339,7 +358,7 @@ describe("disbursement_requests", () => {
 });
 ```
 
-Adjust the `campaigns` insert to match that table's exact required-column shape (re-check `packages/db/src/schema/campaigns.ts` — some fields shown here, like `expiresAt`, may need explicit `null` for a `goal`-model row per its existing CHECK constraint; confirm against the constraint text already in that file before finalizing).
+Adjust the `campaigns` insert to match that table's exact required-column shape (re-check `packages/db/src/schema/campaigns.ts` — some fields shown here, like `expiresAt`, may need explicit `null` for a `goal`-model row per its existing CHECK constraint; confirm against the constraint text already in that file before finalizing). This same cleanup requirement — delete every fixture row a test creates, in every task in this plan that inserts a `campaigns` row for its own test purposes (Task 6, Task 8) — applies throughout; this step is the first place it comes up, not the only one.
 
 - [ ] **Step 8: Run tests, lint, typecheck**
 
@@ -1009,6 +1028,8 @@ git commit -m "feat(api): add campaigner bank account endpoints"
 - Modify: route-mounting file (same as Task 5)
 - Test: `apps/api/src/routes/disbursements.test.ts`
 
+**Chain-continuation note (read before Step 6):** Tasks 6, 7, and 8 all add `.get(...)`/`.post(...)`/`.patch(...)` calls to the SAME single `export const disbursementsRoute = new Elysia()....` builder-chain statement in this one file — matching this codebase's established one-file-per-domain convention (`help.ts` mixes public and admin endpoints in one 231-line file the same way; this plan follows that, not a split into a separate admin file). This task's own code (Steps 1-5 below) is written as a complete, valid, semicolon-terminated statement, and this task's own tests must pass exactly as written. Task 7's implementer will be told explicitly (in its own dispatch) to open this file, delete the semicolon that currently ends the statement, insert its new `.post(...)` calls after the last one this task added, and re-terminate with `;` at the new true end — Task 8's implementer gets the same instruction relative to Task 7's ending point. You do not need to do anything differently because of this — just write this task's portion as normal, complete code; the "reopen and extend" work belongs to Tasks 7 and 8's own dispatches, not this one.
+
 **Interfaces:**
 - Consumes: `campaigns.ts`'s `findOwnedCampaign` is confirmed private (not exported) as of this plan's writing — Step 1 below duplicates the ~10-line ownership-lookup helper locally as `findOwnedCampaignForDisbursement` rather than importing it; do not spend time re-checking this, just use the duplicated version as written. Also consumes `privateDocumentsS3`/`extractDocumentExtension` (from `apps/api/src/lib/media-s3.ts`), `donations`/`payments` schema (for the withdrawable-balance query).
 - Produces: `disbursementsRoute` with `POST /campaigns/:id/disbursements`, `PATCH /disbursements/:id/bank-account`, `PATCH /disbursements/:id/detail`, `POST /disbursements/:id/proof/presign`, `POST /disbursements/:id/proof/confirm`, `GET /disbursements/:id`; a `computeWithdrawableAmount(campaignId)` helper other tasks (7, 8) also call.
@@ -1379,6 +1400,8 @@ Cover, against the real Elysia app + real Postgres (this codebase's established 
 - Proof presign/confirm: object-key-prefix-mismatch returns 400 (mirroring `campaigns.test.ts`'s existing equivalent test).
 - `GET /disbursements/:id` 404s identically for nonexistent vs. someone-else's-disbursement (ownership-scoped 404-not-403, verify both cases explicitly).
 
+**Cleanup is required — and there is no existing precedent to copy.** This codebase has a known, already-documented cross-test-isolation gap: real `active`-status `campaigns` rows created by one test file's fixtures and never deleted leak into `campaigns.test.ts`'s own sort/count/cover-image assertions in unrelated test runs. Checked during this plan's writing: `donations.test.ts`'s own `seedTestCampaign()` helper creates a real `active`-status campaign per test run and has **no cleanup at all** — it is itself an undocumented instance of this same bug, not a pattern to mirror. Do not copy it. Instead: track every campaign/campaigner/user/disbursement id this test file creates (module-level `let` variables set during `beforeAll`/each test, matching Task 1 Step 7's pattern in `packages/db/src/__tests__/disbursement-requests.test.ts`) and delete them all in an `afterAll`, in FK-safe order (disbursements/donations/payments before campaigns, campaigns before campaigners, campaigners before users).
+
 - [ ] **Step 8: Run tests, lint, typecheck**
 
 ```bash
@@ -1404,6 +1427,8 @@ git commit -m "feat(api): add disbursement request creation, proof upload, and w
 **Interfaces:**
 - Consumes: `requestOtp`/`verifyOtp` from Task 3 (with `purpose: "disbursement"`), `users.phone` (to know which phone number to send the OTP to — the authenticated campaigner's own).
 - Produces: `POST /disbursements/:id/otp/request`, `POST /disbursements/:id/otp/verify`, `POST /disbursements/:id/submit`.
+
+**Before Step 1:** `apps/api/src/routes/disbursements.ts` already exists (Task 6) and ends with a semicolon terminating the `export const disbursementsRoute = new Elysia()....get("/disbursements/:id", ...)` statement. Open the file, delete that trailing `;`, add the three `.post(...)` calls below directly after the last method call already there, and terminate the whole statement with `;` after your last addition (Step 3's `submit` handler). Do not create a new file or a new top-level statement — this is one continuous builder-chain expression across Tasks 6, 7, and 8. `findOwnedDisbursement`, `db`, and every other helper/import Task 6 already added to this file are already in scope — reuse them, do not redefine or re-import.
 
 - [ ] **Step 1: `POST /disbursements/:id/otp/request`** — validates the draft is complete, sends the code, transitions `draft → otp_pending`
 
@@ -1577,9 +1602,11 @@ git commit -m "feat(api): add disbursement OTP confirmation and final submit"
 ## Task 8: Admin disbursement queue, approve/reject/pay
 
 **Files:**
-- Modify: `apps/api/src/routes/disbursements.ts` (or create `apps/api/src/routes/admin-disbursements.ts` if the file is getting large — implementer's judgment, matching how this codebase already sometimes splits admin endpoints into their own file, e.g. `admin.ts` vs `help.ts`'s admin section; check `help.ts` for which convention it followed before deciding)
-- Modify: route-mounting file
-- Test: extend or create the matching test file
+- Modify: `apps/api/src/routes/disbursements.ts` — confirmed same file, not a split (checked `help.ts` during plan-writing: it mixes public and admin endpoints in one 231-line file with the same `checkAdmin`-per-handler convention this plan already uses; `disbursements.ts` follows that same convention, not `admin.ts`'s separate-file precedent).
+- Modify: route-mounting file (already done by Task 5; nothing new to mount here)
+- Test: `apps/api/src/routes/disbursements.test.ts` (extend, same file Tasks 6-7 built up)
+
+**Before Step 1:** exactly the same chain-continuation situation as Task 7: `disbursements.ts` currently ends with a semicolon after Task 7's `submit` handler. Delete that `;`, append this task's five endpoints (Steps 1-5 below) to the same `disbursementsRoute` chain, and terminate with `;` after Step 5's `pay` handler — this is the LAST task that extends this file's route chain, so this `;` is the real, final one. Add `checkAdmin` (from `apps/api/src/lib/admin.ts`) to this file's imports — it isn't used by Tasks 6 or 7.
 
 **Interfaces:**
 - Consumes: `checkAdmin` from `apps/api/src/lib/admin.ts`, `MockPaymentProvider.createPayout` from Task 4 (via a locally-duplicated `getProvider()` helper — `donations.ts`'s own version is confirmed not exported, see Step 5), `campaigns.disbursedAmount` (raw-SQL increment, matching the webhook handler's established `sql\`${campaigns.collectedAmount} + ${donation.amount}\`` pattern).
@@ -1855,6 +1882,8 @@ In the test file, write an end-to-end reconciliation test: create a campaign, dr
 - The public-display `displayAmount()` helper (import it from `@galangdana/db`) still returns `collectedAmount - disbursedAmount` unchanged — confirming this plan genuinely didn't touch that formula.
 
 Also cover: `approve`/`reject`/`pay` all 409 on a status that doesn't match their guard (e.g. `pay` on a `requested`-not-yet-`approved` row); `pay` is idempotent-safe against a double-call (second call 409s, does not double-increment `disbursedAmount` — assert the exact final value, not just that it changed).
+
+**Cleanup is required** — same rule as Task 6 Step 7: track every campaign/campaigner/user/donation/disbursement row this test creates and delete them all in an `afterAll`, in FK-safe order. Do not let this test's campaign leak into `campaigns.test.ts`'s sort/count assertions the way `donations.test.ts`'s existing uncleaned fixture already does.
 
 - [ ] **Step 7: Run tests, lint, typecheck; commit**
 
