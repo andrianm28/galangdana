@@ -153,6 +153,21 @@ describe("PUT /admin/help-articles/:id", () => {
     const [row] = await db.select().from(helpArticles).where(eq(helpArticles.id, article.id));
     expect(row?.question).toBe("Q1 diperbarui");
   });
+
+  test("404s for a nonexistent article id", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/admin/help-articles/00000000-0000-0000-0000-000000000000",
+        ADMIN_TOKEN,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ question: "Q", answer: "A" }),
+        },
+      ),
+    );
+    expect(resp.status).toBe(404);
+  });
 });
 
 describe("DELETE /admin/help-articles/:id", () => {
@@ -172,6 +187,19 @@ describe("DELETE /admin/help-articles/:id", () => {
     expect(resp.status).toBe(200);
     const remaining = await db.select().from(helpArticles).where(eq(helpArticles.id, article.id));
     expect(remaining).toHaveLength(0);
+  });
+
+  test("404s for a nonexistent article id", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/admin/help-articles/00000000-0000-0000-0000-000000000000",
+        ADMIN_TOKEN,
+        {
+          method: "DELETE",
+        },
+      ),
+    );
+    expect(resp.status).toBe(404);
   });
 });
 
