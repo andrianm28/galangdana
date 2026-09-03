@@ -581,6 +581,10 @@ export const campaignsRoute = new Elysia()
         .orderBy(desc(campaignRevisions.createdAt));
 
       return {
+        story: campaign.story,
+        goalAmount: campaign.goalAmount
+          ? { amount: campaign.goalAmount.toString(), currency: campaign.currency }
+          : null,
         revisions: revisions.map((rev) => ({
           id: rev.id,
           field: rev.field,

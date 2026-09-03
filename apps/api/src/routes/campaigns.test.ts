@@ -862,8 +862,14 @@ describe("GET /campaigns/:id/revisions", () => {
       authedRequest(`http://localhost/campaigns/${campaign.id}/revisions`, TEST_TOKEN),
     );
     expect(resp.status).toBe(200);
-    const body = (await resp.json()) as { revisions: Array<{ field: string }> };
+    const body = (await resp.json()) as {
+      story: string;
+      goalAmount: { amount: string; currency: string } | null;
+      revisions: Array<{ field: string }>;
+    };
     expect(body.revisions).toHaveLength(2);
+    expect(body.story).toBe("Cerita lengkap Aldi.");
+    expect(body.goalAmount).toEqual({ amount: "15000000", currency: "IDR" });
   });
 
   test("404s (not 403) for a non-owner's campaign", async () => {

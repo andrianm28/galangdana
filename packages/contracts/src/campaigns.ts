@@ -233,6 +233,8 @@ export const AdminActionResponseSchema = Type.Object({ status: Type.String() });
 // ---- Phase 3: campaigner-facing revisions + content edits ----
 
 export const CampaignRevisionListResponseSchema = Type.Object({
+  story: Type.String(),
+  goalAmount: Type.Union([MoneyJSONSchema, Type.Null()]),
   revisions: Type.Array(AdminCampaignRevisionSchema),
 });
 export type CampaignRevisionListResponse = Static<typeof CampaignRevisionListResponseSchema>;
