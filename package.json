@@ -7,7 +7,7 @@
     "dev:web": "bun run --cwd apps/web dev",
     "dev:api": "bun run --cwd apps/api dev",
     "build": "bun run --cwd apps/web build",
-    "test": "bun test packages/money packages/contracts packages/db packages/media packages/search apps/api",
+    "test": "bun test packages/money packages/payments packages/contracts packages/db packages/media packages/search apps/api",
     "test:ui": "bun run --cwd packages/ui test",
     "test:web": "bun run --cwd apps/web test",
     "lint": "biome check .",
