@@ -202,6 +202,38 @@ describe("POST /donations", () => {
   });
 });
 
+describe("GET /donations/:id", () => {
+  test("returns a guest donation's status by id, no auth required", async () => {
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ campaignId: campaign.id, amountStr: "20000" }),
+      }),
+    );
+    const { donationId } = (await resp.json()) as { donationId: string };
+
+    const statusResp = await app.handle(new Request(`http://localhost/donations/${donationId}`));
+    expect(statusResp.status).toBe(200);
+    const body = (await statusResp.json()) as {
+      id: string;
+      status: string;
+      vaNumber: string | null;
+    };
+    expect(body.id).toBe(donationId);
+    expect(body.status).toBe("pending");
+    expect(body.vaNumber).not.toBeNull();
+  });
+
+  test("404s for a nonexistent donation id", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/donations/00000000-0000-0000-0000-000000000000"),
+    );
+    expect(resp.status).toBe(404);
+  });
+});
+
 describe("POST /payments/webhook", () => {
   async function createTestDonation(amountStr: string) {
     const campaign = await seedTestCampaign();

@@ -1,6 +1,7 @@
 import {
   CreateDonationBodySchema,
   CreateDonationResponseSchema,
+  GetDonationResponseSchema,
   PaymentErrorSchema,
 } from "@galangdana/contracts";
 import {
@@ -267,5 +268,36 @@ export const donationsRoute = new Elysia()
         200: t.Object({ status: t.String() }),
         401: PaymentErrorSchema,
       },
+    },
+  )
+  .get(
+    "/donations/:id",
+    async ({ user, params, set }) => {
+      const [row] = await db
+        .select({ donation: donations, payment: payments })
+        .from(donations)
+        .innerJoin(payments, eq(payments.donationId, donations.id))
+        .where(eq(donations.id, params.id));
+      if (!row) {
+        set.status = 404;
+        return { error: "donation_not_found" };
+      }
+      if (row.donation.userId && row.donation.userId !== user?.id) {
+        set.status = 404;
+        return { error: "donation_not_found" };
+      }
+      return {
+        id: row.donation.id,
+        campaignId: row.donation.campaignId,
+        amount: moneyToJSON({ amount: row.donation.amount, currency: row.donation.currency }),
+        status: row.donation.status,
+        vaNumber: row.payment.vaNumber,
+        expiresAt: row.payment.expiresAt.toISOString(),
+        paidAt: row.donation.paidAt?.toISOString() ?? null,
+      };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: { 200: GetDonationResponseSchema, 404: PaymentErrorSchema },
     },
   );
