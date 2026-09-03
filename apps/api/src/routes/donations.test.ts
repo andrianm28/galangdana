@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import {
   campaignCategories,
   campaigners,
@@ -9,12 +9,39 @@ import {
   notificationsOutbox,
   paymentEvents,
   payments,
+  sessions,
+  users,
 } from "@galangdana/db";
 import { MockPaymentProvider } from "@galangdana/payments";
 import { eq } from "drizzle-orm";
 import { donationsRoute } from "./donations";
 
 const app = donationsRoute;
+
+const TEST_USER_ID = "44444444-5555-6666-7777-999999999901";
+const OTHER_USER_ID = "44444444-5555-6666-7777-999999999902";
+const TEST_TOKEN = "donations-test-token";
+const OTHER_TOKEN = "donations-other-token";
+
+beforeAll(async () => {
+  await db.delete(users).where(eq(users.id, TEST_USER_ID));
+  await db.delete(users).where(eq(users.id, OTHER_USER_ID));
+  await db.insert(users).values([
+    { id: TEST_USER_ID, phone: "+6281199990401" },
+    { id: OTHER_USER_ID, phone: "+6281199990402" },
+  ]);
+  await db.insert(sessions).values([
+    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+  ]);
+});
+
+function authedRequest(url: string, token: string, init: RequestInit = {}) {
+  return new Request(url, {
+    ...init,
+    headers: { ...init.headers, cookie: `session=${token}` },
+  });
+}
 
 async function seedTestCampaign() {
   const [category] = await db.select().from(campaignCategories).limit(1);
@@ -231,6 +258,48 @@ describe("GET /donations/:id", () => {
       new Request("http://localhost/donations/00000000-0000-0000-0000-000000000000"),
     );
     expect(resp.status).toBe(404);
+  });
+
+  test("returns a user-owned donation's status when accessed by the owner", async () => {
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      authedRequest("http://localhost/donations", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ campaignId: campaign.id, amountStr: "30000" }),
+      }),
+    );
+    const { donationId } = (await resp.json()) as { donationId: string };
+
+    const statusResp = await app.handle(
+      authedRequest(`http://localhost/donations/${donationId}`, TEST_TOKEN),
+    );
+    expect(statusResp.status).toBe(200);
+    const body = (await statusResp.json()) as {
+      id: string;
+      status: string;
+      vaNumber: string | null;
+    };
+    expect(body.id).toBe(donationId);
+    expect(body.status).toBe("pending");
+    expect(body.vaNumber).not.toBeNull();
+  });
+
+  test("404s when a different user tries to access a user-owned donation (not 403)", async () => {
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      authedRequest("http://localhost/donations", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ campaignId: campaign.id, amountStr: "40000" }),
+      }),
+    );
+    const { donationId } = (await resp.json()) as { donationId: string };
+
+    const statusResp = await app.handle(
+      authedRequest(`http://localhost/donations/${donationId}`, OTHER_TOKEN),
+    );
+    expect(statusResp.status).toBe(404);
   });
 });
 
