@@ -131,9 +131,59 @@ describe("POST /admin/help-articles", () => {
     const body = (await resp.json()) as { id: string; slug: string };
     expect(body.slug).toBe("help-test-admin-create");
   });
+
+  test("409s on a duplicate slug", async () => {
+    await db.delete(helpArticles).where(eq(helpArticles.slug, "help-test-duplicate-slug"));
+    await db.insert(helpArticles).values({
+      slug: "help-test-duplicate-slug",
+      question: "Q",
+      answer: "A",
+    });
+
+    const resp = await app.handle(
+      authedRequest("http://localhost/admin/help-articles", ADMIN_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          slug: "help-test-duplicate-slug",
+          question: "Q2",
+          answer: "A2",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("slug_already_exists");
+  });
 });
 
 describe("PUT /admin/help-articles/:id", () => {
+  test("401s for an unauthenticated request", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/admin/help-articles/00000000-0000-0000-0000-000000000000", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question: "Q", answer: "A" }),
+      }),
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  test("403s for an authenticated non-admin", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/admin/help-articles/00000000-0000-0000-0000-000000000000",
+        TOKEN,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ question: "Q", answer: "A" }),
+        },
+      ),
+    );
+    expect(resp.status).toBe(403);
+  });
+
   test("updates question and answer", async () => {
     await db.delete(helpArticles).where(eq(helpArticles.slug, "help-test-admin-update"));
     const [article] = await db
@@ -171,6 +221,28 @@ describe("PUT /admin/help-articles/:id", () => {
 });
 
 describe("DELETE /admin/help-articles/:id", () => {
+  test("401s for an unauthenticated request", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/admin/help-articles/00000000-0000-0000-0000-000000000000", {
+        method: "DELETE",
+      }),
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  test("403s for an authenticated non-admin", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/admin/help-articles/00000000-0000-0000-0000-000000000000",
+        TOKEN,
+        {
+          method: "DELETE",
+        },
+      ),
+    );
+    expect(resp.status).toBe(403);
+  });
+
   test("deletes an article", async () => {
     await db.delete(helpArticles).where(eq(helpArticles.slug, "help-test-admin-delete"));
     const [article] = await db
@@ -209,6 +281,11 @@ describe("GET /admin/support-tickets", () => {
     expect(resp.status).toBe(401);
   });
 
+  test("403s for an authenticated non-admin", async () => {
+    const resp = await app.handle(authedRequest("http://localhost/admin/support-tickets", TOKEN));
+    expect(resp.status).toBe(403);
+  });
+
   test("lists open tickets by default, for an admin", async () => {
     const [ticket] = await db
       .insert(supportTickets)
@@ -226,6 +303,27 @@ describe("GET /admin/support-tickets", () => {
 });
 
 describe("POST /admin/support-tickets/:id/resolve", () => {
+  test("401s for an unauthenticated request", async () => {
+    const resp = await app.handle(
+      new Request(
+        "http://localhost/admin/support-tickets/00000000-0000-0000-0000-000000000000/resolve",
+        { method: "POST" },
+      ),
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  test("403s for an authenticated non-admin", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/admin/support-tickets/00000000-0000-0000-0000-000000000000/resolve",
+        TOKEN,
+        { method: "POST" },
+      ),
+    );
+    expect(resp.status).toBe(403);
+  });
+
   test("resolves an open ticket", async () => {
     const [ticket] = await db
       .insert(supportTickets)

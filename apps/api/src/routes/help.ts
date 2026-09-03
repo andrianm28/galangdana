@@ -64,7 +64,16 @@ export const helpRoute = new Elysia()
         set.status = adminError.status;
         return { error: adminError.status === 401 ? "not_authenticated" : "not_authorized" };
       }
-      const [article] = await db.insert(helpArticles).values(body).returning();
+      let article: typeof helpArticles.$inferSelect | undefined;
+      try {
+        [article] = await db.insert(helpArticles).values(body).returning();
+      } catch (err) {
+        if ((err as { code?: string }).code === "23505") {
+          set.status = 409;
+          return { error: "slug_already_exists" };
+        }
+        throw err;
+      }
       if (!article) throw new Error("help article insert returned no row");
       return {
         id: article.id,
@@ -77,7 +86,12 @@ export const helpRoute = new Elysia()
     },
     {
       body: CreateHelpArticleBodySchema,
-      response: { 200: HelpArticleSchema, 401: HelpErrorSchema, 403: HelpErrorSchema },
+      response: {
+        200: HelpArticleSchema,
+        401: HelpErrorSchema,
+        403: HelpErrorSchema,
+        409: HelpErrorSchema,
+      },
     },
   )
   .put(

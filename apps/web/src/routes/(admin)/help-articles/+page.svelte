@@ -22,7 +22,10 @@ async function createArticle() {
   });
   submitting = false;
   if (apiError || !created) {
-    error = "Gagal menambahkan artikel.";
+    error =
+      apiError?.status === 409
+        ? "Slug sudah digunakan, gunakan slug lain."
+        : "Gagal menambahkan artikel.";
     return;
   }
   articles = [created as (typeof articles)[0], ...articles];
@@ -81,6 +84,7 @@ async function deleteArticle(id: string) {
         <li class="border-b border-neutral-200 pb-4">
           <div class="flex items-start justify-between gap-4">
             <div>
+              <p class="font-sans text-xs text-neutral-500">{article.slug}</p>
               <p class="font-sans font-medium text-neutral-900">{article.question}</p>
               <p class="font-sans text-sm text-neutral-600">{article.answer}</p>
             </div>
