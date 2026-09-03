@@ -11,3 +11,5 @@ export * from "./campaign-documents";
 export * from "./patients";
 export * from "./beneficiaries";
 export * from "./individual-verifications";
+export * from "./help-articles";
+export * from "./support-tickets";
