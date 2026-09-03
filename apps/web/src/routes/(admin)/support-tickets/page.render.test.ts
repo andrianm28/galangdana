@@ -42,7 +42,9 @@ describe("(admin) /support-tickets rendering", () => {
     await waitFor(() => {
       expect(screen.queryByText("Rina")).toBeNull();
     });
-    expect(fetchSpy).toHaveBeenCalled();
+    expect(fetchSpy.mock.calls[0]?.[0]?.toString()).toContain(
+      `/admin/support-tickets/${SAMPLE_TICKET.id}/resolve`,
+    );
   });
 
   test("when resolve API fails, error message renders and ticket stays in list", async () => {
