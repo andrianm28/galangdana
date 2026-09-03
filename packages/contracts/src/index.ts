@@ -36,6 +36,7 @@ export {
   KycDocumentTypeSchema,
   KycStatusSchema,
   MoneyJSONSchema,
+  MyCampaignsResponseSchema,
   PresignCampaignDocumentBodySchema,
   PresignCampaignDocumentResponseSchema,
   PresignKycDocumentBodySchema,

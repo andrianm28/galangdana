@@ -10,6 +10,7 @@ import {
   CreateCampaignFromDraftBodySchema,
   CreateCampaignFromDraftResponseSchema,
   KycStatusSchema,
+  MyCampaignsResponseSchema,
   PresignCampaignDocumentBodySchema,
   PresignCampaignDocumentResponseSchema,
   PresignKycDocumentBodySchema,
@@ -752,4 +753,33 @@ export const campaignsRoute = new Elysia()
         409: CampaignErrorSchema2c,
       },
     },
+  )
+  .get(
+    "/campaigns/mine",
+    async ({ user, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const [campaigner] = await db
+        .select({ id: campaigners.id })
+        .from(campaigners)
+        .where(eq(campaigners.userId, user.id));
+      if (!campaigner) {
+        return { campaigns: [] };
+      }
+
+      const rows = await db
+        .select({
+          id: campaigns.id,
+          slug: campaigns.slug,
+          title: campaigns.title,
+          status: campaigns.status,
+        })
+        .from(campaigns)
+        .where(eq(campaigns.campaignerId, campaigner.id));
+
+      return { campaigns: rows };
+    },
+    { response: { 200: MyCampaignsResponseSchema, 401: CampaignErrorSchema2c } },
   );

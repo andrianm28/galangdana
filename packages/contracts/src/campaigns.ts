@@ -267,3 +267,14 @@ export const ConfirmCampaignDocumentBodySchema = Type.Object({
   documentType: CampaignDocumentTypeSchema,
   objectKey: Type.String(),
 });
+
+export const MyCampaignsResponseSchema = Type.Object({
+  campaigns: Type.Array(
+    Type.Object({
+      id: Type.String({ format: "uuid" }),
+      slug: Type.String(),
+      title: Type.String(),
+      status: Type.String(),
+    }),
+  ),
+});

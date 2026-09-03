@@ -1016,3 +1016,24 @@ describe("POST /campaigns/:id/documents/presign + /confirm", () => {
     expect(body.error).toBe("campaign_not_editable");
   });
 });
+
+describe("GET /campaigns/mine", () => {
+  test("lists only the caller's own campaigns, any status", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await db
+      .update(campaigns)
+      .set({ status: "needs_revision" })
+      .where(eq(campaigns.id, campaign.id));
+    const resp = await app.handle(authedRequest("http://localhost/campaigns/mine", TEST_TOKEN));
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { campaigns: Array<{ id: string; status: string }> };
+    expect(body.campaigns.some((c) => c.id === campaign.id && c.status === "needs_revision")).toBe(
+      true,
+    );
+  });
+
+  test("401s for an unauthenticated request", async () => {
+    const resp = await app.handle(new Request("http://localhost/campaigns/mine"));
+    expect(resp.status).toBe(401);
+  });
+});
