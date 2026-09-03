@@ -5,6 +5,7 @@ import { supportTickets } from "../schema/support-tickets";
 import { users } from "../schema/users";
 
 const TEST_PHONE = "+6281199100001";
+const TEST_TICKET_EMAILS = ["budi@example.test", "siti@example.test", "dedi@example.test"];
 
 describe("support_tickets", () => {
   beforeAll(async () => {
@@ -13,7 +14,7 @@ describe("support_tickets", () => {
 
   afterEach(async () => {
     await db.delete(users).where(inArray(users.phone, [TEST_PHONE, "+6281199100002"]));
-    await db.delete(supportTickets);
+    await db.delete(supportTickets).where(inArray(supportTickets.email, TEST_TICKET_EMAILS));
   });
 
   test("a ticket can be created without a user (guest submission)", async () => {
