@@ -129,10 +129,6 @@ export const disbursementsRoute = new Elysia()
         set.status = 404;
         return { error: "disbursement_not_found" };
       }
-      if (row.disbursement.status !== "draft") {
-        set.status = 409;
-        return { error: "disbursement_not_editable" };
-      }
       const [bankAccount] = await db
         .select()
         .from(bankAccounts)
@@ -141,10 +137,25 @@ export const disbursementsRoute = new Elysia()
         set.status = 422;
         return { error: "bank_account_not_found" };
       }
-      await db
+      // Guarded on status = 'draft' directly in the UPDATE (not a prior
+      // SELECT-then-check) so a concurrent request -- or a race against
+      // Task 7's OTP-verify transition -- can never both pass a stale
+      // check and both write; only the request that actually observes the
+      // row as still `draft` at write time gets to apply its change.
+      const updated = await db
         .update(disbursementRequests)
         .set({ bankAccountId: bankAccount.id, updatedAt: new Date() })
-        .where(eq(disbursementRequests.id, row.disbursement.id));
+        .where(
+          and(
+            eq(disbursementRequests.id, row.disbursement.id),
+            eq(disbursementRequests.status, "draft"),
+          ),
+        )
+        .returning();
+      if (updated.length === 0) {
+        set.status = 409;
+        return { error: "disbursement_not_editable" };
+      }
       return { success: true };
     },
     {
@@ -171,10 +182,6 @@ export const disbursementsRoute = new Elysia()
         set.status = 404;
         return { error: "disbursement_not_found" };
       }
-      if (row.disbursement.status !== "draft") {
-        set.status = 409;
-        return { error: "disbursement_not_editable" };
-      }
       const amount = BigInt(body.amountStr);
       if (amount <= 0n) {
         set.status = 422;
@@ -185,7 +192,10 @@ export const disbursementsRoute = new Elysia()
         set.status = 422;
         return { error: "amount_exceeds_withdrawable_balance" };
       }
-      await db
+      // See the bank-account handler above for why this is a guarded
+      // UPDATE (status = 'draft' in the WHERE, checked via .returning())
+      // rather than a prior SELECT-then-check.
+      const updated = await db
         .update(disbursementRequests)
         .set({
           type: body.type,
@@ -194,7 +204,17 @@ export const disbursementsRoute = new Elysia()
           narrative: body.narrative,
           updatedAt: new Date(),
         })
-        .where(eq(disbursementRequests.id, row.disbursement.id));
+        .where(
+          and(
+            eq(disbursementRequests.id, row.disbursement.id),
+            eq(disbursementRequests.status, "draft"),
+          ),
+        )
+        .returning();
+      if (updated.length === 0) {
+        set.status = 409;
+        return { error: "disbursement_not_editable" };
+      }
       return { success: true };
     },
     {
@@ -261,18 +281,27 @@ export const disbursementsRoute = new Elysia()
         set.status = 404;
         return { error: "disbursement_not_found" };
       }
-      if (row.disbursement.status !== "draft") {
-        set.status = 409;
-        return { error: "disbursement_not_editable" };
-      }
       if (!body.objectKey.startsWith(`disbursements/${row.disbursement.id}/proof/`)) {
         set.status = 400;
         return { error: "object_key_mismatch" };
       }
-      await db
+      // See the bank-account handler above for why this is a guarded
+      // UPDATE (status = 'draft' in the WHERE, checked via .returning())
+      // rather than a prior SELECT-then-check.
+      const updated = await db
         .update(disbursementRequests)
         .set({ proofObjectKey: body.objectKey, updatedAt: new Date() })
-        .where(eq(disbursementRequests.id, row.disbursement.id));
+        .where(
+          and(
+            eq(disbursementRequests.id, row.disbursement.id),
+            eq(disbursementRequests.status, "draft"),
+          ),
+        )
+        .returning();
+      if (updated.length === 0) {
+        set.status = 409;
+        return { error: "disbursement_not_editable" };
+      }
       return { success: true };
     },
     {

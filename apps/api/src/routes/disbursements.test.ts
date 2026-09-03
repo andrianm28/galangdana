@@ -272,6 +272,50 @@ describe("PATCH /disbursements/:id/bank-account", () => {
     const body = (await resp.json()) as { error: string };
     expect(body.error).toBe("bank_account_not_found");
   });
+
+  test("409s when the disbursement is no longer a draft, even though it was draft when read", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    const [bankAccount] = await db
+      .insert(bankAccounts)
+      .values({
+        campaignerId: testCampaignerId,
+        bankCode: "bca",
+        bankName: "Bank Central Asia",
+        accountNumber: "3333333333",
+        accountHolderName: "Test Campaigner",
+      })
+      .returning();
+    if (!bankAccount) throw new Error("bank account insert failed");
+
+    // Simulate a concurrent transition (e.g. Task 7's OTP-verify flow, or
+    // a second in-flight request) racing ahead of this request's own
+    // findOwnedDisbursement read -- the guarded UPDATE's own
+    // `AND status = 'draft'` clause must be what rejects this, not a
+    // stale pre-read check.
+    await db
+      .update(disbursementRequests)
+      .set({ status: "requested" })
+      .where(eq(disbursementRequests.id, id));
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/bank-account`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bankAccountId: bankAccount.id }),
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("disbursement_not_editable");
+
+    // And the write genuinely did not apply.
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.bankAccountId).toBeNull();
+  });
 });
 
 describe("PATCH /disbursements/:id/detail", () => {
@@ -465,6 +509,37 @@ describe("POST /disbursements/:id/proof/presign + /confirm", () => {
     expect(resp.status).toBe(400);
     const body = (await resp.json()) as { error: string };
     expect(body.error).toBe("object_key_mismatch");
+  });
+
+  test("409s when the disbursement is no longer a draft, even though it was draft when read", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+
+    // Simulate a concurrent transition racing ahead of this request's own
+    // findOwnedDisbursement read -- the guarded UPDATE's own
+    // `AND status = 'draft'` clause must be what rejects this, not a
+    // stale pre-read check.
+    await db
+      .update(disbursementRequests)
+      .set({ status: "requested" })
+      .where(eq(disbursementRequests.id, id));
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/proof/confirm`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ objectKey: `disbursements/${id}/proof/x.jpg` }),
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("disbursement_not_editable");
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.proofObjectKey).toBeNull();
   });
 });
 
