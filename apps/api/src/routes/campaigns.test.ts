@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import {
   campaignCategories,
+  campaignDocuments,
+  campaignRevisions,
   campaigners,
   campaigns,
   db,
@@ -749,6 +751,47 @@ describe("POST /campaigns/:id/submit", () => {
     );
     expect(resp.status).toBe(404);
   });
+
+  test("resubmitting after needs_revision sets submittedAt and resolves open revisions", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await fillKycIdentityAndContact(campaign.id, TEST_TOKEN);
+    await uploadKycDocuments(campaign.id, TEST_TOKEN);
+    await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+
+    // Simulate an admin request-revision (direct DB write -- this test
+    // file has no admin auth helper, and doesn't need one just to set up
+    // this scenario).
+    await db
+      .update(campaigns)
+      .set({ status: "needs_revision" })
+      .where(eq(campaigns.id, campaign.id));
+    const [openRevision] = await db
+      .insert(campaignRevisions)
+      .values({ campaignId: campaign.id, field: "cerita", note: "Perlu detail lebih." })
+      .returning();
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/submit`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.status).toBe("pending_review");
+    expect(row?.submittedAt).not.toBeNull();
+
+    const [resolvedRevision] = await db
+      .select()
+      .from(campaignRevisions)
+      .where(eq(campaignRevisions.id, openRevision?.id ?? ""));
+    expect(resolvedRevision?.status).toBe("resolved");
+    expect(resolvedRevision?.resolvedAt).not.toBeNull();
+  });
 });
 
 describe("POST /campaigns idempotency", () => {
@@ -805,5 +848,198 @@ describe("POST /campaigns idempotency", () => {
 
     const rows = await db.select().from(campaigns).where(eq(campaigns.draftId, draft.id));
     expect(rows.length).toBe(1);
+  });
+});
+
+describe("GET /campaigns/:id/revisions", () => {
+  test("returns this campaign's revision requests, newest first", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await db.insert(campaignRevisions).values([
+      { campaignId: campaign.id, field: "cerita", note: "Pertama." },
+      { campaignId: campaign.id, field: "target_donasi", note: "Kedua." },
+    ]);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/revisions`, TEST_TOKEN),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      story: string;
+      goalAmount: { amount: string; currency: string } | null;
+      revisions: Array<{ field: string }>;
+    };
+    expect(body.revisions).toHaveLength(2);
+    expect(body.story).toBe("Cerita lengkap Aldi.");
+    expect(body.goalAmount).toEqual({ amount: "15000000", currency: "IDR" });
+  });
+
+  test("404s (not 403) for a non-owner's campaign", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/revisions`, OTHER_TOKEN),
+    );
+    expect(resp.status).toBe(404);
+  });
+});
+
+describe("PUT /campaigns/:id/story", () => {
+  test("updates the story while the campaign is needs_revision", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await db
+      .update(campaigns)
+      .set({ status: "needs_revision" })
+      .where(eq(campaigns.id, campaign.id));
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ story: "Cerita yang sudah diperbaiki dan lebih lengkap." }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.story).toBe("Cerita yang sudah diperbaiki dan lebih lengkap.");
+  });
+
+  test("409s once the campaign is active", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await db.update(campaigns).set({ status: "active" }).where(eq(campaigns.id, campaign.id));
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ story: "Percobaan mengubah cerita campaign aktif." }),
+      }),
+    );
+    expect(resp.status).toBe(409);
+  });
+});
+
+describe("PUT /campaigns/:id/goal-amount", () => {
+  test("updates the goal amount as a real bigint", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/goal-amount`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ goalAmountStr: "25000000" }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.goalAmount).toBe(25000000n);
+  });
+
+  test("rejects a malformed goalAmountStr with 400, not a 500", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/goal-amount`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ goalAmountStr: "not-a-number" }),
+      }),
+    );
+    expect(resp.status).toBe(422);
+  });
+});
+
+describe("POST /campaigns/:id/documents/presign + /confirm", () => {
+  test("presign -> real MinIO PUT -> confirm round-trip creates a campaign-scoped document row", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const presignResp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/documents/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType: "sumber_gambar", fileName: "sumber.jpg" }),
+      }),
+    );
+    expect(presignResp.status).toBe(200);
+    const { uploadUrl, objectKey } = (await presignResp.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+    expect(objectKey).toStartWith(`campaigns/${campaign.id}/documents/sumber_gambar/`);
+
+    const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
+    expect(putResp.ok).toBe(true);
+
+    const confirmResp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/documents/confirm`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType: "sumber_gambar", objectKey }),
+      }),
+    );
+    expect(confirmResp.status).toBe(200);
+
+    const [document] = await db
+      .select()
+      .from(campaignDocuments)
+      .where(eq(campaignDocuments.campaignId, campaign.id));
+    expect(document?.type).toBe("sumber_gambar");
+    expect(document?.draftId).toBeNull();
+  });
+
+  test("confirm rejects an objectKey outside this campaign's own prefix", async () => {
+    const campaignA = await createTestCampaign(TEST_TOKEN);
+    const campaignB = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaignA.id}/documents/confirm`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          documentType: "sumber_gambar",
+          objectKey: `campaigns/${campaignB.id}/documents/sumber_gambar/x.jpg`,
+        }),
+      }),
+    );
+    expect(resp.status).toBe(400);
+  });
+
+  test("404s (not 403) presign for a non-owner's campaign", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/documents/presign`, OTHER_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType: "sumber_gambar", fileName: "x.jpg" }),
+      }),
+    );
+    expect(resp.status).toBe(404);
+  });
+
+  test("409s presign once the campaign is no longer editable", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await db.update(campaigns).set({ status: "active" }).where(eq(campaigns.id, campaign.id));
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/documents/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType: "sumber_gambar", fileName: "x.jpg" }),
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("campaign_not_editable");
+  });
+});
+
+describe("GET /campaigns/mine", () => {
+  test("lists only the caller's own campaigns, any status", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await db
+      .update(campaigns)
+      .set({ status: "needs_revision" })
+      .where(eq(campaigns.id, campaign.id));
+    const resp = await app.handle(authedRequest("http://localhost/campaigns/mine", TEST_TOKEN));
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { campaigns: Array<{ id: string; status: string }> };
+    expect(body.campaigns.some((c) => c.id === campaign.id && c.status === "needs_revision")).toBe(
+      true,
+    );
+  });
+
+  test("401s for an unauthenticated request", async () => {
+    const resp = await app.handle(new Request("http://localhost/campaigns/mine"));
+    expect(resp.status).toBe(401);
   });
 });

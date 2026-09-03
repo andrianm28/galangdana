@@ -9,7 +9,7 @@ import { users } from "../schema/users";
 // second run with "duplicate key value violates unique constraint". Same
 // pattern as campaigns.test.ts (Phase 0a): delete any leftover rows with
 // these exact values first so the file is safe to run any number of times.
-const TEST_PHONES = ["+6281100000001", "+6281100000002"];
+const TEST_PHONES = ["+6281100000001", "+6281100000002", "+6281100000003", "+6281100000004"];
 const TEST_EMAILS = ["test-users-1@example.test", "test-users-2@example.test"];
 
 describe("users", () => {
@@ -47,5 +47,16 @@ describe("users", () => {
     await expect(
       Promise.resolve(db.insert(users).values({ email: "test-users-2@example.test" })),
     ).rejects.toThrow(/unique/i);
+  });
+
+  test("role defaults to campaigner, and can be set to admin", async () => {
+    const [defaultRow] = await db.insert(users).values({ phone: "+6281100000003" }).returning();
+    expect(defaultRow?.role).toBe("campaigner");
+
+    const [adminRow] = await db
+      .insert(users)
+      .values({ phone: "+6281100000004", role: "admin" })
+      .returning();
+    expect(adminRow?.role).toBe("admin");
   });
 });

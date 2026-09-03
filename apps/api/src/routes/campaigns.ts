@@ -1,22 +1,30 @@
 import {
   CampaignDetailSchema,
   CampaignErrorSchema,
-  CampaignErrorSchema2c,
   CampaignListQuerySchema,
   CampaignListResponseSchema,
+  CampaignRevisionListResponseSchema,
+  ConfirmCampaignDocumentBodySchema,
   ConfirmKycDocumentBodySchema,
   CreateCampaignFromDraftBodySchema,
   CreateCampaignFromDraftResponseSchema,
   KycStatusSchema,
+  MyCampaignsResponseSchema,
+  PresignCampaignDocumentBodySchema,
+  PresignCampaignDocumentResponseSchema,
   PresignKycDocumentBodySchema,
   PresignKycDocumentResponseSchema,
+  SaveCampaignGoalAmountBodySchema,
+  SaveCampaignStoryBodySchema,
   SaveKycContactBodySchema,
   SaveKycIdentityBodySchema,
   SubmitCampaignResponseSchema,
 } from "@galangdana/contracts";
 import {
   campaignCategories,
+  campaignDocuments,
   campaignDrafts,
+  campaignRevisions,
   campaignStoryAnswers,
   campaigners,
   campaigns,
@@ -27,6 +35,7 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { toCampaignDetail, toCampaignSummary } from "../lib/campaign-response";
 import { getOrCreateCampaignerForUser } from "../lib/campaigner";
+import { extractDocumentExtension, privateDocumentsS3 } from "../lib/media-s3";
 import { sessionDerive } from "../lib/session";
 import { generateUniqueSlug } from "../lib/slug";
 
@@ -214,10 +223,10 @@ export const campaignsRoute = new Elysia()
       body: CreateCampaignFromDraftBodySchema,
       response: {
         200: CreateCampaignFromDraftResponseSchema,
-        400: CampaignErrorSchema2c,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        500: CampaignErrorSchema2c,
+        400: CampaignErrorSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        500: CampaignErrorSchema,
       },
     },
   )
@@ -285,9 +294,9 @@ export const campaignsRoute = new Elysia()
       body: SaveKycIdentityBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   )
@@ -336,9 +345,9 @@ export const campaignsRoute = new Elysia()
       body: SaveKycContactBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   )
@@ -374,9 +383,9 @@ export const campaignsRoute = new Elysia()
       body: PresignKycDocumentBodySchema,
       response: {
         200: PresignKycDocumentResponseSchema,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        422: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        422: CampaignErrorSchema,
       },
     },
   )
@@ -427,10 +436,10 @@ export const campaignsRoute = new Elysia()
       body: ConfirmKycDocumentBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
-        400: CampaignErrorSchema2c,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        400: CampaignErrorSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   )
@@ -477,8 +486,8 @@ export const campaignsRoute = new Elysia()
       params: t.Object({ slug: t.String() }),
       response: {
         200: KycStatusSchema,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
       },
     },
   )
@@ -522,10 +531,17 @@ export const campaignsRoute = new Elysia()
         return { error: "kyc_incomplete" };
       }
 
+      const now = new Date();
       await db
         .update(campaigns)
-        .set({ status: "pending_review", updatedAt: new Date() })
+        .set({ status: "pending_review", submittedAt: now, updatedAt: now })
         .where(eq(campaigns.id, campaign.id));
+      await db
+        .update(campaignRevisions)
+        .set({ status: "resolved", resolvedAt: now })
+        .where(
+          and(eq(campaignRevisions.campaignId, campaign.id), eq(campaignRevisions.status, "open")),
+        );
 
       return { status: "pending_review" };
     },
@@ -533,10 +549,240 @@ export const campaignsRoute = new Elysia()
       params: t.Object({ id: t.String() }),
       response: {
         200: SubmitCampaignResponseSchema,
-        400: CampaignErrorSchema2c,
-        401: CampaignErrorSchema2c,
-        404: CampaignErrorSchema2c,
-        409: CampaignErrorSchema2c,
+        400: CampaignErrorSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
+  )
+  .get(
+    // Path param is named ":slug" (not ":id") solely to match the existing
+    // GET /campaigns/:slug route's param name at this same trie position --
+    // memoirist (Elysia's router) requires a consistent param name per HTTP
+    // method at a shared position, even though this route's continuation
+    // ("/revisions") differs. The value is actually a campaign id, not a slug.
+    "/campaigns/:slug/revisions",
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.slug, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+
+      const revisions = await db
+        .select()
+        .from(campaignRevisions)
+        .where(eq(campaignRevisions.campaignId, campaign.id))
+        .orderBy(desc(campaignRevisions.createdAt));
+
+      return {
+        story: campaign.story,
+        goalAmount: campaign.goalAmount
+          ? { amount: campaign.goalAmount.toString(), currency: campaign.currency }
+          : null,
+        revisions: revisions.map((rev) => ({
+          id: rev.id,
+          field: rev.field,
+          note: rev.note,
+          status: rev.status,
+          createdAt: rev.createdAt.toISOString(),
+          resolvedAt: rev.resolvedAt?.toISOString() ?? null,
+        })),
+      };
+    },
+    {
+      params: t.Object({ slug: t.String() }),
+      response: {
+        200: CampaignRevisionListResponseSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+      },
+    },
+  )
+  .put(
+    "/campaigns/:id/story",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
+
+      await db
+        .update(campaigns)
+        .set({ story: body.story, updatedAt: new Date() })
+        .where(eq(campaigns.id, campaign.id));
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: SaveCampaignStoryBodySchema,
+      response: {
+        200: t.Object({ success: t.Boolean() }),
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
+      },
+    },
+  )
+  .put(
+    "/campaigns/:id/goal-amount",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
+
+      await db
+        .update(campaigns)
+        .set({ goalAmount: BigInt(body.goalAmountStr), updatedAt: new Date() })
+        .where(eq(campaigns.id, campaign.id));
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: SaveCampaignGoalAmountBodySchema,
+      response: {
+        200: t.Object({ success: t.Boolean() }),
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/campaigns/:id/documents/presign",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
+
+      const ext = extractDocumentExtension(body.fileName);
+      if (!ext) {
+        set.status = 422;
+        return { error: "unsupported_file_type" };
+      }
+
+      const objectKey = `campaigns/${campaign.id}/documents/${body.documentType}/${crypto.randomUUID()}.${ext}`;
+      const expiresInSeconds = 300;
+      const uploadUrl = privateDocumentsS3
+        .file(objectKey)
+        .presign({ method: "PUT", expiresIn: expiresInSeconds });
+
+      return { uploadUrl, objectKey, expiresInSeconds };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: PresignCampaignDocumentBodySchema,
+      response: {
+        200: PresignCampaignDocumentResponseSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
+        422: CampaignErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/campaigns/:id/documents/confirm",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
+
+      if (!body.objectKey.startsWith(`campaigns/${campaign.id}/documents/${body.documentType}/`)) {
+        set.status = 400;
+        return { error: "object_key_mismatch" };
+      }
+
+      await db
+        .insert(campaignDocuments)
+        .values({ campaignId: campaign.id, type: body.documentType, objectKey: body.objectKey });
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: ConfirmCampaignDocumentBodySchema,
+      response: {
+        200: t.Object({ success: t.Boolean() }),
+        400: CampaignErrorSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
+      },
+    },
+  )
+  .get(
+    "/campaigns/mine",
+    async ({ user, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const [campaigner] = await db
+        .select({ id: campaigners.id })
+        .from(campaigners)
+        .where(eq(campaigners.userId, user.id));
+      if (!campaigner) {
+        return { campaigns: [] };
+      }
+
+      const rows = await db
+        .select({
+          id: campaigns.id,
+          slug: campaigns.slug,
+          title: campaigns.title,
+          status: campaigns.status,
+        })
+        .from(campaigns)
+        .where(eq(campaigns.campaignerId, campaigner.id));
+
+      return { campaigns: rows };
+    },
+    { response: { 200: MyCampaignsResponseSchema, 401: CampaignErrorSchema } },
   );
