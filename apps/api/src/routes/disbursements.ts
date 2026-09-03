@@ -1,4 +1,7 @@
 import {
+  AdminDisbursementDetailSchema,
+  AdminDisbursementListResponseSchema,
+  AdminRejectDisbursementBodySchema,
   ConfirmDisbursementProofBodySchema,
   CreateDisbursementResponseSchema,
   DisbursementActionResponseSchema,
@@ -18,14 +21,22 @@ import {
   campaigns,
   db,
   disbursementRequests,
+  type disbursementStatusEnum,
   donations,
 } from "@galangdana/db";
 import { moneyToJSON } from "@galangdana/money";
-import { and, eq, sql } from "drizzle-orm";
+import { MockPaymentProvider } from "@galangdana/payments";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { requestOtp, verifyOtp } from "../auth/otp";
+import { checkAdmin } from "../lib/admin";
 import { extractDocumentExtension, privateDocumentsS3 } from "../lib/media-s3";
 import { sessionDerive } from "../lib/session";
+
+const SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev";
+function getProvider() {
+  return new MockPaymentProvider({ serverKey: SERVER_KEY });
+}
 
 /**
  * withdrawable = collectedAmount - totalPlatformFees(paid donations) -
@@ -503,6 +514,255 @@ export const disbursementsRoute = new Elysia()
         200: DisbursementActionResponseSchema,
         401: DisbursementErrorSchema,
         404: DisbursementErrorSchema,
+        409: DisbursementErrorSchema,
+      },
+    },
+  )
+  .get(
+    "/admin/disbursements",
+    async ({ user, query, set }) => {
+      const adminError = checkAdmin(user);
+      if (adminError) {
+        set.status = adminError.status;
+        return { error: adminError.status === 401 ? "not_authenticated" : "not_authorized" };
+      }
+      const status = (query.status ??
+        "requested") as (typeof disbursementStatusEnum.enumValues)[number];
+      const rows = await db
+        .select({
+          id: disbursementRequests.id,
+          campaignId: campaigns.id,
+          campaignTitle: campaigns.title,
+          type: disbursementRequests.type,
+          amount: disbursementRequests.amount,
+          currency: disbursementRequests.currency,
+          status: disbursementRequests.status,
+          createdAt: disbursementRequests.createdAt,
+        })
+        .from(disbursementRequests)
+        .innerJoin(campaigns, eq(disbursementRequests.campaignId, campaigns.id))
+        .where(eq(disbursementRequests.status, status))
+        .orderBy(desc(disbursementRequests.createdAt));
+      return {
+        disbursements: rows.map((row) => ({
+          id: row.id,
+          campaignId: row.campaignId,
+          campaignTitle: row.campaignTitle,
+          // biome-ignore lint/style/noNonNullAssertion: status "requested" implies detail is filled
+          type: row.type!,
+          amount: moneyToJSON({ amount: row.amount ?? 0n, currency: row.currency ?? "IDR" }),
+          status: row.status,
+          createdAt: row.createdAt.toISOString(),
+        })),
+      };
+    },
+    {
+      query: t.Object({ status: t.Optional(t.String()) }),
+      response: {
+        200: AdminDisbursementListResponseSchema,
+        401: DisbursementErrorSchema,
+        403: DisbursementErrorSchema,
+      },
+    },
+  )
+  .get(
+    "/admin/disbursements/:id",
+    async ({ user, params, set }) => {
+      const adminError = checkAdmin(user);
+      if (adminError) {
+        set.status = adminError.status;
+        return { error: adminError.status === 401 ? "not_authenticated" : "not_authorized" };
+      }
+      const [row] = await db
+        .select({
+          disbursement: disbursementRequests,
+          campaign: campaigns,
+          bankAccount: bankAccounts,
+        })
+        .from(disbursementRequests)
+        .innerJoin(campaigns, eq(disbursementRequests.campaignId, campaigns.id))
+        .leftJoin(bankAccounts, eq(disbursementRequests.bankAccountId, bankAccounts.id))
+        .where(eq(disbursementRequests.id, params.id));
+      if (!row || !row.bankAccount) {
+        set.status = 404;
+        return { error: "disbursement_not_found" };
+      }
+      const proofViewUrl = row.disbursement.proofObjectKey
+        ? privateDocumentsS3
+            .file(row.disbursement.proofObjectKey)
+            .presign({ method: "GET", expiresIn: 300 })
+        : null;
+      return {
+        id: row.disbursement.id,
+        campaignId: row.campaign.id,
+        campaignTitle: row.campaign.title,
+        bankAccount: {
+          bankName: row.bankAccount.bankName,
+          accountNumber: row.bankAccount.accountNumber,
+          accountHolderName: row.bankAccount.accountHolderName,
+          verifiedAt: row.bankAccount.verifiedAt?.toISOString() ?? null,
+        },
+        // biome-ignore lint/style/noNonNullAssertion: reached admin queue implies detail filled
+        type: row.disbursement.type!,
+        amount: moneyToJSON({
+          amount: row.disbursement.amount ?? 0n,
+          currency: row.disbursement.currency ?? "IDR",
+        }),
+        narrative: row.disbursement.narrative ?? "",
+        proofViewUrl,
+        status: row.disbursement.status,
+        createdAt: row.disbursement.createdAt.toISOString(),
+      };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: {
+        200: AdminDisbursementDetailSchema,
+        401: DisbursementErrorSchema,
+        403: DisbursementErrorSchema,
+        404: DisbursementErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/admin/disbursements/:id/approve",
+    async ({ user, params, set }) => {
+      const adminError = checkAdmin(user);
+      if (adminError) {
+        set.status = adminError.status;
+        return { error: adminError.status === 401 ? "not_authenticated" : "not_authorized" };
+      }
+      const now = new Date();
+      const transitioned = await db
+        .update(disbursementRequests)
+        .set({ status: "approved", approvedBy: user?.id, approvedAt: now, updatedAt: now })
+        .where(
+          and(eq(disbursementRequests.id, params.id), eq(disbursementRequests.status, "requested")),
+        )
+        .returning();
+      if (transitioned.length === 0) {
+        set.status = 409;
+        return { error: "invalid_disbursement_status" };
+      }
+      return { status: "approved" as const };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: {
+        200: DisbursementActionResponseSchema,
+        401: DisbursementErrorSchema,
+        403: DisbursementErrorSchema,
+        409: DisbursementErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/admin/disbursements/:id/reject",
+    async ({ user, params, body, set }) => {
+      const adminError = checkAdmin(user);
+      if (adminError) {
+        set.status = adminError.status;
+        return { error: adminError.status === 401 ? "not_authenticated" : "not_authorized" };
+      }
+      const transitioned = await db
+        .update(disbursementRequests)
+        .set({ status: "rejected", rejectedReason: body.reason, updatedAt: new Date() })
+        .where(
+          and(eq(disbursementRequests.id, params.id), eq(disbursementRequests.status, "requested")),
+        )
+        .returning();
+      if (transitioned.length === 0) {
+        set.status = 409;
+        return { error: "invalid_disbursement_status" };
+      }
+      return { status: "rejected" as const };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: AdminRejectDisbursementBodySchema,
+      response: {
+        200: DisbursementActionResponseSchema,
+        401: DisbursementErrorSchema,
+        403: DisbursementErrorSchema,
+        409: DisbursementErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/admin/disbursements/:id/pay",
+    async ({ user, params, set }) => {
+      const adminError = checkAdmin(user);
+      if (adminError) {
+        set.status = adminError.status;
+        return { error: adminError.status === 401 ? "not_authenticated" : "not_authorized" };
+      }
+      const [row] = await db
+        .select({ disbursement: disbursementRequests, bankAccount: bankAccounts })
+        .from(disbursementRequests)
+        .leftJoin(bankAccounts, eq(disbursementRequests.bankAccountId, bankAccounts.id))
+        .where(eq(disbursementRequests.id, params.id));
+      if (
+        !row ||
+        row.disbursement.status !== "approved" ||
+        !row.bankAccount ||
+        !row.disbursement.amount
+      ) {
+        set.status = 409;
+        return { error: "invalid_disbursement_status" };
+      }
+
+      const provider = getProvider();
+      // Field names match what Task 4 actually shipped (packages/payments/src/types.ts),
+      // NOT this plan's own original sketch -- Task 4's research found Xendit's real API
+      // uses referenceId/channelCode (Payouts API v2), not externalId/bankCode (the
+      // deprecated Disbursement API this plan's earlier draft assumed). channelCode is
+      // set directly from bank_accounts.bankCode (e.g. "bca") even though Xendit's real
+      // channelCode format differs (e.g. "ID_BCA") -- a known, deliberate simplification
+      // Task 4 flagged: the mock never validates this value's format, and mapping it
+      // correctly is a real adapter's problem, out of this slice's scope entirely.
+      const payout = await provider.createPayout({
+        referenceId: row.disbursement.id,
+        amount: row.disbursement.amount,
+        channelCode: row.bankAccount.bankCode,
+        accountNumber: row.bankAccount.accountNumber,
+        accountHolderName: row.bankAccount.accountHolderName,
+        description: row.disbursement.narrative ?? "",
+      });
+
+      const now = new Date();
+      const transitioned = await db.transaction(async (tx) => {
+        const updated = await tx
+          .update(disbursementRequests)
+          .set({ status: "paid", payoutRef: payout.payoutId, paidAt: now, updatedAt: now })
+          .where(
+            and(
+              eq(disbursementRequests.id, row.disbursement.id),
+              eq(disbursementRequests.status, "approved"),
+            ),
+          )
+          .returning();
+        if (updated.length === 0) {
+          return false;
+        }
+        await tx
+          .update(campaigns)
+          .set({ disbursedAmount: sql`${campaigns.disbursedAmount} + ${row.disbursement.amount}` })
+          .where(eq(campaigns.id, row.disbursement.campaignId));
+        return true;
+      });
+
+      if (!transitioned) {
+        set.status = 409;
+        return { error: "invalid_disbursement_status" };
+      }
+      return { status: "paid" as const };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: {
+        200: DisbursementActionResponseSchema,
+        401: DisbursementErrorSchema,
+        403: DisbursementErrorSchema,
         409: DisbursementErrorSchema,
       },
     },

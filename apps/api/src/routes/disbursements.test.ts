@@ -6,6 +6,7 @@ import {
   campaigns,
   db,
   disbursementRequests,
+  displayAmount,
   donations,
   otpChallenges,
   payments,
@@ -13,7 +14,7 @@ import {
   users,
 } from "@galangdana/db";
 import { MockPaymentProvider } from "@galangdana/payments";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { requestOtp } from "../auth/otp";
 import type { SmsProvider } from "../auth/sms-provider";
@@ -52,8 +53,10 @@ const app = new Elysia().use(donationsRoute).use(disbursementsRoute);
 
 const TEST_USER_ID = "44444444-5555-6666-7777-cccccccccc01";
 const OTHER_USER_ID = "44444444-5555-6666-7777-cccccccccc02";
+const ADMIN_USER_ID = "44444444-5555-6666-7777-cccccccccc03";
 const TEST_TOKEN = "disbursements-test-token";
 const OTHER_TOKEN = "disbursements-other-token";
+const ADMIN_TOKEN = "disbursements-admin-token";
 const TEST_USER_PHONE = "+6281199990601";
 
 let categoryId: number;
@@ -73,14 +76,16 @@ function authedRequest(url: string, token: string, init: RequestInit = {}) {
 }
 
 beforeAll(async () => {
-  await db.delete(users).where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID]));
+  await db.delete(users).where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID, ADMIN_USER_ID]));
   await db.insert(users).values([
     { id: TEST_USER_ID, phone: TEST_USER_PHONE },
     { id: OTHER_USER_ID, phone: "+6281199990602" },
+    { id: ADMIN_USER_ID, phone: "+6281199990603", role: "admin" },
   ]);
   await db.insert(sessions).values([
     { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
     { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    { id: ADMIN_TOKEN, userId: ADMIN_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
   ]);
 
   const [category] = await db.select().from(campaignCategories).limit(1);
@@ -123,7 +128,11 @@ afterAll(async () => {
   // what actually references bankAccountId) cleans them up too.
   if (testCampaignerId) await db.delete(campaigners).where(eq(campaigners.id, testCampaignerId));
   if (otherCampaignerId) await db.delete(campaigners).where(eq(campaigners.id, otherCampaignerId));
-  await db.delete(users).where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID]));
+  // disbursementRequests (deleted above, ahead of users) is what references
+  // ADMIN_USER_ID via approvedBy (no cascade on that FK) -- deleting users
+  // after disbursementRequests, same as the existing TEST_USER_ID/OTHER_USER_ID
+  // ordering, is what keeps this FK-safe.
+  await db.delete(users).where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID, ADMIN_USER_ID]));
   await db.delete(otpChallenges).where(eq(otpChallenges.phone, TEST_USER_PHONE));
   await redis.del(`otp:ratelimit:${TEST_USER_PHONE}`);
 });
@@ -146,6 +155,33 @@ async function createTestCampaign(campaignerId: string, status: "draft" | "activ
     })
     .returning();
   if (!campaign) throw new Error("campaign insert failed");
+  campaignIds.push(campaign.id);
+  return campaign;
+}
+
+// "program"-model campaigns (unlike this file's default "goal" model) are
+// the only ones where displayAmount() actually subtracts disbursedAmount
+// (a "goal" campaign's displayAmount is cumulative collectedAmount,
+// unaffected by disbursements) -- needed to exercise that formula for
+// real. The check constraint on campaigns.model requires goalAmount and
+// expiresAt to both be NULL for "program", not just omitted.
+async function createProgramTestCampaign(campaignerId: string) {
+  const [campaign] = await db
+    .insert(campaigns)
+    .values({
+      slug: `test-disbursement-program-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      title: "Test Disbursement Program Campaign",
+      shortDescription: "Test",
+      story: "Test",
+      categoryId,
+      campaignerId,
+      type: "donation",
+      currency: "IDR",
+      model: "program",
+      status: "active",
+    })
+    .returning();
+  if (!campaign) throw new Error("program campaign insert failed");
   campaignIds.push(campaign.id);
   return campaign;
 }
@@ -679,6 +715,48 @@ async function makeOtpReadyDraft(campaignId: string, amount: bigint) {
   return id;
 }
 
+// Drives a fresh draft all the way to `requested` through the real
+// otp/request -> otp/verify -> submit route chain (Task 7), resetting the
+// shared 3-per-hour otp:ratelimit bucket first since this helper is called
+// from many independent admin-flow tests below, not just the one describe
+// block that already owned that reset.
+async function driveDisbursementToRequested(campaignId: string, amount: bigint) {
+  const id = await makeOtpReadyDraft(campaignId, amount);
+  await redis.del(`otp:ratelimit:${TEST_USER_PHONE}`);
+  const otpRequestResp = await app.handle(
+    authedRequest(`http://localhost/disbursements/${id}/otp/request`, TEST_TOKEN, {
+      method: "POST",
+    }),
+  );
+  if (otpRequestResp.status !== 200)
+    throw new Error(`otp/request failed: ${otpRequestResp.status}`);
+  const code = await requestFreshOtpCode(TEST_USER_PHONE, "disbursement");
+  const verifyResp = await app.handle(
+    authedRequest(`http://localhost/disbursements/${id}/otp/verify`, TEST_TOKEN, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code }),
+    }),
+  );
+  if (verifyResp.status !== 200) throw new Error(`otp/verify failed: ${verifyResp.status}`);
+  const submitResp = await app.handle(
+    authedRequest(`http://localhost/disbursements/${id}/submit`, TEST_TOKEN, { method: "POST" }),
+  );
+  if (submitResp.status !== 200) throw new Error(`submit failed: ${submitResp.status}`);
+  return id;
+}
+
+async function driveDisbursementToApproved(campaignId: string, amount: bigint) {
+  const id = await driveDisbursementToRequested(campaignId, amount);
+  const approveResp = await app.handle(
+    authedRequest(`http://localhost/admin/disbursements/${id}/approve`, ADMIN_TOKEN, {
+      method: "POST",
+    }),
+  );
+  if (approveResp.status !== 200) throw new Error(`approve failed: ${approveResp.status}`);
+  return id;
+}
+
 describe("Disbursement OTP request/verify + submit", () => {
   // Every test below either calls the /otp/request route or requestOtp
   // directly (to capture a real code) against the same fixed
@@ -882,5 +960,429 @@ describe("Disbursement OTP request/verify + submit", () => {
       .where(eq(disbursementRequests.id, id));
     expect(row?.status).toBe("otp_pending");
     expect(row?.otpVerifiedAt).toBeNull();
+  });
+});
+
+describe("GET /admin/disbursements", () => {
+  beforeAll(async () => {
+    // Several describe blocks above (bank-account/detail/proof-confirm
+    // "409s when no longer a draft" tests) simulate a concurrent status
+    // transition by flipping status straight to "requested" via a raw
+    // db.update, WITHOUT going through the real otp/request completeness
+    // check -- so those tracked disbursements sit in the shared table as
+    // "requested" with type/amount/bankAccountId still null. The real
+    // submit route can never produce that state (Step 1's `type!`
+    // assertion above assumes exactly this), but /admin/disbursements
+    // queries the whole table, not just this describe block's own rows,
+    // so those leftovers would otherwise crash the queue response's
+    // schema validation. Push them back to draft -- their own tests have
+    // already finished asserting against them by the time this describe
+    // block runs.
+    await db
+      .update(disbursementRequests)
+      .set({ status: "draft" })
+      .where(
+        and(
+          inArray(disbursementRequests.id, disbursementIds),
+          eq(disbursementRequests.status, "requested"),
+          isNull(disbursementRequests.type),
+        ),
+      );
+  });
+
+  test("401s with no session", async () => {
+    const resp = await app.handle(new Request("http://localhost/admin/disbursements"));
+    expect(resp.status).toBe(401);
+  });
+
+  test("403s for an authenticated non-admin", async () => {
+    const resp = await app.handle(
+      authedRequest("http://localhost/admin/disbursements", TEST_TOKEN),
+    );
+    expect(resp.status).toBe(403);
+  });
+
+  test("defaults to the requested queue and does not list a draft disbursement", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await driveDisbursementToRequested(campaign.id, withdrawable);
+    // A draft with no detail filled in -- must never appear in the default queue.
+    await createDraftDisbursement(campaign.id, TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest("http://localhost/admin/disbursements", ADMIN_TOKEN),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      disbursements: Array<{
+        id: string;
+        campaignId: string;
+        campaignTitle: string;
+        status: string;
+      }>;
+    };
+    const found = body.disbursements.find((d) => d.id === id);
+    expect(found).toBeDefined();
+    expect(found?.campaignId).toBe(campaign.id);
+    expect(found?.campaignTitle).toBe(campaign.title);
+    expect(found?.status).toBe("requested");
+    expect(body.disbursements.every((d) => d.status === "requested")).toBe(true);
+  });
+
+  test("respects an explicit ?status= filter", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await driveDisbursementToApproved(campaign.id, withdrawable);
+
+    const resp = await app.handle(
+      authedRequest("http://localhost/admin/disbursements?status=approved", ADMIN_TOKEN),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { disbursements: Array<{ id: string; status: string }> };
+    const found = body.disbursements.find((d) => d.id === id);
+    expect(found).toBeDefined();
+    expect(found?.status).toBe("approved");
+  });
+});
+
+describe("GET /admin/disbursements/:id", () => {
+  test("401s with no session", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/admin/disbursements/00000000-0000-0000-0000-000000000000"),
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  test("403s for an authenticated non-admin", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/admin/disbursements/00000000-0000-0000-0000-000000000000",
+        TEST_TOKEN,
+      ),
+    );
+    expect(resp.status).toBe(403);
+  });
+
+  test("404s for a nonexistent disbursement id", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/admin/disbursements/00000000-0000-0000-0000-000000000000",
+        ADMIN_TOKEN,
+      ),
+    );
+    expect(resp.status).toBe(404);
+  });
+
+  test("returns bank account, amount, and a presigned proof-view URL for a requested disbursement", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await driveDisbursementToRequested(campaign.id, withdrawable);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}`, ADMIN_TOKEN),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      id: string;
+      campaignId: string;
+      bankAccount: { bankName: string; accountNumber: string; accountHolderName: string };
+      status: string;
+      proofViewUrl: string | null;
+    };
+    expect(body.id).toBe(id);
+    expect(body.campaignId).toBe(campaign.id);
+    expect(body.bankAccount.bankName).toBe("Bank Central Asia");
+    expect(body.status).toBe("requested");
+    expect(body.proofViewUrl).toStartWith("http");
+  });
+});
+
+describe("POST /admin/disbursements/:id/approve", () => {
+  test("401s with no session", async () => {
+    const resp = await app.handle(
+      new Request(
+        "http://localhost/admin/disbursements/00000000-0000-0000-0000-000000000000/approve",
+        {
+          method: "POST",
+        },
+      ),
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  test("403s for an authenticated non-admin", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/admin/disbursements/00000000-0000-0000-0000-000000000000/approve",
+        TEST_TOKEN,
+        { method: "POST" },
+      ),
+    );
+    expect(resp.status).toBe(403);
+  });
+
+  test("approves a requested disbursement and records approvedBy/approvedAt", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await driveDisbursementToRequested(campaign.id, withdrawable);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/approve`, ADMIN_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { status: string };
+    expect(body.status).toBe("approved");
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.status).toBe("approved");
+    expect(row?.approvedBy).toBe(ADMIN_USER_ID);
+    expect(row?.approvedAt).not.toBeNull();
+  });
+
+  test("409s on a disbursement that is not requested (e.g. still draft)", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/approve`, ADMIN_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("invalid_disbursement_status");
+  });
+});
+
+describe("POST /admin/disbursements/:id/reject", () => {
+  test("401s with no session", async () => {
+    const resp = await app.handle(
+      new Request(
+        "http://localhost/admin/disbursements/00000000-0000-0000-0000-000000000000/reject",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ reason: "x" }),
+        },
+      ),
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  test("403s for an authenticated non-admin", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/admin/disbursements/00000000-0000-0000-0000-000000000000/reject",
+        TEST_TOKEN,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ reason: "x" }),
+        },
+      ),
+    );
+    expect(resp.status).toBe(403);
+  });
+
+  test("rejects a requested disbursement and records the reason", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await driveDisbursementToRequested(campaign.id, withdrawable);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/reject`, ADMIN_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: "Bank account name mismatch" }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { status: string };
+    expect(body.status).toBe("rejected");
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.status).toBe("rejected");
+    expect(row?.rejectedReason).toBe("Bank account name mismatch");
+  });
+
+  test("409s on a disbursement that is not requested (e.g. already approved)", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await driveDisbursementToApproved(campaign.id, withdrawable);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/reject`, ADMIN_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: "too late" }),
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("invalid_disbursement_status");
+  });
+});
+
+describe("POST /admin/disbursements/:id/pay", () => {
+  test("401s with no session", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/admin/disbursements/00000000-0000-0000-0000-000000000000/pay", {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  test("403s for an authenticated non-admin", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/admin/disbursements/00000000-0000-0000-0000-000000000000/pay",
+        TEST_TOKEN,
+        { method: "POST" },
+      ),
+    );
+    expect(resp.status).toBe(403);
+  });
+
+  test("409s on a disbursement that is requested but not yet approved", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await driveDisbursementToRequested(campaign.id, withdrawable);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("invalid_disbursement_status");
+
+    const [campaignRow] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(campaignRow?.disbursedAmount).toBe(0n);
+  });
+
+  test("pays an approved disbursement exactly once: a second call 409s without double-incrementing disbursedAmount", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await driveDisbursementToApproved(campaign.id, withdrawable);
+
+    const firstResp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(firstResp.status).toBe(200);
+    const firstBody = (await firstResp.json()) as { status: string };
+    expect(firstBody.status).toBe("paid");
+
+    const [afterFirst] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(afterFirst?.status).toBe("paid");
+    expect(afterFirst?.payoutRef).toBe(`payout-${id}`);
+    expect(afterFirst?.paidAt).not.toBeNull();
+
+    const [campaignAfterFirst] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, campaign.id));
+    expect(campaignAfterFirst?.disbursedAmount).toBe(withdrawable);
+
+    const secondResp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(secondResp.status).toBe(409);
+    const secondBody = (await secondResp.json()) as { error: string };
+    expect(secondBody.error).toBe("invalid_disbursement_status");
+
+    // Exact final value asserted (not just "changed") -- confirms the second
+    // call's guarded UPDATE genuinely applied zero writes, not that some
+    // other coincidence kept the number stable.
+    const [campaignAfterSecond] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, campaign.id));
+    expect(campaignAfterSecond?.disbursedAmount).toBe(withdrawable);
+  });
+});
+
+describe("Admin payout execution reconciles the withdrawable-balance formula against real data", () => {
+  test("collectedAmount/fees/disbursedAmount/withdrawable/displayAmount all reconcile after a real payout", async () => {
+    // "program" model: displayAmount() only subtracts disbursedAmount for
+    // this model (a "goal" campaign's displayAmount is cumulative
+    // collectedAmount, never adjusted for disbursements) -- see
+    // createProgramTestCampaign.
+    const campaign = await createProgramTestCampaign(testCampaignerId);
+    const donation = await createPaidDonation(campaign.id, "1000000");
+
+    const [campaignAfterDonation] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, campaign.id));
+    if (!campaignAfterDonation) throw new Error("campaign missing after paid donation");
+    const collectedAmount = campaignAfterDonation.collectedAmount;
+    const totalFees = donation.platformFee;
+
+    const withdrawableBeforeDisbursement = await computeWithdrawableAmount(campaign.id);
+    expect(withdrawableBeforeDisbursement).toBe(collectedAmount - totalFees);
+
+    const disbursementAmount = withdrawableBeforeDisbursement;
+    const id = await driveDisbursementToApproved(campaign.id, disbursementAmount);
+
+    const payResp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(payResp.status).toBe(200);
+    const payBody = (await payResp.json()) as { status: string };
+    expect(payBody.status).toBe("paid");
+
+    const [campaignAfterPay] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, campaign.id));
+    if (!campaignAfterPay) throw new Error("campaign missing after payout");
+
+    // 1. disbursedAmount increased by exactly the disbursement's amount.
+    expect(campaignAfterPay.disbursedAmount).toBe(disbursementAmount);
+    // collectedAmount itself is untouched by a payout -- only disbursedAmount moves.
+    expect(campaignAfterPay.collectedAmount).toBe(collectedAmount);
+
+    // 2. computeWithdrawableAmount now reconciles to
+    // collectedAmount - totalFees - disbursedAmount - 0 (no more pending,
+    // this disbursement is now `paid`, not otp_pending/requested/approved).
+    const withdrawableAfterPay = await computeWithdrawableAmount(campaign.id);
+    expect(withdrawableAfterPay).toBe(
+      collectedAmount - totalFees - campaignAfterPay.disbursedAmount,
+    );
+    expect(withdrawableAfterPay).toBe(0n);
+
+    // 3. The public displayAmount() formula is untouched by this plan --
+    // still exactly collectedAmount - disbursedAmount (no fee subtraction),
+    // for a "program"-model campaign where that subtraction actually applies.
+    expect(displayAmount(campaignAfterPay).amount).toBe(
+      campaignAfterPay.collectedAmount - campaignAfterPay.disbursedAmount,
+    );
   });
 });
