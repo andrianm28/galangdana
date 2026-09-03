@@ -1,6 +1,11 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { api } from "$lib/api-client";
+import type { Treaty } from "@elysiajs/eden";
+import type {
+  PresignCampaignDocumentResponse,
+  SubmitCampaignResponse,
+} from "@galangdana/contracts";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
@@ -53,9 +58,18 @@ async function saveStory() {
   if (!storyValue.trim()) return;
   saving = "cerita";
   error = null;
-  const { error: apiError } = await campaignClient(data.campaignId).story.put({
+  // The campaignClient() cast above erases this whole chain to `any` --
+  // re-establish the real response shape (matching PUT /campaigns/:id/story's
+  // actual `response: { 200, 401, 404, 409 }` map in apps/api/src/routes/campaigns.ts)
+  // so `apiError` is still checked against the real error shape.
+  const { error: apiError } = (await campaignClient(data.campaignId).story.put({
     story: storyValue,
-  });
+  })) as Treaty.TreatyResponse<{
+    200: { success: boolean };
+    401: { error: string };
+    404: { error: string };
+    409: { error: string };
+  }>;
   saving = null;
   if (apiError) error = "Gagal menyimpan cerita.";
 }
@@ -67,9 +81,16 @@ async function saveGoalAmount() {
   }
   saving = "target_donasi";
   error = null;
-  const { error: apiError } = await campaignClient(data.campaignId)["goal-amount"].put({
+  // Same narrowing as saveStory(), matching PUT /campaigns/:id/goal-amount's
+  // actual `response: { 200, 401, 404, 409 }` map.
+  const { error: apiError } = (await campaignClient(data.campaignId)["goal-amount"].put({
     goalAmountStr: goalAmountValue,
-  });
+  })) as Treaty.TreatyResponse<{
+    200: { success: boolean };
+    401: { error: string };
+    404: { error: string };
+    409: { error: string };
+  }>;
   saving = null;
   if (apiError) error = "Gagal menyimpan target donasi.";
 }
@@ -82,9 +103,21 @@ async function uploadDocument(documentType: string) {
   saving = documentType;
   error = null;
 
-  const { data: presign, error: presignError } = await campaignClient(
+  // Same narrowing as saveStory(), matching POST /campaigns/:id/documents/presign's
+  // actual `response: { 200, 401, 404, 409, 422 }` map, so `presign`/`presignError`
+  // are checked against the real PresignCampaignDocumentResponse / error shapes.
+  const { data: presign, error: presignError } = (await campaignClient(
     data.campaignId,
-  ).documents.presign.post({ documentType, fileName: selectedFile.name });
+  ).documents.presign.post({
+    documentType,
+    fileName: selectedFile.name,
+  })) as Treaty.TreatyResponse<{
+    200: PresignCampaignDocumentResponse;
+    401: { error: string };
+    404: { error: string };
+    409: { error: string };
+    422: { error: string };
+  }>;
   if (presignError || !presign) {
     saving = null;
     error = "Gagal menyiapkan unggahan.";
@@ -98,10 +131,18 @@ async function uploadDocument(documentType: string) {
     return;
   }
 
-  const { error: confirmError } = await campaignClient(data.campaignId).documents.confirm.post({
+  // Same narrowing as saveStory(), matching POST /campaigns/:id/documents/confirm's
+  // actual `response: { 200, 400, 401, 404, 409 }` map.
+  const { error: confirmError } = (await campaignClient(data.campaignId).documents.confirm.post({
     documentType,
     objectKey: presign.objectKey,
-  });
+  })) as Treaty.TreatyResponse<{
+    200: { success: boolean };
+    400: { error: string };
+    401: { error: string };
+    404: { error: string };
+    409: { error: string };
+  }>;
   saving = null;
   if (confirmError) {
     error = "Gagal menyimpan dokumen.";
@@ -113,7 +154,17 @@ async function uploadDocument(documentType: string) {
 async function resubmit() {
   error = null;
   submitting = true;
-  const { error: apiError } = await campaignClient(data.campaignId).submit.post();
+  // Same narrowing as saveStory(), matching POST /campaigns/:id/submit's
+  // actual `response: { 200, 400, 401, 404, 409 }` map.
+  const { error: apiError } = (await campaignClient(
+    data.campaignId,
+  ).submit.post()) as Treaty.TreatyResponse<{
+    200: SubmitCampaignResponse;
+    400: { error: string };
+    401: { error: string };
+    404: { error: string };
+    409: { error: string };
+  }>;
   submitting = false;
   if (apiError) {
     error = "Gagal mengajukan ulang campaign.";
