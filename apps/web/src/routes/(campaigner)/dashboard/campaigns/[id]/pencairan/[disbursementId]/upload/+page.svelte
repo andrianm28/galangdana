@@ -20,7 +20,8 @@ function onFileChange(e: Event) {
 }
 
 async function upload() {
-  if (!file) return;
+  const selectedFile = file;
+  if (!selectedFile) return;
   error = null;
   uploading = true;
 
@@ -31,7 +32,7 @@ async function upload() {
   // POST /disbursements/:id/proof/presign's actual
   // `response: { 200, 401, 404, 409, 422 }` map in apps/api/src/routes/disbursements.ts.
   const { data: presign, error: presignError } = (await disbursementClient.proof.presign.post({
-    fileName: file.name,
+    fileName: selectedFile.name,
   })) as Treaty.TreatyResponse<{
     200: { uploadUrl: string; objectKey: string; expiresInSeconds: number };
     401: { error: string };
@@ -45,7 +46,7 @@ async function upload() {
     return;
   }
 
-  const putRes = await fetch(presign.uploadUrl, { method: "PUT", body: file });
+  const putRes = await fetch(presign.uploadUrl, { method: "PUT", body: selectedFile });
   if (!putRes.ok) {
     error = "Gagal mengunggah berkas.";
     uploading = false;
@@ -87,7 +88,13 @@ async function proceed() {
     <p class="mb-4 font-sans text-sm text-red-600">{error}</p>
   {/if}
 
-  <input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange={onFileChange} class="mb-2" />
+  <input
+    type="file"
+    accept=".pdf,.jpg,.jpeg,.png"
+    onchange={onFileChange}
+    disabled={uploading}
+    class="mb-2"
+  />
 
   {#if file}
     <p class="mb-4 font-sans text-sm text-neutral-600">{file.name}</p>

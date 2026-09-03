@@ -91,6 +91,70 @@ describe("pencairan/upload page", () => {
     fetchSpy.mockRestore();
   });
 
+  test("uploading captures the selected file before the presign await, so reselecting a different file mid-flight doesn't cross-contaminate the PUT", async () => {
+    const originalFile = new File(["original content"], "original.pdf", {
+      type: "application/pdf",
+    });
+    const reselectedFile = new File(["reselected content"], "reselected.pdf", {
+      type: "application/pdf",
+    });
+
+    let resolvePresign!: (value: Response) => void;
+    const presignPromise = new Promise<Response>((resolve) => {
+      resolvePresign = resolve;
+    });
+
+    let putBody: unknown;
+    const fetchSpy = vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
+
+      if (url.includes("/disbursements/d1/proof/presign") && method === "POST") {
+        return presignPromise;
+      }
+      if (url === "http://upload.test/proof" && method === "PUT") {
+        putBody = init?.body;
+        return new Response(null, { status: 200 });
+      }
+      if (url.includes("/disbursements/d1/proof/confirm") && method === "POST") {
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`unexpected fetch call: ${method} ${url}`);
+    });
+
+    const { container } = renderPage();
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await fireEvent.change(fileInput, { target: { files: [originalFile] } });
+    await fireEvent.click(screen.getByRole("button", { name: "Unggah" }));
+    // Let the presign call actually reach the mocked fetch (it stays pending
+    // on presignPromise until we resolve it below).
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Simulate the user reselecting a different file while presign is in flight.
+    await fireEvent.change(fileInput, { target: { files: [reselectedFile] } });
+
+    resolvePresign(
+      new Response(
+        JSON.stringify({
+          uploadUrl: "http://upload.test/proof",
+          objectKey: "disbursements/d1/proof/abc.pdf",
+          expiresInSeconds: 300,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(putBody).toBe(originalFile);
+    expect(putBody).not.toBe(reselectedFile);
+    fetchSpy.mockRestore();
+  });
+
   test("navigates to the detail step after a successful upload and clicking Lanjutkan", async () => {
     const fetchSpy = vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
       const url = typeof input === "string" ? input : input.toString();
