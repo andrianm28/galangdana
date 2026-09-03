@@ -33,9 +33,14 @@ export const adminRoute = new Elysia()
       }
 
       // query.status is validated only as a generic string by the route's `t.Object`
-      // schema below, but the `status` column is a Postgres enum -- this assertion
-      // is safe because an unrecognized value just matches zero rows, same as any
-      // other filter with no matches.
+      // schema below, but the `status` column is a Postgres enum. An unrecognized
+      // value here does NOT match zero rows -- Postgres rejects the invalid enum
+      // literal outright, which surfaces as an opaque 500 (via the global error
+      // handler) rather than a graceful empty list. Acceptable for now since this
+      // route is checkAdmin-gated (only reachable by an authenticated admin) and no
+      // caller in this plan yet sends an arbitrary status value -- but if a future
+      // admin UI ever accepts free-text status input, validate it against
+      // campaignStatusEnum.enumValues before this point and return a real 4xx.
       const status = (query.status ??
         "pending_review") as (typeof campaignStatusEnum.enumValues)[number];
       const rows = await db
