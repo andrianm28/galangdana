@@ -30,7 +30,14 @@ const DETAIL = {
     selfieViewUrl: "http://localhost:9000/campaign-documents/kyc/x/selfie/z.jpg?signed=1",
     status: "pending",
   },
-  documents: [],
+  documents: [
+    {
+      id: "22222222-2222-2222-2222-222222222222",
+      type: "kartu_mahasiswa",
+      viewUrl: "http://localhost:9000/campaign-documents/kartu_mahasiswa/y.jpg?signed=1",
+      uploadedAt: "2026-09-01T00:00:00.000Z",
+    },
+  ],
   revisions: [],
 };
 
@@ -40,6 +47,12 @@ describe("admin campaign review page", () => {
     expect(screen.getByText("Bantu Aldi Sembuh")).not.toBeNull();
     expect(screen.getByText("3271234567890001")).not.toBeNull();
     expect(screen.getByText("Aldi Setiawan")).not.toBeNull();
+  });
+
+  test("renders a link for each presigned supporting document", () => {
+    render(Page, { props: { data: { campaign: DETAIL }, params: { id: DETAIL.id }, form: null } });
+    const link = screen.getByRole("link", { name: "Kartu Mahasiswa" });
+    expect(link.getAttribute("href")).toBe(DETAIL.documents[0]?.viewUrl);
   });
 
   test("clicking Setujui approves and navigates back to the queue", async () => {

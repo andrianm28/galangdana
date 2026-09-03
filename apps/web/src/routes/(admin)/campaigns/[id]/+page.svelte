@@ -1,6 +1,7 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { api } from "$lib/api-client";
+import { formatMoney, moneyFromJSON } from "@galangdana/money";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
@@ -17,6 +18,12 @@ const REVISION_FIELDS = [
 ] as const;
 
 type RevisionFieldKey = (typeof REVISION_FIELDS)[number]["key"];
+
+const FIELD_LABELS: Record<string, string> = Object.fromEntries(
+  REVISION_FIELDS.map((f) => [f.key, f.label]),
+);
+
+const goal = $derived(data.campaign.goalAmount ? moneyFromJSON(data.campaign.goalAmount) : null);
 
 let selectedFields = $state<Set<RevisionFieldKey>>(new Set());
 let notes = $state<Record<string, string>>({});
@@ -85,6 +92,52 @@ async function requestRevision() {
   <section class="mb-6">
     <h3 class="mb-2 font-sans text-sm font-semibold text-neutral-900">Cerita</h3>
     <p class="whitespace-pre-line font-sans text-sm text-neutral-700">{data.campaign.story}</p>
+  </section>
+
+  <section class="mb-6">
+    <h3 class="mb-2 font-sans text-sm font-semibold text-neutral-900">Target Donasi</h3>
+    <p class="font-sans text-sm text-neutral-700">{goal ? formatMoney(goal) : "-"}</p>
+  </section>
+
+  <section class="mb-6">
+    <h3 class="mb-2 font-sans text-sm font-semibold text-neutral-900">Dokumen Pendukung</h3>
+    {#if data.campaign.documents.length === 0}
+      <p class="font-sans text-sm text-neutral-500">Belum ada dokumen diunggah.</p>
+    {:else}
+      <ul class="flex flex-col gap-1">
+        {#each data.campaign.documents as document (document.id)}
+          <li>
+            <a
+              href={document.viewUrl}
+              target="_blank"
+              rel="noreferrer"
+              class="font-sans text-sm text-primary hover:underline"
+            >
+              {FIELD_LABELS[document.type] ?? document.type}
+            </a>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+
+  <section class="mb-6">
+    <h3 class="mb-2 font-sans text-sm font-semibold text-neutral-900">Riwayat Revisi</h3>
+    {#if data.campaign.revisions.length === 0}
+      <p class="font-sans text-sm text-neutral-500">Belum ada permintaan revisi.</p>
+    {:else}
+      <ul class="flex flex-col gap-2">
+        {#each data.campaign.revisions as revision (revision.id)}
+          <li class="rounded-sm border border-neutral-200 p-2">
+            <p class="font-sans text-sm font-semibold text-neutral-900">
+              {FIELD_LABELS[revision.field] ?? revision.field}
+              <span class="font-normal text-neutral-500">({revision.status})</span>
+            </p>
+            <p class="font-sans text-sm text-neutral-600">{revision.note}</p>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </section>
 
   <section class="mb-6">
