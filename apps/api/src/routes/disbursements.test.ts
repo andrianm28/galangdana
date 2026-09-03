@@ -14,7 +14,7 @@ import {
   users,
 } from "@galangdana/db";
 import { MockPaymentProvider } from "@galangdana/payments";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { requestOtp } from "../auth/otp";
 import type { SmsProvider } from "../auth/sms-provider";
@@ -964,32 +964,6 @@ describe("Disbursement OTP request/verify + submit", () => {
 });
 
 describe("GET /admin/disbursements", () => {
-  beforeAll(async () => {
-    // Several describe blocks above (bank-account/detail/proof-confirm
-    // "409s when no longer a draft" tests) simulate a concurrent status
-    // transition by flipping status straight to "requested" via a raw
-    // db.update, WITHOUT going through the real otp/request completeness
-    // check -- so those tracked disbursements sit in the shared table as
-    // "requested" with type/amount/bankAccountId still null. The real
-    // submit route can never produce that state (Step 1's `type!`
-    // assertion above assumes exactly this), but /admin/disbursements
-    // queries the whole table, not just this describe block's own rows,
-    // so those leftovers would otherwise crash the queue response's
-    // schema validation. Push them back to draft -- their own tests have
-    // already finished asserting against them by the time this describe
-    // block runs.
-    await db
-      .update(disbursementRequests)
-      .set({ status: "draft" })
-      .where(
-        and(
-          inArray(disbursementRequests.id, disbursementIds),
-          eq(disbursementRequests.status, "requested"),
-          isNull(disbursementRequests.type),
-        ),
-      );
-  });
-
   test("401s with no session", async () => {
     const resp = await app.handle(new Request("http://localhost/admin/disbursements"));
     expect(resp.status).toBe(401);
@@ -1044,6 +1018,23 @@ describe("GET /admin/disbursements", () => {
     const found = body.disbursements.find((d) => d.id === id);
     expect(found).toBeDefined();
     expect(found?.status).toBe("approved");
+  });
+
+  test("?status=draft returns 200 with type: null instead of crashing (draft disbursements have no type yet)", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest("http://localhost/admin/disbursements?status=draft", ADMIN_TOKEN),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      disbursements: Array<{ id: string; type: string | null; status: string }>;
+    };
+    const found = body.disbursements.find((d) => d.id === id);
+    expect(found).toBeDefined();
+    expect(found?.status).toBe("draft");
+    expect(found?.type).toBeNull();
   });
 });
 
@@ -1323,6 +1314,54 @@ describe("POST /admin/disbursements/:id/pay", () => {
       .from(campaigns)
       .where(eq(campaigns.id, campaign.id));
     expect(campaignAfterSecond?.disbursedAmount).toBe(withdrawable);
+  });
+
+  test("two genuinely concurrent pay calls on the same approved disbursement: exactly one succeeds, disbursedAmount is incremented exactly once", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await driveDisbursementToApproved(campaign.id, withdrawable);
+
+    // Fired via Promise.all with no sequencing (unlike the test above,
+    // where the second call's pre-check -- `row.disbursement.status !==
+    // "approved"` -- already short-circuits before getProvider/createPayout/
+    // db.transaction are ever reached, since by then the first call has
+    // already committed). Both requests here start from the SAME
+    // `approved` snapshot, so both pass that pre-check and both reach the
+    // real guarded `UPDATE ... WHERE status = 'approved' RETURNING` inside
+    // the transaction -- this is what actually proves only one of them can
+    // win that race, not just that a repeat call is rejected.
+    const pay = () =>
+      app.handle(
+        authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+          method: "POST",
+        }),
+      );
+    const [respA, respB] = await Promise.all([pay(), pay()]);
+    const statuses = [respA.status, respB.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    const winner = respA.status === 200 ? respA : respB;
+    const loser = respA.status === 409 ? respA : respB;
+    const winnerBody = (await winner.json()) as { status: string };
+    expect(winnerBody.status).toBe("paid");
+    const loserBody = (await loser.json()) as { error: string };
+    expect(loserBody.error).toBe("invalid_disbursement_status");
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.status).toBe("paid");
+
+    // The number that actually matters: disbursedAmount reflects exactly
+    // one increment, read fresh from the DB after both concurrent calls
+    // have fully resolved.
+    const [campaignAfterConcurrentPay] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, campaign.id));
+    expect(campaignAfterConcurrentPay?.disbursedAmount).toBe(withdrawable);
   });
 });
 

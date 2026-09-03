@@ -548,8 +548,7 @@ export const disbursementsRoute = new Elysia()
           id: row.id,
           campaignId: row.campaignId,
           campaignTitle: row.campaignTitle,
-          // biome-ignore lint/style/noNonNullAssertion: status "requested" implies detail is filled
-          type: row.type!,
+          type: row.type,
           amount: moneyToJSON({ amount: row.amount ?? 0n, currency: row.currency ?? "IDR" }),
           status: row.status,
           createdAt: row.createdAt.toISOString(),

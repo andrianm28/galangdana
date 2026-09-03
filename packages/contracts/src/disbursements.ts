@@ -84,7 +84,11 @@ export const AdminDisbursementListItemSchema = Type.Object({
   id: Type.String(),
   campaignId: Type.String(),
   campaignTitle: Type.String(),
-  type: DisbursementTypeSchema,
+  // Nullable: draft/otp_pending disbursements legitimately have no type yet
+  // (the wizard hasn't reached the detail step) and this list is not
+  // filtered to "requested" only -- ?status= can select either of those
+  // earlier statuses too. Mirrors DisbursementDetailSchema.type above.
+  type: Type.Union([DisbursementTypeSchema, Type.Null()]),
   amount: MoneyJSONSchema,
   status: DisbursementStatusSchema,
   createdAt: Type.String(),
