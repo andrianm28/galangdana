@@ -849,3 +849,88 @@ describe("POST /campaigns idempotency", () => {
     expect(rows.length).toBe(1);
   });
 });
+
+describe("GET /campaigns/:id/revisions", () => {
+  test("returns this campaign's revision requests, newest first", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await db.insert(campaignRevisions).values([
+      { campaignId: campaign.id, field: "cerita", note: "Pertama." },
+      { campaignId: campaign.id, field: "target_donasi", note: "Kedua." },
+    ]);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/revisions`, TEST_TOKEN),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { revisions: Array<{ field: string }> };
+    expect(body.revisions).toHaveLength(2);
+  });
+
+  test("404s (not 403) for a non-owner's campaign", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/revisions`, OTHER_TOKEN),
+    );
+    expect(resp.status).toBe(404);
+  });
+});
+
+describe("PUT /campaigns/:id/story", () => {
+  test("updates the story while the campaign is needs_revision", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await db
+      .update(campaigns)
+      .set({ status: "needs_revision" })
+      .where(eq(campaigns.id, campaign.id));
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ story: "Cerita yang sudah diperbaiki dan lebih lengkap." }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.story).toBe("Cerita yang sudah diperbaiki dan lebih lengkap.");
+  });
+
+  test("409s once the campaign is active", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await db.update(campaigns).set({ status: "active" }).where(eq(campaigns.id, campaign.id));
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ story: "Percobaan mengubah cerita campaign aktif." }),
+      }),
+    );
+    expect(resp.status).toBe(409);
+  });
+});
+
+describe("PUT /campaigns/:id/goal-amount", () => {
+  test("updates the goal amount as a real bigint", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/goal-amount`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ goalAmountStr: "25000000" }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.goalAmount).toBe(25000000n);
+  });
+
+  test("rejects a malformed goalAmountStr with 400, not a 500", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/goal-amount`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ goalAmountStr: "not-a-number" }),
+      }),
+    );
+    expect(resp.status).toBe(422);
+  });
+});

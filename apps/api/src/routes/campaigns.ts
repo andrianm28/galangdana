@@ -4,12 +4,15 @@ import {
   CampaignErrorSchema2c,
   CampaignListQuerySchema,
   CampaignListResponseSchema,
+  CampaignRevisionListResponseSchema,
   ConfirmKycDocumentBodySchema,
   CreateCampaignFromDraftBodySchema,
   CreateCampaignFromDraftResponseSchema,
   KycStatusSchema,
   PresignKycDocumentBodySchema,
   PresignKycDocumentResponseSchema,
+  SaveCampaignGoalAmountBodySchema,
+  SaveCampaignStoryBodySchema,
   SaveKycContactBodySchema,
   SaveKycIdentityBodySchema,
   SubmitCampaignResponseSchema,
@@ -542,6 +545,120 @@ export const campaignsRoute = new Elysia()
       response: {
         200: SubmitCampaignResponseSchema,
         400: CampaignErrorSchema2c,
+        401: CampaignErrorSchema2c,
+        404: CampaignErrorSchema2c,
+        409: CampaignErrorSchema2c,
+      },
+    },
+  )
+  .get(
+    // Path param is named ":slug" (not ":id") solely to match the existing
+    // GET /campaigns/:slug route's param name at this same trie position --
+    // memoirist (Elysia's router) requires a consistent param name per HTTP
+    // method at a shared position, even though this route's continuation
+    // ("/revisions") differs. The value is actually a campaign id, not a slug.
+    "/campaigns/:slug/revisions",
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.slug, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+
+      const revisions = await db
+        .select()
+        .from(campaignRevisions)
+        .where(eq(campaignRevisions.campaignId, campaign.id))
+        .orderBy(desc(campaignRevisions.createdAt));
+
+      return {
+        revisions: revisions.map((rev) => ({
+          id: rev.id,
+          field: rev.field,
+          note: rev.note,
+          status: rev.status,
+          createdAt: rev.createdAt.toISOString(),
+          resolvedAt: rev.resolvedAt?.toISOString() ?? null,
+        })),
+      };
+    },
+    {
+      params: t.Object({ slug: t.String() }),
+      response: {
+        200: CampaignRevisionListResponseSchema,
+        401: CampaignErrorSchema2c,
+        404: CampaignErrorSchema2c,
+      },
+    },
+  )
+  .put(
+    "/campaigns/:id/story",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
+
+      await db
+        .update(campaigns)
+        .set({ story: body.story, updatedAt: new Date() })
+        .where(eq(campaigns.id, campaign.id));
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: SaveCampaignStoryBodySchema,
+      response: {
+        200: t.Object({ success: t.Boolean() }),
+        401: CampaignErrorSchema2c,
+        404: CampaignErrorSchema2c,
+        409: CampaignErrorSchema2c,
+      },
+    },
+  )
+  .put(
+    "/campaigns/:id/goal-amount",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
+
+      await db
+        .update(campaigns)
+        .set({ goalAmount: BigInt(body.goalAmountStr), updatedAt: new Date() })
+        .where(eq(campaigns.id, campaign.id));
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: SaveCampaignGoalAmountBodySchema,
+      response: {
+        200: t.Object({ success: t.Boolean() }),
         401: CampaignErrorSchema2c,
         404: CampaignErrorSchema2c,
         409: CampaignErrorSchema2c,
