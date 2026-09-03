@@ -1819,10 +1819,18 @@ git commit -m "feat(api): add disbursement OTP confirmation and final submit"
       }
 
       const provider = getProvider();
+      // Field names match what Task 4 actually shipped (packages/payments/src/types.ts),
+      // NOT this plan's own original sketch -- Task 4's research found Xendit's real API
+      // uses referenceId/channelCode (Payouts API v2), not externalId/bankCode (the
+      // deprecated Disbursement API this plan's earlier draft assumed). channelCode is
+      // set directly from bank_accounts.bankCode (e.g. "bca") even though Xendit's real
+      // channelCode format differs (e.g. "ID_BCA") -- a known, deliberate simplification
+      // Task 4 flagged: the mock never validates this value's format, and mapping it
+      // correctly is a real adapter's problem, out of this slice's scope entirely.
       const payout = await provider.createPayout({
-        externalId: row.disbursement.id,
+        referenceId: row.disbursement.id,
         amount: row.disbursement.amount,
-        bankCode: row.bankAccount.bankCode,
+        channelCode: row.bankAccount.bankCode,
         accountNumber: row.bankAccount.accountNumber,
         accountHolderName: row.bankAccount.accountHolderName,
         description: row.disbursement.narrative ?? "",
