@@ -86,3 +86,21 @@ export type {
   CampaignDraftDetailResponse,
   CampaignDraftResponse,
 } from "./campaign-drafts";
+export {
+  AdminSupportTicketListResponseSchema,
+  CreateHelpArticleBodySchema,
+  HelpArticleListResponseSchema,
+  HelpArticleSchema,
+  HelpErrorSchema,
+  SubmitSupportTicketBodySchema,
+  SubmitSupportTicketResponseSchema,
+  SupportTicketSchema,
+  SupportTicketStatusSchema,
+  UpdateHelpArticleBodySchema,
+} from "./help";
+export type {
+  AdminSupportTicketListResponse,
+  HelpArticleListResponse,
+  HelpArticleResponse,
+  SubmitSupportTicketResponse,
+} from "./help";
