@@ -62,68 +62,90 @@ export const donationsRoute = new Elysia().use(sessionDerive).post(
       return existingKey.responseBody as Static<typeof CreateDonationResponseSchema>;
     }
 
-    const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, body.campaignId));
-    if (!campaign) {
-      set.status = 404;
-      return { error: "campaign_not_found" };
-    }
+    // Everything from here on either commits a full donation (via the
+    // transaction below) or releases the claimed key in the catch block
+    // below -- so a transient failure (bad input, missing policy row, a
+    // provider error) never permanently poisons this idempotency key. An
+    // early `return` (the 404 below) has to release the claim itself,
+    // since it doesn't go through the catch.
+    try {
+      const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, body.campaignId));
+      if (!campaign) {
+        await db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, idempotencyKey));
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
 
-    const [policy] = await db
-      .select()
-      .from(allocationPolicies)
-      .where(eq(allocationPolicies.isDefault, true));
-    if (!policy) {
-      throw new Error("no default allocation policy configured");
-    }
+      const [policy] = await db
+        .select()
+        .from(allocationPolicies)
+        .where(eq(allocationPolicies.isDefault, true));
+      if (!policy) {
+        throw new Error("no default allocation policy configured");
+      }
 
-    const amount = BigInt(body.amountStr);
-    const platformFee = (amount * BigInt(policy.platformFeeBps)) / 10000n;
+      const amount = BigInt(body.amountStr);
+      const platformFee = (amount * BigInt(policy.platformFeeBps)) / 10000n;
 
-    const [donation] = await db
-      .insert(donations)
-      .values({
-        userId: user?.id,
-        campaignId: campaign.id,
-        allocationPolicyId: policy.id,
-        amount,
+      // Pre-generate the id and create the provider charge BEFORE opening a
+      // DB transaction -- createCharge is a network call in a real
+      // (non-mock) provider, and holding a transaction open across that
+      // would be a problem waiting to happen once this mock is swapped for
+      // a real Midtrans adapter.
+      const donationId = crypto.randomUUID();
+      const provider = getProvider();
+      const charge = await provider.createCharge({
+        orderId: donationId,
+        grossAmount: amount,
         currency: campaign.currency,
-        platformFee,
-        isAnonymous: body.isAnonymous ?? false,
-        comment: body.comment,
-      })
-      .returning();
-    if (!donation) throw new Error("donation insert returned no row");
+      });
 
-    const provider = getProvider();
-    const charge = await provider.createCharge({
-      orderId: donation.id,
-      grossAmount: amount,
-      currency: campaign.currency,
-    });
+      const responseBody = await db.transaction(async (tx) => {
+        await tx.insert(donations).values({
+          id: donationId,
+          userId: user?.id,
+          campaignId: campaign.id,
+          allocationPolicyId: policy.id,
+          amount,
+          currency: campaign.currency,
+          platformFee,
+          isAnonymous: body.isAnonymous ?? false,
+          comment: body.comment,
+        });
 
-    await db.insert(payments).values({
-      donationId: donation.id,
-      provider: "mock",
-      method: charge.method,
-      providerOrderId: charge.providerOrderId,
-      vaNumber: charge.vaNumber,
-      grossAmount: amount,
-      expiresAt: charge.expiresAt,
-    });
+        await tx.insert(payments).values({
+          donationId,
+          provider: "mock",
+          method: charge.method,
+          providerOrderId: charge.providerOrderId,
+          vaNumber: charge.vaNumber,
+          grossAmount: amount,
+          expiresAt: charge.expiresAt,
+        });
 
-    const responseBody = {
-      donationId: donation.id,
-      vaNumber: charge.vaNumber,
-      amount: moneyToJSON({ amount, currency: campaign.currency }),
-      expiresAt: charge.expiresAt.toISOString(),
-    };
+        const body_: Static<typeof CreateDonationResponseSchema> = {
+          donationId,
+          vaNumber: charge.vaNumber,
+          amount: moneyToJSON({ amount, currency: campaign.currency }),
+          expiresAt: charge.expiresAt.toISOString(),
+        };
 
-    await db
-      .update(idempotencyKeys)
-      .set({ responseBody })
-      .where(eq(idempotencyKeys.key, idempotencyKey));
+        await tx
+          .update(idempotencyKeys)
+          .set({ responseBody: body_ })
+          .where(eq(idempotencyKeys.key, idempotencyKey));
 
-    return responseBody;
+        return body_;
+      });
+
+      return responseBody;
+    } catch (err) {
+      // Release the claim so a genuine retry (not just a duplicate
+      // double-tap) can actually succeed instead of getting stuck behind a
+      // 409 forever.
+      await db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, idempotencyKey));
+      throw err;
+    }
   },
   {
     headers: t.Object({ "idempotency-key": t.Optional(t.String()) }),
