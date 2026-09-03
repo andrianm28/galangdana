@@ -35,6 +35,8 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
 
   return {
     campaignId: params.id,
+    story: data.story,
+    goalAmount: data.goalAmount,
     revisions: data.revisions.filter((r) => r.status === "open"),
   };
 };

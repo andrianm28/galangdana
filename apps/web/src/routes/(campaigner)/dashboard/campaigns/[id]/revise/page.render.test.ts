@@ -22,9 +22,76 @@ const REVISIONS = [
 describe("campaigner revision-fix page", () => {
   test("shows each open revision request with the moderator's note", () => {
     render(Page, {
-      props: { data: { campaignId: "c1", revisions: REVISIONS }, params: { id: "c1" }, form: null },
+      props: {
+        data: {
+          campaignId: "c1",
+          story: "Cerita lama sebelum revisi.",
+          goalAmount: { amount: "5000000", currency: "IDR" },
+          revisions: REVISIONS,
+        },
+        params: { id: "c1" },
+        form: null,
+      },
     });
     expect(screen.getByText("Cerita terlalu singkat, tambahkan detail.")).not.toBeNull();
+  });
+
+  test("pre-fills the story and goal-amount inputs with the campaign's current values", () => {
+    render(Page, {
+      props: {
+        data: {
+          campaignId: "c1",
+          story: "Cerita lama sebelum revisi.",
+          goalAmount: { amount: "5000000", currency: "IDR" },
+          revisions: [
+            ...REVISIONS,
+            {
+              id: "r2",
+              field: "target_donasi",
+              note: "Target donasi terlalu tinggi.",
+              status: "open",
+              createdAt: "2026-09-02T00:00:00.000Z",
+              resolvedAt: null,
+            },
+          ],
+        },
+        params: { id: "c1" },
+        form: null,
+      },
+    });
+
+    expect((screen.getByLabelText("Cerita baru") as HTMLTextAreaElement).value).toBe(
+      "Cerita lama sebelum revisi.",
+    );
+    expect((screen.getByLabelText("Target donasi baru (Rp)") as HTMLInputElement).value).toBe(
+      "5000000",
+    );
+  });
+
+  test("pre-fills the goal-amount input as empty when the campaign has no goal set", () => {
+    render(Page, {
+      props: {
+        data: {
+          campaignId: "c1",
+          story: "Cerita lama sebelum revisi.",
+          goalAmount: null,
+          revisions: [
+            {
+              id: "r2",
+              field: "target_donasi",
+              note: "Target donasi terlalu tinggi.",
+              status: "open",
+              createdAt: "2026-09-02T00:00:00.000Z",
+              resolvedAt: null,
+            },
+          ],
+        },
+        params: { id: "c1" },
+        form: null,
+      },
+    });
+
+    expect((screen.getByLabelText("Target donasi baru (Rp)") as HTMLInputElement).value).toBe("");
   });
 
   test("saving a fixed story calls the story endpoint", async () => {
@@ -36,7 +103,16 @@ describe("campaigner revision-fix page", () => {
     );
 
     render(Page, {
-      props: { data: { campaignId: "c1", revisions: REVISIONS }, params: { id: "c1" }, form: null },
+      props: {
+        data: {
+          campaignId: "c1",
+          story: "Cerita lama sebelum revisi.",
+          goalAmount: { amount: "5000000", currency: "IDR" },
+          revisions: REVISIONS,
+        },
+        params: { id: "c1" },
+        form: null,
+      },
     });
     await fireEvent.input(screen.getByLabelText("Cerita baru"), {
       target: { value: "Cerita yang sudah lebih lengkap dan jelas." },
@@ -57,7 +133,16 @@ describe("campaigner revision-fix page", () => {
     );
 
     render(Page, {
-      props: { data: { campaignId: "c1", revisions: REVISIONS }, params: { id: "c1" }, form: null },
+      props: {
+        data: {
+          campaignId: "c1",
+          story: "Cerita lama sebelum revisi.",
+          goalAmount: { amount: "5000000", currency: "IDR" },
+          revisions: REVISIONS,
+        },
+        params: { id: "c1" },
+        form: null,
+      },
     });
     await fireEvent.click(screen.getByRole("button", { name: "Ajukan Ulang" }));
     await new Promise((r) => setTimeout(r, 0));
@@ -119,7 +204,12 @@ describe("campaigner revision-fix page", () => {
 
     const { container } = render(Page, {
       props: {
-        data: { campaignId: "c1", revisions: documentRevisions },
+        data: {
+          campaignId: "c1",
+          story: "Cerita lama sebelum revisi.",
+          goalAmount: { amount: "5000000", currency: "IDR" },
+          revisions: documentRevisions,
+        },
         params: { id: "c1" },
         form: null,
       },

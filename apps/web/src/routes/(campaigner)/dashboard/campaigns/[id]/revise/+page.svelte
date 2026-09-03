@@ -46,9 +46,9 @@ const DOCUMENT_FIELDS = new Set([
 ]);
 
 // biome-ignore lint/style/useConst: Svelte binding requires mutable let
-let storyValue = $state("");
+let storyValue = $state(data.story);
 // biome-ignore lint/style/useConst: Svelte binding requires mutable let
-let goalAmountValue = $state("");
+let goalAmountValue = $state(data.goalAmount?.amount ?? "");
 let saving = $state<string | null>(null);
 let submitting = $state(false);
 let error = $state<string | null>(null);
