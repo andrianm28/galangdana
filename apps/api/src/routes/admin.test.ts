@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import {
   campaignCategories,
+  campaignRevisions,
   campaigners,
   campaigns,
   db,
@@ -126,5 +127,81 @@ describe("GET /admin/campaigns/:id", () => {
     expect(body.verification.fullName).toBe("Aldi Setiawan");
     expect(body.verification.ktpViewUrl).toMatch(/^https?:\/\//);
     expect(body.verification.selfieViewUrl).toMatch(/^https?:\/\//);
+  });
+});
+
+describe("POST /admin/campaigns/:id/approve", () => {
+  test("403s for a non-admin", async () => {
+    const campaign = await seedPendingCampaign();
+    const token = CAMPAIGNER_TOKEN;
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/campaigns/${campaign.id}/approve`, token, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(403);
+  });
+
+  test("flips status to active, sets publishedAt, and marks KYC verified", async () => {
+    const campaign = await seedPendingCampaign();
+    const token = ADMIN_TOKEN;
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/campaigns/${campaign.id}/approve`, token, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.status).toBe("active");
+    expect(row?.publishedAt).not.toBeNull();
+
+    const [verification] = await db
+      .select()
+      .from(individualVerifications)
+      .where(eq(individualVerifications.campaignId, campaign.id));
+    expect(verification?.status).toBe("verified");
+  });
+
+  test("409s when the campaign isn't pending_review", async () => {
+    const campaign = await seedPendingCampaign();
+    await db.update(campaigns).set({ status: "active" }).where(eq(campaigns.id, campaign.id));
+    const token = ADMIN_TOKEN;
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/campaigns/${campaign.id}/approve`, token, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(409);
+  });
+});
+
+describe("POST /admin/campaigns/:id/request-revision", () => {
+  test("flips status to needs_revision and creates open revision rows", async () => {
+    const campaign = await seedPendingCampaign();
+    const token = ADMIN_TOKEN;
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/campaigns/${campaign.id}/request-revision`, token, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          items: [
+            { field: "cerita", note: "Cerita terlalu singkat, tambahkan detail." },
+            { field: "sumber_gambar", note: "Sertakan sumber foto." },
+          ],
+        }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.status).toBe("needs_revision");
+
+    const revisions = await db
+      .select()
+      .from(campaignRevisions)
+      .where(eq(campaignRevisions.campaignId, campaign.id));
+    expect(revisions).toHaveLength(2);
+    expect(revisions.every((r) => r.status === "open")).toBe(true);
   });
 });

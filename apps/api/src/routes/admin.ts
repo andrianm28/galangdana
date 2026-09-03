@@ -1,6 +1,8 @@
 import {
+  AdminActionResponseSchema,
   AdminCampaignDetailResponseSchema,
   AdminCampaignListResponseSchema,
+  AdminRequestRevisionBodySchema,
   CampaignErrorSchema,
 } from "@galangdana/contracts";
 import {
@@ -13,6 +15,7 @@ import {
   db,
   individualVerifications,
 } from "@galangdana/db";
+import { syncCampaignsIndex } from "@galangdana/search";
 import { desc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { checkAdmin } from "../lib/admin";
@@ -171,6 +174,111 @@ export const adminRoute = new Elysia()
         401: CampaignErrorSchema,
         403: CampaignErrorSchema,
         404: CampaignErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/admin/campaigns/:id/approve",
+    async ({ user, params, set }) => {
+      const adminError = checkAdmin(user);
+      if (adminError) {
+        set.status = adminError.status;
+        return { error: adminError.status === 401 ? "not_authenticated" : "not_authorized" };
+      }
+
+      const [row] = await db
+        .select({ campaign: campaigns, category: campaignCategories, campaigner: campaigners })
+        .from(campaigns)
+        .innerJoin(campaignCategories, eq(campaigns.categoryId, campaignCategories.id))
+        .innerJoin(campaigners, eq(campaigns.campaignerId, campaigners.id))
+        .where(eq(campaigns.id, params.id));
+      if (!row) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (row.campaign.status !== "pending_review") {
+        set.status = 409;
+        return { error: "invalid_campaign_status" };
+      }
+
+      const now = new Date();
+      await db
+        .update(campaigns)
+        .set({ status: "active", publishedAt: now, updatedAt: now })
+        .where(eq(campaigns.id, row.campaign.id));
+      await db
+        .update(individualVerifications)
+        .set({ status: "verified", updatedAt: now })
+        .where(eq(individualVerifications.campaignId, row.campaign.id));
+
+      await syncCampaignsIndex([
+        {
+          id: row.campaign.id,
+          slug: row.campaign.slug,
+          title: row.campaign.title,
+          shortDescription: row.campaign.shortDescription,
+          categoryId: row.category.id,
+          categorySlug: row.category.slug,
+          model: row.campaign.model,
+          createdAtMs: row.campaign.createdAt.getTime(),
+        },
+      ]);
+
+      return { status: "active" };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: {
+        200: AdminActionResponseSchema,
+        401: CampaignErrorSchema,
+        403: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/admin/campaigns/:id/request-revision",
+    async ({ user, params, body, set }) => {
+      const adminError = checkAdmin(user);
+      if (adminError) {
+        set.status = adminError.status;
+        return { error: adminError.status === 401 ? "not_authenticated" : "not_authorized" };
+      }
+
+      const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, params.id));
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (campaign.status !== "pending_review") {
+        set.status = 409;
+        return { error: "invalid_campaign_status" };
+      }
+
+      await db.insert(campaignRevisions).values(
+        body.items.map((item) => ({
+          campaignId: campaign.id,
+          field: item.field,
+          note: item.note,
+        })),
+      );
+      await db
+        .update(campaigns)
+        .set({ status: "needs_revision", updatedAt: new Date() })
+        .where(eq(campaigns.id, campaign.id));
+
+      return { status: "needs_revision" };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: AdminRequestRevisionBodySchema,
+      response: {
+        200: AdminActionResponseSchema,
+        401: CampaignErrorSchema,
+        403: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
       },
     },
   );
