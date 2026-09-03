@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import {
   campaignCategories,
+  campaignDocuments,
   campaignRevisions,
   campaigners,
   campaigns,
@@ -932,5 +933,86 @@ describe("PUT /campaigns/:id/goal-amount", () => {
       }),
     );
     expect(resp.status).toBe(422);
+  });
+});
+
+describe("POST /campaigns/:id/documents/presign + /confirm", () => {
+  test("presign -> real MinIO PUT -> confirm round-trip creates a campaign-scoped document row", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const presignResp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/documents/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType: "sumber_gambar", fileName: "sumber.jpg" }),
+      }),
+    );
+    expect(presignResp.status).toBe(200);
+    const { uploadUrl, objectKey } = (await presignResp.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+    expect(objectKey).toStartWith(`campaigns/${campaign.id}/documents/sumber_gambar/`);
+
+    const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
+    expect(putResp.ok).toBe(true);
+
+    const confirmResp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/documents/confirm`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType: "sumber_gambar", objectKey }),
+      }),
+    );
+    expect(confirmResp.status).toBe(200);
+
+    const [document] = await db
+      .select()
+      .from(campaignDocuments)
+      .where(eq(campaignDocuments.campaignId, campaign.id));
+    expect(document?.type).toBe("sumber_gambar");
+    expect(document?.draftId).toBeNull();
+  });
+
+  test("confirm rejects an objectKey outside this campaign's own prefix", async () => {
+    const campaignA = await createTestCampaign(TEST_TOKEN);
+    const campaignB = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaignA.id}/documents/confirm`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          documentType: "sumber_gambar",
+          objectKey: `campaigns/${campaignB.id}/documents/sumber_gambar/x.jpg`,
+        }),
+      }),
+    );
+    expect(resp.status).toBe(400);
+  });
+
+  test("404s (not 403) presign for a non-owner's campaign", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/documents/presign`, OTHER_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType: "sumber_gambar", fileName: "x.jpg" }),
+      }),
+    );
+    expect(resp.status).toBe(404);
+  });
+
+  test("409s presign once the campaign is no longer editable", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    await db.update(campaigns).set({ status: "active" }).where(eq(campaigns.id, campaign.id));
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/documents/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentType: "sumber_gambar", fileName: "x.jpg" }),
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("campaign_not_editable");
   });
 });

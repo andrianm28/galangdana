@@ -5,10 +5,13 @@ import {
   CampaignListQuerySchema,
   CampaignListResponseSchema,
   CampaignRevisionListResponseSchema,
+  ConfirmCampaignDocumentBodySchema,
   ConfirmKycDocumentBodySchema,
   CreateCampaignFromDraftBodySchema,
   CreateCampaignFromDraftResponseSchema,
   KycStatusSchema,
+  PresignCampaignDocumentBodySchema,
+  PresignCampaignDocumentResponseSchema,
   PresignKycDocumentBodySchema,
   PresignKycDocumentResponseSchema,
   SaveCampaignGoalAmountBodySchema,
@@ -19,6 +22,7 @@ import {
 } from "@galangdana/contracts";
 import {
   campaignCategories,
+  campaignDocuments,
   campaignDrafts,
   campaignRevisions,
   campaignStoryAnswers,
@@ -31,6 +35,7 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { toCampaignDetail, toCampaignSummary } from "../lib/campaign-response";
 import { getOrCreateCampaignerForUser } from "../lib/campaigner";
+import { extractDocumentExtension, privateDocumentsS3 } from "../lib/media-s3";
 import { sessionDerive } from "../lib/session";
 import { generateUniqueSlug } from "../lib/slug";
 
@@ -659,6 +664,89 @@ export const campaignsRoute = new Elysia()
       body: SaveCampaignGoalAmountBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
+        401: CampaignErrorSchema2c,
+        404: CampaignErrorSchema2c,
+        409: CampaignErrorSchema2c,
+      },
+    },
+  )
+  .post(
+    "/campaigns/:id/documents/presign",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
+
+      const ext = extractDocumentExtension(body.fileName);
+      if (!ext) {
+        set.status = 422;
+        return { error: "unsupported_file_type" };
+      }
+
+      const objectKey = `campaigns/${campaign.id}/documents/${body.documentType}/${crypto.randomUUID()}.${ext}`;
+      const expiresInSeconds = 300;
+      const uploadUrl = privateDocumentsS3
+        .file(objectKey)
+        .presign({ method: "PUT", expiresIn: expiresInSeconds });
+
+      return { uploadUrl, objectKey, expiresInSeconds };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: PresignCampaignDocumentBodySchema,
+      response: {
+        200: PresignCampaignDocumentResponseSchema,
+        401: CampaignErrorSchema2c,
+        404: CampaignErrorSchema2c,
+        409: CampaignErrorSchema2c,
+        422: CampaignErrorSchema2c,
+      },
+    },
+  )
+  .post(
+    "/campaigns/:id/documents/confirm",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (campaign.status !== "draft" && campaign.status !== "needs_revision") {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
+
+      if (!body.objectKey.startsWith(`campaigns/${campaign.id}/documents/${body.documentType}/`)) {
+        set.status = 400;
+        return { error: "object_key_mismatch" };
+      }
+
+      await db
+        .insert(campaignDocuments)
+        .values({ campaignId: campaign.id, type: body.documentType, objectKey: body.objectKey });
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: ConfirmCampaignDocumentBodySchema,
+      response: {
+        200: t.Object({ success: t.Boolean() }),
+        400: CampaignErrorSchema2c,
         401: CampaignErrorSchema2c,
         404: CampaignErrorSchema2c,
         409: CampaignErrorSchema2c,
