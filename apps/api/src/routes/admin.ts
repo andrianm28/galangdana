@@ -16,7 +16,7 @@ import {
   individualVerifications,
 } from "@galangdana/db";
 import { syncCampaignsIndex } from "@galangdana/search";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { checkAdmin } from "../lib/admin";
 import { privateDocumentsS3 } from "../lib/media-s3";
@@ -117,7 +117,12 @@ export const adminRoute = new Elysia()
       const documents = await db
         .select()
         .from(campaignDocuments)
-        .where(eq(campaignDocuments.campaignId, row.campaign.id));
+        .where(
+          or(
+            eq(campaignDocuments.campaignId, row.campaign.id),
+            row.campaign.draftId ? eq(campaignDocuments.draftId, row.campaign.draftId) : sql`false`,
+          ),
+        );
 
       const revisions = await db
         .select()
@@ -196,33 +201,45 @@ export const adminRoute = new Elysia()
         set.status = 404;
         return { error: "campaign_not_found" };
       }
-      if (row.campaign.status !== "pending_review") {
+
+      const now = new Date();
+      const transitioned = await db.transaction(async (tx) => {
+        const updated = await tx
+          .update(campaigns)
+          .set({ status: "active", publishedAt: now, updatedAt: now })
+          .where(and(eq(campaigns.id, row.campaign.id), eq(campaigns.status, "pending_review")))
+          .returning();
+        if (updated.length === 0) {
+          return false;
+        }
+        await tx
+          .update(individualVerifications)
+          .set({ status: "verified", updatedAt: now })
+          .where(eq(individualVerifications.campaignId, row.campaign.id));
+        return true;
+      });
+
+      if (!transitioned) {
         set.status = 409;
         return { error: "invalid_campaign_status" };
       }
 
-      const now = new Date();
-      await db
-        .update(campaigns)
-        .set({ status: "active", publishedAt: now, updatedAt: now })
-        .where(eq(campaigns.id, row.campaign.id));
-      await db
-        .update(individualVerifications)
-        .set({ status: "verified", updatedAt: now })
-        .where(eq(individualVerifications.campaignId, row.campaign.id));
-
-      await syncCampaignsIndex([
-        {
-          id: row.campaign.id,
-          slug: row.campaign.slug,
-          title: row.campaign.title,
-          shortDescription: row.campaign.shortDescription,
-          categoryId: row.category.id,
-          categorySlug: row.category.slug,
-          model: row.campaign.model,
-          createdAtMs: row.campaign.createdAt.getTime(),
-        },
-      ]);
+      try {
+        await syncCampaignsIndex([
+          {
+            id: row.campaign.id,
+            slug: row.campaign.slug,
+            title: row.campaign.title,
+            shortDescription: row.campaign.shortDescription,
+            categoryId: row.category.id,
+            categorySlug: row.category.slug,
+            model: row.campaign.model,
+            createdAtMs: row.campaign.createdAt.getTime(),
+          },
+        ]);
+      } catch (err) {
+        console.error("syncCampaignsIndex failed after approving campaign", row.campaign.id, err);
+      }
 
       return { status: "active" };
     },
@@ -251,22 +268,30 @@ export const adminRoute = new Elysia()
         set.status = 404;
         return { error: "campaign_not_found" };
       }
-      if (campaign.status !== "pending_review") {
+
+      const transitioned = await db.transaction(async (tx) => {
+        const updated = await tx
+          .update(campaigns)
+          .set({ status: "needs_revision", updatedAt: new Date() })
+          .where(and(eq(campaigns.id, campaign.id), eq(campaigns.status, "pending_review")))
+          .returning();
+        if (updated.length === 0) {
+          return false;
+        }
+        await tx.insert(campaignRevisions).values(
+          body.items.map((item) => ({
+            campaignId: campaign.id,
+            field: item.field,
+            note: item.note,
+          })),
+        );
+        return true;
+      });
+
+      if (!transitioned) {
         set.status = 409;
         return { error: "invalid_campaign_status" };
       }
-
-      await db.insert(campaignRevisions).values(
-        body.items.map((item) => ({
-          campaignId: campaign.id,
-          field: item.field,
-          note: item.note,
-        })),
-      );
-      await db
-        .update(campaigns)
-        .set({ status: "needs_revision", updatedAt: new Date() })
-        .where(eq(campaigns.id, campaign.id));
 
       return { status: "needs_revision" };
     },

@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import {
   campaignCategories,
+  campaignDocuments,
+  campaignDrafts,
   campaignRevisions,
   campaigners,
   campaigns,
@@ -128,6 +130,42 @@ describe("GET /admin/campaigns/:id", () => {
     expect(body.verification.ktpViewUrl).toMatch(/^https?:\/\//);
     expect(body.verification.selfieViewUrl).toMatch(/^https?:\/\//);
   });
+
+  test("includes a draft-scoped document that was never re-pointed to the campaign", async () => {
+    const campaign = await seedPendingCampaign();
+
+    // Mirrors POST /campaigns: campaigns.draftId points back at the draft
+    // the wizard was submitted from, but campaign_documents rows written
+    // during that wizard flow keep draftId set and campaignId NULL forever
+    // -- nothing ever re-points them (see this task's brief).
+    const [draft] = await db
+      .insert(campaignDrafts)
+      .values({
+        userId: CAMPAIGNER_USER_ID,
+        track: "non_medical",
+        expiresAt: new Date(Date.now() + 86400000),
+      })
+      .returning();
+    if (!draft) throw new Error("draft insert failed");
+    await db.update(campaigns).set({ draftId: draft.id }).where(eq(campaigns.id, campaign.id));
+    await db.insert(campaignDocuments).values({
+      draftId: draft.id,
+      type: "kartu_mahasiswa",
+      objectKey: `drafts/${draft.id}/kartu_mahasiswa/x.jpg`,
+    });
+
+    const token = ADMIN_TOKEN;
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/campaigns/${campaign.id}`, token),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      documents: Array<{ type: string; viewUrl: string }>;
+    };
+    expect(body.documents).toHaveLength(1);
+    expect(body.documents[0]?.type).toBe("kartu_mahasiswa");
+    expect(body.documents[0]?.viewUrl).toMatch(/^https?:\/\//);
+  });
 });
 
 describe("POST /admin/campaigns/:id/approve", () => {
@@ -174,6 +212,23 @@ describe("POST /admin/campaigns/:id/approve", () => {
     );
     expect(resp.status).toBe(409);
   });
+
+  test("a second approve attempt 409s instead of silently re-approving", async () => {
+    const campaign = await seedPendingCampaign();
+    const token = ADMIN_TOKEN;
+    const url = `http://localhost/admin/campaigns/${campaign.id}/approve`;
+
+    const first = await app.handle(authedRequest(url, token, { method: "POST" }));
+    expect(first.status).toBe(200);
+    const [afterFirst] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    const publishedAtAfterFirst = afterFirst?.publishedAt?.toISOString();
+
+    const second = await app.handle(authedRequest(url, token, { method: "POST" }));
+    expect(second.status).toBe(409);
+
+    const [afterSecond] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(afterSecond?.publishedAt?.toISOString()).toBe(publishedAtAfterFirst);
+  });
 });
 
 describe("POST /admin/campaigns/:id/request-revision", () => {
@@ -203,5 +258,38 @@ describe("POST /admin/campaigns/:id/request-revision", () => {
       .where(eq(campaignRevisions.campaignId, campaign.id));
     expect(revisions).toHaveLength(2);
     expect(revisions.every((r) => r.status === "open")).toBe(true);
+  });
+
+  test("a second request-revision attempt 409s and does not insert duplicate revisions", async () => {
+    const campaign = await seedPendingCampaign();
+    const token = ADMIN_TOKEN;
+    const url = `http://localhost/admin/campaigns/${campaign.id}/request-revision`;
+    const requestBody = JSON.stringify({
+      items: [{ field: "cerita", note: "Cerita terlalu singkat, tambahkan detail." }],
+    });
+
+    const first = await app.handle(
+      authedRequest(url, token, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: requestBody,
+      }),
+    );
+    expect(first.status).toBe(200);
+
+    const second = await app.handle(
+      authedRequest(url, token, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: requestBody,
+      }),
+    );
+    expect(second.status).toBe(409);
+
+    const revisions = await db
+      .select()
+      .from(campaignRevisions)
+      .where(eq(campaignRevisions.campaignId, campaign.id));
+    expect(revisions).toHaveLength(1);
   });
 });
