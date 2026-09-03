@@ -1,0 +1,503 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+  bankAccounts,
+  campaignCategories,
+  campaigners,
+  campaigns,
+  db,
+  disbursementRequests,
+  donations,
+  payments,
+  sessions,
+  users,
+} from "@galangdana/db";
+import { MockPaymentProvider } from "@galangdana/payments";
+import { eq, inArray } from "drizzle-orm";
+import { Elysia } from "elysia";
+import { computeWithdrawableAmount, disbursementsRoute } from "./disbursements";
+import { donationsRoute } from "./donations";
+
+// The withdrawable-balance tests need a real paid donation, which only
+// exists after going through POST /donations + POST /payments/webhook (both
+// live on donationsRoute) -- so this file exercises a small combined app
+// rather than disbursementsRoute alone.
+const app = new Elysia().use(donationsRoute).use(disbursementsRoute);
+
+const TEST_USER_ID = "44444444-5555-6666-7777-cccccccccc01";
+const OTHER_USER_ID = "44444444-5555-6666-7777-cccccccccc02";
+const TEST_TOKEN = "disbursements-test-token";
+const OTHER_TOKEN = "disbursements-other-token";
+
+let categoryId: number;
+let testCampaignerId: string;
+let otherCampaignerId: string;
+
+// Every row this file creates is tracked here and deleted in `afterAll`, in
+// FK-safe order -- there is no existing precedent to copy for this (see
+// this task's brief: donations.test.ts's own seedTestCampaign() leaks a
+// real active campaign per run with no cleanup at all).
+const campaignIds: string[] = [];
+const disbursementIds: string[] = [];
+const donationIds: string[] = [];
+
+function authedRequest(url: string, token: string, init: RequestInit = {}) {
+  return new Request(url, { ...init, headers: { ...init.headers, cookie: `session=${token}` } });
+}
+
+beforeAll(async () => {
+  await db.delete(users).where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID]));
+  await db.insert(users).values([
+    { id: TEST_USER_ID, phone: "+6281199990601" },
+    { id: OTHER_USER_ID, phone: "+6281199990602" },
+  ]);
+  await db.insert(sessions).values([
+    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+  ]);
+
+  const [category] = await db.select().from(campaignCategories).limit(1);
+  if (!category) throw new Error("no seeded category found -- run db:seed first");
+  categoryId = category.id;
+
+  const [campaigner] = await db
+    .insert(campaigners)
+    .values({
+      type: "individual",
+      displayName: "Disbursements Test Campaigner",
+      userId: TEST_USER_ID,
+    })
+    .returning();
+  if (!campaigner) throw new Error("campaigner insert failed");
+  testCampaignerId = campaigner.id;
+
+  const [otherCampaigner] = await db
+    .insert(campaigners)
+    .values({ type: "individual", displayName: "Other Campaigner", userId: OTHER_USER_ID })
+    .returning();
+  if (!otherCampaigner) throw new Error("other campaigner insert failed");
+  otherCampaignerId = otherCampaigner.id;
+});
+
+afterAll(async () => {
+  if (disbursementIds.length > 0) {
+    await db.delete(disbursementRequests).where(inArray(disbursementRequests.id, disbursementIds));
+  }
+  if (donationIds.length > 0) {
+    await db.delete(payments).where(inArray(payments.donationId, donationIds));
+    await db.delete(donations).where(inArray(donations.id, donationIds));
+  }
+  if (campaignIds.length > 0) {
+    await db.delete(campaigns).where(inArray(campaigns.id, campaignIds));
+  }
+  // Bank accounts created directly in the bank-account tests below are not
+  // tracked separately -- bankAccounts.campaignerId cascades on delete, so
+  // deleting these campaigners (after the disbursements above, which is
+  // what actually references bankAccountId) cleans them up too.
+  if (testCampaignerId) await db.delete(campaigners).where(eq(campaigners.id, testCampaignerId));
+  if (otherCampaignerId) await db.delete(campaigners).where(eq(campaigners.id, otherCampaignerId));
+  await db.delete(users).where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID]));
+});
+
+async function createTestCampaign(campaignerId: string, status: "draft" | "active" = "active") {
+  const [campaign] = await db
+    .insert(campaigns)
+    .values({
+      slug: `test-disbursement-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      title: "Test Disbursement Campaign",
+      shortDescription: "Test",
+      story: "Test",
+      categoryId,
+      campaignerId,
+      type: "donation",
+      currency: "IDR",
+      model: "goal",
+      goalAmount: 100_000_000n,
+      status,
+    })
+    .returning();
+  if (!campaign) throw new Error("campaign insert failed");
+  campaignIds.push(campaign.id);
+  return campaign;
+}
+
+async function createDraftDisbursement(campaignId: string, token: string) {
+  const resp = await app.handle(
+    authedRequest(`http://localhost/campaigns/${campaignId}/disbursements`, token, {
+      method: "POST",
+    }),
+  );
+  if (resp.status !== 200) throw new Error(`draft disbursement creation failed: ${resp.status}`);
+  const body = (await resp.json()) as { id: string };
+  disbursementIds.push(body.id);
+  return body.id;
+}
+
+async function createPaidDonation(campaignId: string, amountStr: string) {
+  const donationResp = await app.handle(
+    new Request("http://localhost/donations", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+      body: JSON.stringify({ campaignId, amountStr }),
+    }),
+  );
+  const { donationId } = (await donationResp.json()) as { donationId: string };
+  donationIds.push(donationId);
+
+  const [payment] = await db.select().from(payments).where(eq(payments.donationId, donationId));
+  if (!payment) throw new Error("payment row missing");
+
+  const provider = new MockPaymentProvider({
+    serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+  });
+  const payload = await provider.simulateWebhookPayload(payment.providerOrderId, BigInt(amountStr));
+  const webhookResp = await app.handle(
+    new Request("http://localhost/payments/webhook", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  );
+  if (webhookResp.status !== 200)
+    throw new Error(`webhook processing failed: ${webhookResp.status}`);
+
+  const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+  if (!donation) throw new Error("donation missing after webhook");
+  return donation;
+}
+
+describe("POST /campaigns/:id/disbursements", () => {
+  test("creates a draft disbursement for an owned, active campaign", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/disbursements`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { id: string };
+    disbursementIds.push(body.id);
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, body.id));
+    expect(row?.status).toBe("draft");
+    expect(row?.campaignId).toBe(campaign.id);
+  });
+
+  test("409s for a non-active campaign", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "draft");
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/disbursements`, TEST_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("campaign_not_active");
+  });
+
+  test("404s (not 403) for someone else's campaign", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/disbursements`, OTHER_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(404);
+  });
+
+  test("401s with no session", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const resp = await app.handle(
+      new Request(`http://localhost/campaigns/${campaign.id}/disbursements`, { method: "POST" }),
+    );
+    expect(resp.status).toBe(401);
+  });
+});
+
+describe("PATCH /disbursements/:id/bank-account", () => {
+  test("saves the campaigner's own bank account onto a draft disbursement", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    const [bankAccount] = await db
+      .insert(bankAccounts)
+      .values({
+        campaignerId: testCampaignerId,
+        bankCode: "bca",
+        bankName: "Bank Central Asia",
+        accountNumber: "1111111111",
+        accountHolderName: "Test Campaigner",
+      })
+      .returning();
+    if (!bankAccount) throw new Error("bank account insert failed");
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/bank-account`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bankAccountId: bankAccount.id }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.bankAccountId).toBe(bankAccount.id);
+  });
+
+  test("422s when the bank account belongs to a different campaigner", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    const [otherBankAccount] = await db
+      .insert(bankAccounts)
+      .values({
+        campaignerId: otherCampaignerId,
+        bankCode: "bni",
+        bankName: "Bank Negara Indonesia",
+        accountNumber: "2222222222",
+        accountHolderName: "Other Campaigner",
+      })
+      .returning();
+    if (!otherBankAccount) throw new Error("other bank account insert failed");
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/bank-account`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bankAccountId: otherBankAccount.id }),
+      }),
+    );
+    expect(resp.status).toBe(422);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("bank_account_not_found");
+  });
+});
+
+describe("PATCH /disbursements/:id/detail", () => {
+  test("rejects an amount exceeding the withdrawable balance", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "200000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/detail`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "partial",
+          amountStr: (withdrawable + 1n).toString(),
+          narrative: "Too much",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(422);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("amount_exceeds_withdrawable_balance");
+  });
+
+  test("409s when the disbursement is no longer a draft", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "200000");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    await db
+      .update(disbursementRequests)
+      .set({ status: "requested" })
+      .where(eq(disbursementRequests.id, id));
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/detail`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "partial", amountStr: "1000", narrative: "x" }),
+      }),
+    );
+    expect(resp.status).toBe(409);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("disbursement_not_editable");
+  });
+});
+
+describe("withdrawable balance across two in-flight disbursement requests", () => {
+  test("a draft disbursement does not reserve funds, but a requested one does", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const donation = await createPaidDonation(campaign.id, "1000000");
+
+    const [freshCampaign] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    if (!freshCampaign) throw new Error("campaign missing after paid donation");
+
+    const initialWithdrawable = await computeWithdrawableAmount(campaign.id);
+    const expectedInitial =
+      freshCampaign.collectedAmount - donation.platformFee - freshCampaign.disbursedAmount;
+    expect(initialWithdrawable).toBe(expectedInitial);
+
+    // Leave a small remainder so the reduced balance after id1 becomes
+    // "requested" is still nonzero and independently checkable below.
+    const amount1 = initialWithdrawable - 1n;
+    expect(amount1).toBeGreaterThan(0n);
+
+    const id1 = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    const detail1Resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id1}/detail`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "partial",
+          amountStr: amount1.toString(),
+          narrative: "Request 1",
+        }),
+      }),
+    );
+    expect(detail1Resp.status).toBe(200);
+
+    // id1 is still `draft` -- it must NOT count toward pendingDisbursementsAmount,
+    // so a second, independent draft can request the exact same amount.
+    const id2 = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    const detail2Resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id2}/detail`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "partial",
+          amountStr: amount1.toString(),
+          narrative: "Request 2",
+        }),
+      }),
+    );
+    expect(detail2Resp.status).toBe(200);
+
+    // Simulate Task 7's OTP-verify -> "requested" transition directly --
+    // that route doesn't exist yet in this task.
+    await db
+      .update(disbursementRequests)
+      .set({ status: "requested" })
+      .where(eq(disbursementRequests.id, id1));
+
+    const withdrawableAfterRequest = await computeWithdrawableAmount(campaign.id);
+    expect(withdrawableAfterRequest).toBe(initialWithdrawable - amount1);
+
+    // A third disbursement now correctly sees the reduced balance: the
+    // same amount that succeeded twice above is now rejected.
+    const id3 = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    const detail3Resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id3}/detail`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "partial",
+          amountStr: amount1.toString(),
+          narrative: "Request 3",
+        }),
+      }),
+    );
+    expect(detail3Resp.status).toBe(422);
+    const detail3Body = (await detail3Resp.json()) as { error: string };
+    expect(detail3Body.error).toBe("amount_exceeds_withdrawable_balance");
+
+    // But requesting exactly the tiny remaining balance still succeeds,
+    // confirming the reduced figure is exact, not just "smaller".
+    const detail3RetryResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id3}/detail`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "partial",
+          amountStr: withdrawableAfterRequest.toString(),
+          narrative: "Request 3 retry",
+        }),
+      }),
+    );
+    expect(detail3RetryResp.status).toBe(200);
+  });
+});
+
+describe("POST /disbursements/:id/proof/presign + /confirm", () => {
+  test("presign -> real MinIO PUT -> confirm round trip sets proofObjectKey", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    const presignResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/proof/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "bukti-transfer.jpg" }),
+      }),
+    );
+    expect(presignResp.status).toBe(200);
+    const { uploadUrl, objectKey } = (await presignResp.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+    expect(objectKey).toStartWith(`disbursements/${id}/proof/`);
+
+    const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake proof bytes" });
+    expect(putResp.ok).toBe(true);
+
+    const confirmResp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}/proof/confirm`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ objectKey }),
+      }),
+    );
+    expect(confirmResp.status).toBe(200);
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(row?.proofObjectKey).toBe(objectKey);
+  });
+
+  test("400s when the objectKey doesn't match this disbursement's own prefix", async () => {
+    const campaignA = await createTestCampaign(testCampaignerId, "active");
+    const campaignB = await createTestCampaign(testCampaignerId, "active");
+    const idA = await createDraftDisbursement(campaignA.id, TEST_TOKEN);
+    const idB = await createDraftDisbursement(campaignB.id, TEST_TOKEN);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${idA}/proof/confirm`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ objectKey: `disbursements/${idB}/proof/x.jpg` }),
+      }),
+    );
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("object_key_mismatch");
+  });
+});
+
+describe("GET /disbursements/:id", () => {
+  test("404s for a nonexistent disbursement id", async () => {
+    const resp = await app.handle(
+      authedRequest(
+        "http://localhost/disbursements/00000000-0000-0000-0000-000000000000",
+        TEST_TOKEN,
+      ),
+    );
+    expect(resp.status).toBe(404);
+  });
+
+  test("404s (not 403) for another user's disbursement", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}`, OTHER_TOKEN),
+    );
+    expect(resp.status).toBe(404);
+  });
+
+  test("returns the disbursement detail for its owner", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/disbursements/${id}`, TEST_TOKEN),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { id: string; status: string; campaignId: string };
+    expect(body.id).toBe(id);
+    expect(body.status).toBe("draft");
+    expect(body.campaignId).toBe(campaign.id);
+  });
+});
