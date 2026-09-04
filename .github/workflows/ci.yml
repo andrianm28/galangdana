@@ -96,6 +96,15 @@ jobs:
       MEDIA_S3_ACCESS_KEY_ID: galangdana
       MEDIA_S3_SECRET_ACCESS_KEY: galangdana-dev-secret
       MEDIA_S3_BUCKET: campaign-media
+      # apps/api/src/routes/donations.ts fails closed (throws) if this is
+      # unset, by design (a Sumopod QRIS payment security fix -- see that
+      # file's SUMOPOD_WEBHOOK_SECRET guard) -- donations.test.ts has its own
+      # top-level guard that throws the same way, so this must be set for
+      # the whole file to even load. Same non-functional test-only value
+      # used throughout packages/payments's Sumopod tests and .env.example
+      # (base64-decodes to "test-secret-key-for-unit-tests", not a real
+      # credential -- Sumopod's real servers have no knowledge of it).
+      SUMOPOD_WEBHOOK_SECRET: whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz
     steps:
       - uses: actions/checkout@v4
 
