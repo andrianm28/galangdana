@@ -9,6 +9,7 @@ describe("MockPaymentProvider", () => {
       grossAmount: 50000n,
       currency: "IDR",
     });
+    if (result.method !== "bank_transfer_va") throw new Error("expected a bank_transfer_va charge");
     expect(result.vaNumber).toMatch(/^\d{10,16}$/);
     expect(result.providerOrderId).toBe("donation-order-1");
     expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now());

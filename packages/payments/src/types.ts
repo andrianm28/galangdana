@@ -1,19 +1,37 @@
-export type PaymentMethod = "bank_transfer_va";
+export type PaymentMethod = "bank_transfer_va" | "qris_redirect";
 
 export interface ChargeInput {
   orderId: string;
   grossAmount: bigint;
   currency: "IDR" | "USD";
+  // Only meaningful for redirect-based methods (Sumopod) -- where to send
+  // the donor after they finish (or cancel) on the provider's hosted page.
+  // Ignored by providers that don't need it (the mock VA flow).
+  successReturnUrl?: string;
+  cancelReturnUrl?: string;
 }
 
-export interface ChargeResult {
-  providerOrderId: string;
-  method: PaymentMethod;
-  vaNumber: string;
-  expiresAt: Date;
-}
+export type ChargeResult =
+  | {
+      providerOrderId: string;
+      method: "bank_transfer_va";
+      vaNumber: string;
+      expiresAt: Date;
+    }
+  | {
+      providerOrderId: string;
+      method: "qris_redirect";
+      redirectUrl: string;
+      expiresAt: Date;
+    };
 
 export interface WebhookEvent {
+  // "mock" | "sumopod" -- which provider actually delivered this event.
+  // The webhook-processing code uses this for the payment_events dedup
+  // guard's UNIQUE(provider, providerEventId) constraint; it was
+  // previously hardcoded to the literal "mock" everywhere, which was
+  // silently wrong (harmless with one provider, not with two).
+  provider: string;
   providerEventId: string;
   providerOrderId: string;
   status: "paid" | "failed" | "expired";
