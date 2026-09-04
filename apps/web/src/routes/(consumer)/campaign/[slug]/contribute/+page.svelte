@@ -8,6 +8,11 @@ import type { PageProps } from "./$types";
 const { data }: PageProps = $props();
 
 const amount = $derived(page.url.searchParams.get("amount") ?? "");
+const paymentMethod = $derived(
+  (page.url.searchParams.get("paymentMethod") ?? "bank_transfer_va") as
+    | "bank_transfer_va"
+    | "qris_redirect",
+);
 let submitting = $state(false);
 let error = $state<string | null>(null);
 
@@ -15,12 +20,16 @@ async function confirm() {
   error = null;
   submitting = true;
   const { data: responseData, error: apiError } = await api.donations.post(
-    { campaignId: data.campaign.id, amountStr: amount },
+    { campaignId: data.campaign.id, amountStr: amount, paymentMethod },
     { headers: { "idempotency-key": crypto.randomUUID() } },
   );
   submitting = false;
   if (apiError || !responseData || "error" in responseData) {
     error = "Gagal memproses donasi. Silakan coba lagi.";
+    return;
+  }
+  if (responseData.method === "qris_redirect" && responseData.redirectUrl) {
+    window.location.href = responseData.redirectUrl;
     return;
   }
   await goto(`/donation/status/${responseData.donationId}`);
