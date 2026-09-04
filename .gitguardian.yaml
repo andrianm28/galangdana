@@ -1,0 +1,5 @@
+version: 2
+secret:
+  ignored-matches:
+    - name: "Sumopod webhook HMAC test fixture (not a real credential)"
+      match: "whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz"
