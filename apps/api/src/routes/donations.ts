@@ -15,16 +15,137 @@ import {
   payments,
 } from "@galangdana/db";
 import { moneyToJSON } from "@galangdana/money";
-import { MockPaymentProvider } from "@galangdana/payments";
+import { MockPaymentProvider, SumopodProvider } from "@galangdana/payments";
+import type { PaymentMethod, WebhookEvent } from "@galangdana/payments";
 import type { Static } from "@sinclair/typebox";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { sessionDerive } from "../lib/session";
 
 const SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev";
+const SUMOPOD_API_KEY = process.env.SUMOPOD_API_KEY ?? "";
+// Falls back to the same placeholder secret used across packages/payments's
+// own Sumopod tests (sumopod-signature.test.ts, sumopod-provider.test.ts)
+// rather than "" -- an empty string fails HMAC key import outright ("Zero-
+// length key is not supported"), which would make every Sumopod webhook
+// delivery 401 whenever SUMOPOD_WEBHOOK_SECRET isn't set in the environment,
+// mirroring how SERVER_KEY above always has a usable dev default.
+const SUMOPOD_WEBHOOK_SECRET =
+  process.env.SUMOPOD_WEBHOOK_SECRET ?? "whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz";
 
-function getProvider() {
+function getProvider(method: PaymentMethod) {
+  if (method === "qris_redirect") {
+    return new SumopodProvider({ apiKey: SUMOPOD_API_KEY, webhookSecret: SUMOPOD_WEBHOOK_SECRET });
+  }
   return new MockPaymentProvider({ serverKey: SERVER_KEY });
+}
+
+function getSumopodProvider() {
+  return new SumopodProvider({ apiKey: SUMOPOD_API_KEY, webhookSecret: SUMOPOD_WEBHOOK_SECRET });
+}
+
+async function processPaymentWebhookEvent(event: WebhookEvent) {
+  const result = await db.transaction(async (tx) => {
+    // First write: the dedup guard. A retried/duplicate delivery hits
+    // this table's UNIQUE(provider, providerEventId) constraint and
+    // throws before any other write happens. Run it in a nested
+    // transaction (SAVEPOINT) rather than directly against `tx`:
+    // postgres.js's `begin()` tracks the first error seen by ANY query
+    // run through its transaction-scoped `sql` tag in a closure
+    // variable independent of whatever `try/catch` wraps that query in
+    // JS, then rethrows it after the callback resolves -- so catching
+    // this insert's rejection here would NOT stop the outer
+    // transaction from still failing at commit time with that same
+    // error. A savepoint gets its own independent error-tracking scope,
+    // so catching its rejection here really does let the outer
+    // transaction commit cleanly.
+    try {
+      await tx.transaction(async (tx2) => {
+        await tx2.insert(paymentEvents).values({
+          provider: event.provider,
+          providerEventId: event.providerEventId,
+          payload: event.rawPayload as object,
+        });
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === "23505") {
+        return { alreadyProcessed: true as const };
+      }
+      throw err;
+    }
+
+    const [payment] = await tx
+      .select()
+      .from(payments)
+      .where(eq(payments.providerOrderId, event.providerOrderId));
+    if (!payment) {
+      throw new Error(`webhook for unknown providerOrderId: ${event.providerOrderId}`);
+    }
+
+    if (event.status !== "paid") {
+      const now = new Date();
+      // Guarded the same way as the "paid" branch below: only transition
+      // a donation that's still pending, so a delayed/out-of-order
+      // expired/failed event (a different providerEventId, so it
+      // survives the dedup guard above) can never regress a donation
+      // that a prior "paid" delivery already settled.
+      const updatedDonations = await tx
+        .update(donations)
+        .set({ status: event.status, updatedAt: now })
+        .where(and(eq(donations.id, payment.donationId), eq(donations.status, "pending")))
+        .returning();
+      if (updatedDonations.length === 0) {
+        return { alreadyProcessed: true as const };
+      }
+
+      await tx
+        .update(payments)
+        .set({ status: event.status, updatedAt: now })
+        .where(
+          and(eq(payments.providerOrderId, event.providerOrderId), ne(payments.status, "paid")),
+        );
+      return { alreadyProcessed: false as const, paid: false as const };
+    }
+
+    const now = new Date();
+    const updatedDonations = await tx
+      .update(donations)
+      .set({ status: "paid", paidAt: now, updatedAt: now })
+      .where(and(eq(donations.id, payment.donationId), eq(donations.status, "pending")))
+      .returning();
+    if (updatedDonations.length === 0) {
+      // Already paid by a prior delivery that beat the payment_events
+      // dedup guard in a genuine race (two concurrent deliveries both
+      // inserting different providerEventIds for the same order) --
+      // treat as already-processed, not an error.
+      return { alreadyProcessed: true as const };
+    }
+    const donation = updatedDonations[0];
+    if (!donation) throw new Error("unreachable: update returned no row after length check");
+
+    await tx
+      .update(payments)
+      .set({ status: "paid", updatedAt: now })
+      .where(eq(payments.id, payment.id));
+
+    await tx
+      .update(campaigns)
+      .set({
+        collectedAmount: sql`${campaigns.collectedAmount} + ${donation.amount}`,
+        donationCount: sql`${campaigns.donationCount} + 1`,
+      })
+      .where(eq(campaigns.id, donation.campaignId));
+
+    await tx.insert(notificationsOutbox).values({
+      channel: "email",
+      template: "donation_receipt",
+      payload: { donationId: donation.id, campaignId: donation.campaignId },
+    });
+
+    return { alreadyProcessed: false as const, paid: true as const };
+  });
+
+  return { status: result.alreadyProcessed ? "already_processed" : "processed" };
 }
 
 export const donationsRoute = new Elysia()
@@ -101,11 +222,14 @@ export const donationsRoute = new Elysia()
         // would be a problem waiting to happen once this mock is swapped for
         // a real Midtrans adapter.
         const donationId = crypto.randomUUID();
-        const provider = getProvider();
+        const provider = getProvider(body.paymentMethod);
+        const publicWebUrl = process.env.PUBLIC_WEB_URL ?? "http://localhost:5173";
         const charge = await provider.createCharge({
           orderId: donationId,
           grossAmount: amount,
           currency: campaign.currency,
+          successReturnUrl: `${publicWebUrl}/donation/status/${donationId}`,
+          cancelReturnUrl: `${publicWebUrl}/donation/status/${donationId}`,
         });
 
         const responseBody = await db.transaction(async (tx) => {
@@ -123,17 +247,20 @@ export const donationsRoute = new Elysia()
 
           await tx.insert(payments).values({
             donationId,
-            provider: "mock",
+            provider: charge.method === "qris_redirect" ? "sumopod" : "mock",
             method: charge.method,
             providerOrderId: charge.providerOrderId,
-            vaNumber: charge.vaNumber,
+            vaNumber: charge.method === "bank_transfer_va" ? charge.vaNumber : null,
+            redirectUrl: charge.method === "qris_redirect" ? charge.redirectUrl : null,
             grossAmount: amount,
             expiresAt: charge.expiresAt,
           });
 
           const body_: Static<typeof CreateDonationResponseSchema> = {
             donationId,
-            vaNumber: charge.vaNumber,
+            method: charge.method,
+            vaNumber: charge.method === "bank_transfer_va" ? charge.vaNumber : null,
+            redirectUrl: charge.method === "qris_redirect" ? charge.redirectUrl : null,
             amount: moneyToJSON({ amount, currency: campaign.currency }),
             expiresAt: charge.expiresAt.toISOString(),
           };
@@ -169,116 +296,35 @@ export const donationsRoute = new Elysia()
   .post(
     "/payments/webhook",
     async ({ request, set }) => {
-      const provider = getProvider();
-      let event: Awaited<ReturnType<typeof provider.parseWebhook>>;
+      const provider = getProvider("bank_transfer_va");
+      let event: WebhookEvent;
       try {
         event = await provider.parseWebhook(request);
       } catch {
         set.status = 401;
         return { error: "invalid_signature" };
       }
-
-      const result = await db.transaction(async (tx) => {
-        // First write: the dedup guard. A retried/duplicate delivery hits
-        // this table's UNIQUE(provider, providerEventId) constraint and
-        // throws before any other write happens. Run it in a nested
-        // transaction (SAVEPOINT) rather than directly against `tx`:
-        // postgres.js's `begin()` tracks the first error seen by ANY query
-        // run through its transaction-scoped `sql` tag in a closure
-        // variable independent of whatever `try/catch` wraps that query in
-        // JS, then rethrows it after the callback resolves -- so catching
-        // this insert's rejection here would NOT stop the outer
-        // transaction from still failing at commit time with that same
-        // error. A savepoint gets its own independent error-tracking scope,
-        // so catching its rejection here really does let the outer
-        // transaction commit cleanly.
-        try {
-          await tx.transaction(async (tx2) => {
-            await tx2.insert(paymentEvents).values({
-              provider: "mock",
-              providerEventId: event.providerEventId,
-              payload: event.rawPayload as object,
-            });
-          });
-        } catch (err) {
-          if ((err as { code?: string }).code === "23505") {
-            return { alreadyProcessed: true as const };
-          }
-          throw err;
-        }
-
-        const [payment] = await tx
-          .select()
-          .from(payments)
-          .where(eq(payments.providerOrderId, event.providerOrderId));
-        if (!payment) {
-          throw new Error(`webhook for unknown providerOrderId: ${event.providerOrderId}`);
-        }
-
-        if (event.status !== "paid") {
-          const now = new Date();
-          // Guarded the same way as the "paid" branch below: only transition
-          // a donation that's still pending, so a delayed/out-of-order
-          // expired/failed event (a different providerEventId, so it
-          // survives the dedup guard above) can never regress a donation
-          // that a prior "paid" delivery already settled.
-          const updatedDonations = await tx
-            .update(donations)
-            .set({ status: event.status, updatedAt: now })
-            .where(and(eq(donations.id, payment.donationId), eq(donations.status, "pending")))
-            .returning();
-          if (updatedDonations.length === 0) {
-            return { alreadyProcessed: true as const };
-          }
-
-          await tx
-            .update(payments)
-            .set({ status: event.status, updatedAt: now })
-            .where(
-              and(eq(payments.providerOrderId, event.providerOrderId), ne(payments.status, "paid")),
-            );
-          return { alreadyProcessed: false as const, paid: false as const };
-        }
-
-        const now = new Date();
-        const updatedDonations = await tx
-          .update(donations)
-          .set({ status: "paid", paidAt: now, updatedAt: now })
-          .where(and(eq(donations.id, payment.donationId), eq(donations.status, "pending")))
-          .returning();
-        if (updatedDonations.length === 0) {
-          // Already paid by a prior delivery that beat the payment_events
-          // dedup guard in a genuine race (two concurrent deliveries both
-          // inserting different providerEventIds for the same order) --
-          // treat as already-processed, not an error.
-          return { alreadyProcessed: true as const };
-        }
-        const donation = updatedDonations[0];
-        if (!donation) throw new Error("unreachable: update returned no row after length check");
-
-        await tx
-          .update(payments)
-          .set({ status: "paid", updatedAt: now })
-          .where(eq(payments.id, payment.id));
-
-        await tx
-          .update(campaigns)
-          .set({
-            collectedAmount: sql`${campaigns.collectedAmount} + ${donation.amount}`,
-            donationCount: sql`${campaigns.donationCount} + 1`,
-          })
-          .where(eq(campaigns.id, donation.campaignId));
-
-        await tx.insert(notificationsOutbox).values({
-          channel: "email",
-          template: "donation_receipt",
-          payload: { donationId: donation.id, campaignId: donation.campaignId },
-        });
-
-        return { alreadyProcessed: false as const, paid: true as const };
-      });
-
-      return { status: result.alreadyProcessed ? "already_processed" : "processed" };
+      return processPaymentWebhookEvent(event);
+    },
+    {
+      response: {
+        200: t.Object({ status: t.String() }),
+        401: PaymentErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/payments/webhook/sumopod",
+    async ({ request, set }) => {
+      const provider = getSumopodProvider();
+      let event: WebhookEvent;
+      try {
+        event = await provider.parseWebhook(request);
+      } catch {
+        set.status = 401;
+        return { error: "invalid_signature" };
+      }
+      return processPaymentWebhookEvent(event);
     },
     {
       response: {
@@ -308,7 +354,9 @@ export const donationsRoute = new Elysia()
         campaignId: row.donation.campaignId,
         amount: moneyToJSON({ amount: row.donation.amount, currency: row.donation.currency }),
         status: row.donation.status,
+        method: row.payment.method as "bank_transfer_va" | "qris_redirect",
         vaNumber: row.payment.vaNumber,
+        redirectUrl: row.payment.redirectUrl,
         expiresAt: row.payment.expiresAt.toISOString(),
         paidAt: row.donation.paidAt?.toISOString() ?? null,
       };

@@ -18,6 +18,45 @@ import { donationsRoute } from "./donations";
 
 const app = donationsRoute;
 
+// Matches donations.ts's own SUMOPOD_WEBHOOK_SECRET fallback default (no
+// SUMOPOD_WEBHOOK_SECRET env var is set for this test run) -- same pattern
+// as MOCK_MIDTRANS_SERVER_KEY's "mock-server-key-for-dev" default below.
+const SUMOPOD_WEBHOOK_SECRET =
+  process.env.SUMOPOD_WEBHOOK_SECRET ?? "whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz";
+
+// Independently computes a valid svix-style signature -- mirrors
+// sumopod-signature.test.ts's and sumopod-provider.test.ts's own local
+// helpers rather than importing sumopod-signature.ts's internals.
+async function computeSumopodSignature(
+  secret: string,
+  svixId: string,
+  svixTimestamp: string,
+  body: string,
+) {
+  function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+  const secretBytes = base64ToBytes(secret.replace(/^whsec_/, ""));
+  const signedContent = `${svixId}.${svixTimestamp}.${body}`;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    secretBytes,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signatureBytes = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(signedContent),
+  );
+  const sig = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)));
+  return `v1,${sig}`;
+}
+
 const TEST_USER_ID = "44444444-5555-6666-7777-999999999901";
 const OTHER_USER_ID = "44444444-5555-6666-7777-999999999902";
 const TEST_TOKEN = "donations-test-token";
@@ -75,7 +114,11 @@ describe("POST /donations", () => {
       new Request("http://localhost/donations", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr: "50000" }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+        }),
       }),
     );
     expect(resp.status).toBe(200);
@@ -98,7 +141,11 @@ describe("POST /donations", () => {
       new Request("http://localhost/donations", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr: "50000" }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+        }),
       }),
     );
     expect(resp.status).toBe(400);
@@ -111,7 +158,11 @@ describe("POST /donations", () => {
       new Request("http://localhost/donations", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": key },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr: "75000" }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "75000",
+          paymentMethod: "bank_transfer_va",
+        }),
       });
     const first = await app.handle(req());
     const firstBody = (await first.json()) as { donationId: string };
@@ -130,6 +181,7 @@ describe("POST /donations", () => {
         body: JSON.stringify({
           campaignId: "00000000-0000-0000-0000-000000000000",
           amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
         }),
       }),
     );
@@ -142,7 +194,11 @@ describe("POST /donations", () => {
       new Request("http://localhost/donations", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr: "not-a-number" }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "not-a-number",
+          paymentMethod: "bank_transfer_va",
+        }),
       }),
     );
     expect(resp.status).toBe(422);
@@ -160,7 +216,11 @@ describe("POST /donations", () => {
       new Request("http://localhost/donations", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": key },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr: "50000" }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+        }),
       }),
     );
     expect(resp.status).toBe(409);
@@ -175,7 +235,11 @@ describe("POST /donations", () => {
       new Request("http://localhost/donations", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": key },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr: "50000" }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+        }),
       });
     const [a, b] = await Promise.all([app.handle(req()), app.handle(req())]);
     // Whichever request loses the race for the DB-level claim can observe
@@ -212,6 +276,7 @@ describe("POST /donations", () => {
         body: JSON.stringify({
           campaignId: "00000000-0000-0000-0000-000000000000",
           amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
         }),
       }),
     );
@@ -222,10 +287,91 @@ describe("POST /donations", () => {
       new Request("http://localhost/donations", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": key },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr: "50000" }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+        }),
       }),
     );
     expect(retryResp.status).toBe(200);
+  });
+});
+
+// Sumopod's `createCharge` always calls its hardcoded sandbox URL
+// (https://api-pay-sandbox.sumopod.com) -- there's no local baseUrl override
+// wired through donations.ts's getProvider(), and hitting the real sandbox
+// from this suite would make tests network-dependent and flaky. Stubbing
+// globalThis.fetch is the only way to exercise the real POST /donations ->
+// getProvider("qris_redirect") -> SumopodProvider.createCharge path without
+// a real network call, while still proving the route wiring (not just an
+// isolated `instanceof` check) actually works end-to-end.
+async function withStubbedSumopodFetch<T>(fn: () => Promise<T>): Promise<T> {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input, init) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("api-pay-sandbox.sumopod.com")) {
+      return Response.json({
+        payment_id: `sumopod-test-payment-${crypto.randomUUID()}`,
+        order_id: "unused-by-this-fixture",
+        payment_link_url: "https://pay.sumopod.com/pay/test-fixture",
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      });
+    }
+    return originalFetch(input, init);
+  }) as typeof fetch;
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function createTestQrisDonation(amountStr: string) {
+  const campaign = await seedTestCampaign();
+  const resp = await withStubbedSumopodFetch(() =>
+    app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr,
+          paymentMethod: "qris_redirect",
+        }),
+      }),
+    ),
+  );
+  const body = (await resp.json()) as { donationId: string };
+  const [payment] = await db
+    .select()
+    .from(payments)
+    .where(eq(payments.donationId, body.donationId));
+  if (!payment) throw new Error("payment row missing");
+  return { campaign, donationId: body.donationId, providerOrderId: payment.providerOrderId };
+}
+
+describe("POST /donations with paymentMethod: qris_redirect", () => {
+  test("creates a pending donation and a payment with a redirect URL, backed by SumopodProvider", async () => {
+    const { donationId } = await createTestQrisDonation("70000");
+
+    const body_ = await app.handle(new Request(`http://localhost/donations/${donationId}`)).then(
+      (r) =>
+        r.json() as Promise<{
+          method: string;
+          vaNumber: string | null;
+          redirectUrl: string | null;
+        }>,
+    );
+    expect(body_.method).toBe("qris_redirect");
+    expect(body_.vaNumber).toBeNull();
+    expect(body_.redirectUrl).toBe("https://pay.sumopod.com/pay/test-fixture");
+
+    const [payment] = await db.select().from(payments).where(eq(payments.donationId, donationId));
+    expect(payment?.provider).toBe("sumopod");
+    expect(payment?.method).toBe("qris_redirect");
+    expect(payment?.vaNumber).toBeNull();
+    expect(payment?.redirectUrl).toBe("https://pay.sumopod.com/pay/test-fixture");
   });
 });
 
@@ -236,7 +382,11 @@ describe("GET /donations/:id", () => {
       new Request("http://localhost/donations", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr: "20000" }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "20000",
+          paymentMethod: "bank_transfer_va",
+        }),
       }),
     );
     const { donationId } = (await resp.json()) as { donationId: string };
@@ -246,11 +396,15 @@ describe("GET /donations/:id", () => {
     const body = (await statusResp.json()) as {
       id: string;
       status: string;
+      method: string;
       vaNumber: string | null;
+      redirectUrl: string | null;
     };
     expect(body.id).toBe(donationId);
     expect(body.status).toBe("pending");
+    expect(body.method).toBe("bank_transfer_va");
     expect(body.vaNumber).not.toBeNull();
+    expect(body.redirectUrl).toBeNull();
   });
 
   test("404s for a nonexistent donation id", async () => {
@@ -266,7 +420,11 @@ describe("GET /donations/:id", () => {
       authedRequest("http://localhost/donations", TEST_TOKEN, {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr: "30000" }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "30000",
+          paymentMethod: "bank_transfer_va",
+        }),
       }),
     );
     const { donationId } = (await resp.json()) as { donationId: string };
@@ -278,11 +436,15 @@ describe("GET /donations/:id", () => {
     const body = (await statusResp.json()) as {
       id: string;
       status: string;
+      method: string;
       vaNumber: string | null;
+      redirectUrl: string | null;
     };
     expect(body.id).toBe(donationId);
     expect(body.status).toBe("pending");
+    expect(body.method).toBe("bank_transfer_va");
     expect(body.vaNumber).not.toBeNull();
+    expect(body.redirectUrl).toBeNull();
   });
 
   test("404s when a different user tries to access a user-owned donation (not 403)", async () => {
@@ -291,7 +453,11 @@ describe("GET /donations/:id", () => {
       authedRequest("http://localhost/donations", TEST_TOKEN, {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr: "40000" }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "40000",
+          paymentMethod: "bank_transfer_va",
+        }),
       }),
     );
     const { donationId } = (await resp.json()) as { donationId: string };
@@ -310,7 +476,11 @@ describe("POST /payments/webhook", () => {
       new Request("http://localhost/donations", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ campaignId: campaign.id, amountStr }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr,
+          paymentMethod: "bank_transfer_va",
+        }),
       }),
     );
     const body = (await resp.json()) as { donationId: string; vaNumber: string };
@@ -347,6 +517,16 @@ describe("POST /payments/webhook", () => {
     const [campaignAfter] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
     expect(campaignAfter?.collectedAmount).toBe((campaignBefore?.collectedAmount ?? 0n) + 50000n);
     expect(campaignAfter?.donationCount).toBe((campaignBefore?.donationCount ?? 0) + 1);
+
+    // payment_events.provider must record which provider actually delivered
+    // this event, not a hardcoded literal -- this route processes both
+    // /payments/webhook (mock) and /payments/webhook/sumopod deliveries
+    // through the same shared function.
+    const [eventRow] = await db
+      .select()
+      .from(paymentEvents)
+      .where(eq(paymentEvents.providerEventId, payload.transaction_id as string));
+    expect(eventRow?.provider).toBe("mock");
   });
 
   test("a duplicate webhook delivery is a 200 no-op, not a double-processed donation", async () => {
@@ -484,5 +664,94 @@ describe("POST /payments/webhook", () => {
     expect(donation?.status).toBe("paid");
     const [payment] = await db.select().from(payments).where(eq(payments.donationId, donationId));
     expect(payment?.status).toBe("paid");
+  });
+});
+
+describe("POST /payments/webhook/sumopod", () => {
+  test("an invalid signature is rejected with 401 and never writes a payment_events row", async () => {
+    const rawBody = JSON.stringify({
+      event_type: "payment.completed",
+      data: { payment_id: "sumopod-invalid-sig-test", order_id: "irrelevant", status: "completed" },
+    });
+    const resp = await app.handle(
+      new Request("http://localhost/payments/webhook/sumopod", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "svix-id": "msg_invalid_sig_test",
+          "svix-timestamp": "1700000000",
+          "svix-signature": "v1,bm90LXRoZS1yaWdodC1zaWduYXR1cmU=",
+        },
+        body: rawBody,
+      }),
+    );
+    expect(resp.status).toBe(401);
+
+    const rows = await db
+      .select()
+      .from(paymentEvents)
+      .where(eq(paymentEvents.providerEventId, "sumopod-invalid-sig-test:payment.completed"));
+    expect(rows).toHaveLength(0);
+  });
+
+  test("a validly-signed payment.completed webhook marks a qris_redirect donation paid, increments campaign totals, and records provider: sumopod", async () => {
+    const { campaign, donationId, providerOrderId } = await createTestQrisDonation("80000");
+
+    // Sumopod's own internal payment id -- deliberately a DIFFERENT value
+    // than providerOrderId (which, per this same task's fix to
+    // sumopod-provider.ts, is our own order id / donationId), so this test
+    // proves the two sides correlate via order_id, not by coincidence.
+    const sumopodPaymentId = `sumopod-internal-payment-${crypto.randomUUID()}`;
+    const rawBody = JSON.stringify({
+      event_type: "payment.completed",
+      data: {
+        payment_id: sumopodPaymentId,
+        order_id: providerOrderId,
+        amount: 80000,
+        fee: 1200,
+        net_amount: 78800,
+        status: "completed",
+        payment_method: "qris",
+        completed_at: new Date().toISOString(),
+      },
+    });
+    const svixId = `msg_${crypto.randomUUID()}`;
+    const svixTimestamp = String(Math.floor(Date.now() / 1000));
+    const sig = await computeSumopodSignature(
+      SUMOPOD_WEBHOOK_SECRET,
+      svixId,
+      svixTimestamp,
+      rawBody,
+    );
+
+    const [campaignBefore] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+
+    const resp = await app.handle(
+      new Request("http://localhost/payments/webhook/sumopod", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "svix-id": svixId,
+          "svix-timestamp": svixTimestamp,
+          "svix-signature": sig,
+        },
+        body: rawBody,
+      }),
+    );
+    expect(resp.status).toBe(200);
+
+    const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donation?.status).toBe("paid");
+    expect(donation?.paidAt).not.toBeNull();
+
+    const [campaignAfter] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(campaignAfter?.collectedAmount).toBe((campaignBefore?.collectedAmount ?? 0n) + 80000n);
+    expect(campaignAfter?.donationCount).toBe((campaignBefore?.donationCount ?? 0) + 1);
+
+    const [eventRow] = await db
+      .select()
+      .from(paymentEvents)
+      .where(eq(paymentEvents.providerEventId, `${sumopodPaymentId}:payment.completed`));
+    expect(eventRow?.provider).toBe("sumopod");
   });
 });
