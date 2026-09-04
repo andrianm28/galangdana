@@ -54,6 +54,27 @@ describe("campaigner dashboard rendering", () => {
     expect(link.getAttribute("href")).toBe("/dashboard/campaigns/2/revise");
   });
 
+  test("links an active campaign to the pencairan entry point", () => {
+    render(Page, {
+      props: {
+        data: {
+          campaigns: [
+            {
+              id: "3",
+              slug: "bantu-warga-desa",
+              title: "Bantu Warga Desa",
+              status: "active",
+            },
+          ],
+        },
+        params: {},
+        form: null,
+      },
+    });
+    const link = screen.getByRole("link", { name: /Ajukan Pencairan/ });
+    expect(link.getAttribute("href")).toBe("/dashboard/campaigns/3/pencairan");
+  });
+
   test("shows an empty-state message with no campaigns yet", () => {
     render(Page, { props: { data: { campaigns: [] }, params: {}, form: null } });
     expect(screen.getByText(/belum punya campaign/i)).not.toBeNull();

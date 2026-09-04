@@ -65,4 +65,10 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, { props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } } });
     expect(screen.getByText("Ini adalah cerita lengkap campaign.")).not.toBeNull();
   });
+
+  test("links to the campaign's public disbursement log page", () => {
+    render(Page, { props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } } });
+    const link = screen.getByText("Riwayat Pencairan Dana");
+    expect(link.getAttribute("href")).toBe("/campaign/test-goal/pencairan-dana");
+  });
 });

@@ -118,7 +118,26 @@ export class MockPaymentProvider implements PaymentProvider {
     return { providerOrderId: orderId, status: charge ? "pending" : "failed" };
   }
 
-  async createPayout(_input: PayoutInput): Promise<PayoutResult> {
-    throw new Error("createPayout is not implemented -- payouts are Phase 6 scope");
+  async createPayout(input: PayoutInput): Promise<PayoutResult> {
+    // Mirrors Xendit's current Payouts API v2 response shape (an "id" field
+    // and a "status" field valued from {ACCEPTED, REQUESTED,
+    // PENDING_COMPLIANCE_ASSESSMENT, COMPLIANCE_REJECTED, SUCCEEDED, FAILED,
+    // CANCELLED, REVERSED} -- verified via docs.xendit.co during Task 4's
+    // research, see task-4-report.md) rather than the older Disbursement
+    // API's PENDING/COMPLETED/FAILED vocabulary this task's brief originally
+    // sketched -- so a real XenditProvider later reuses this exact
+    // interface unchanged, matching how MockPaymentProvider's
+    // createCharge/parseWebhook already mirror Midtrans's real wire format.
+    // This mock completes synchronously ("completed" immediately,
+    // corresponding to Xendit's terminal SUCCEEDED state) since there's no
+    // async payout queue in this slice (see this plan's Scope Note) -- a
+    // real adapter's createPayout would return "pending" (Xendit's initial
+    // ACCEPTED/REQUESTED states) and complete later via the
+    // x-callback-token-verified callback, which this plan's Task 8 does not
+    // yet consume.
+    return {
+      payoutId: `payout-${input.referenceId}`,
+      status: "completed",
+    };
   }
 }

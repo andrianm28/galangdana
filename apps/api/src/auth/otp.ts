@@ -1,4 +1,4 @@
-import { db, otpChallenges, users } from "@galangdana/db";
+import { db, otpChallenges, type otpPurposeEnum, users } from "@galangdana/db";
 import type { User } from "@galangdana/db";
 import { and, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import { normalizePhone } from "./normalize";
@@ -23,6 +23,7 @@ export interface RequestOtpResult {
 
 export async function requestOtp(
   phone: string,
+  purpose: (typeof otpPurposeEnum.enumValues)[number],
   smsProvider: SmsProvider = new ConsoleSmsProvider(),
 ): Promise<RequestOtpResult> {
   // Normalized BEFORE rate-limiting and BEFORE the DB write: without
@@ -51,6 +52,7 @@ export async function requestOtp(
 
   await db.insert(otpChallenges).values({
     phone: normalized,
+    purpose,
     codeHash,
     expiresAt: new Date(Date.now() + OTP_TTL_MS),
   });
@@ -71,7 +73,11 @@ export interface VerifyOtpResult {
     | "already_used";
 }
 
-export async function verifyOtp(phone: string, code: string): Promise<VerifyOtpResult> {
+export async function verifyOtp(
+  phone: string,
+  code: string,
+  purpose: (typeof otpPurposeEnum.enumValues)[number],
+): Promise<VerifyOtpResult> {
   const normalized = normalizePhone(phone);
   if (!normalized) {
     return { success: false, reason: "invalid_phone" };
@@ -87,7 +93,13 @@ export async function verifyOtp(phone: string, code: string): Promise<VerifyOtpR
   const [challenge] = await db
     .select()
     .from(otpChallenges)
-    .where(and(eq(otpChallenges.phone, normalized), isNull(otpChallenges.consumedAt)))
+    .where(
+      and(
+        eq(otpChallenges.phone, normalized),
+        eq(otpChallenges.purpose, purpose),
+        isNull(otpChallenges.consumedAt),
+      ),
+    )
     .orderBy(desc(otpChallenges.createdAt))
     .limit(1);
 
@@ -156,6 +168,14 @@ export async function verifyOtp(phone: string, code: string): Promise<VerifyOtpR
 
   if (!consumed) {
     return { success: false, reason: "already_used" };
+  }
+
+  // Only the "login" purpose creates/returns a User -- a disbursement OTP
+  // verifies an ALREADY-authenticated campaigner's intent to submit a
+  // specific payout request, it doesn't authenticate a phone number into
+  // a session. Task 7's caller ignores `user` for purpose "disbursement".
+  if (purpose !== "login") {
+    return { success: true };
   }
 
   // Atomic find-or-create via INSERT ... ON CONFLICT, not a separate

@@ -78,7 +78,7 @@ describe("phone OTP flow", () => {
       }
     }
     const sms = new CapturingSms();
-    await requestOtp(OTP_PHONE, sms);
+    await requestOtp(OTP_PHONE, "login", sms);
 
     const verifyResp = await app.handle(
       new Request("http://localhost/auth/otp/verify", {

@@ -49,10 +49,17 @@ describe("MockPaymentProvider", () => {
     await expect(provider.parseWebhook(req)).rejects.toThrow(/signature/i);
   });
 
-  test("createPayout is not implemented (payouts are Phase 6)", async () => {
+  test("createPayout returns a completed payout synchronously", async () => {
     const provider = new MockPaymentProvider({ serverKey: "test-key" });
-    await expect(
-      provider.createPayout({ orderId: "x", amount: 1n, bankAccount: "x", bankCode: "x" }),
-    ).rejects.toThrow(/not implemented/i);
+    const result = await provider.createPayout({
+      referenceId: "disb-123",
+      amount: 500_000n,
+      channelCode: "ID_BCA",
+      accountNumber: "1234567890",
+      accountHolderName: "Test Campaigner",
+      description: "Pencairan dana kampanye",
+    });
+    expect(result.status).toBe("completed");
+    expect(result.payoutId).toContain("disb-123");
   });
 });

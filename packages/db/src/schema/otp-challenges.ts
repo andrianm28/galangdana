@@ -1,4 +1,10 @@
-import { index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+
+// Existing rows (all pre-Phase-6 login OTPs) get "login" via the
+// migration's server_default -- see Step 5. A disbursement OTP
+// challenge must never verify a login attempt and vice versa; every
+// query in otp.ts (Task 3) filters on purpose, not just phone.
+export const otpPurposeEnum = pgEnum("otp_purpose", ["login", "disbursement"]);
 
 // codeHash is a Bun.password hash of the OTP digits, never the plaintext
 // code. attempts counts verify attempts consumed against THIS challenge
@@ -11,6 +17,7 @@ export const otpChallenges = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     phone: text("phone").notNull(),
+    purpose: otpPurposeEnum("purpose").notNull().default("login"),
     codeHash: text("code_hash").notNull(),
     attempts: integer("attempts").notNull().default(0),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -18,13 +25,14 @@ export const otpChallenges = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // verifyOtp() runs `WHERE phone = ? AND consumed_at IS NULL ORDER BY
-    // created_at DESC LIMIT 1` on every single OTP verify -- the hottest
-    // query in this subsystem -- and had no supporting index at all. The
-    // final whole-branch review re-raised this (it was deferred earlier
-    // as "not yet needed") once whole-branch context showed it's live on
-    // this exact hot path today, not a forward-looking concern.
-    index("otp_challenges_phone_created_at_idx").on(table.phone, table.createdAt),
+    // The existing (phone, createdAt) index no longer fully matches
+    // verifyOtp's WHERE clause once purpose is added (Task 3) -- extend
+    // it to (phone, purpose, createdAt) rather than adding a second index.
+    index("otp_challenges_phone_purpose_created_at_idx").on(
+      table.phone,
+      table.purpose,
+      table.createdAt,
+    ),
   ],
 );
 

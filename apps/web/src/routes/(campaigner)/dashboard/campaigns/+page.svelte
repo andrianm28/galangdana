@@ -37,6 +37,14 @@ const STATUS_LABELS: Record<string, string> = {
               Perbaiki
             </a>
           {/if}
+          {#if campaign.status === "active"}
+            <a
+              href="/dashboard/campaigns/{campaign.id}/pencairan"
+              class="rounded-sm bg-primary px-3 py-1.5 font-sans text-xs font-semibold text-white hover:bg-primary-dark"
+            >
+              Ajukan Pencairan
+            </a>
+          {/if}
         </li>
       {/each}
     </ul>

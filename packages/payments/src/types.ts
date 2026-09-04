@@ -25,15 +25,25 @@ export interface PaymentStatus {
   status: "pending" | "paid" | "failed" | "expired";
 }
 
+/**
+ * Field names mirror Xendit's current Payouts API v2 (reference_id +
+ * channel_code + channel_properties), not the older Disbursement API's
+ * external_id/bank_code -- verified via docs.xendit.co, see mock-provider.ts's
+ * createPayout for detail. accountNumber/accountHolderName correspond to
+ * Xendit's nested channel_properties object; channelCode is e.g. "ID_BCA".
+ */
 export interface PayoutInput {
-  orderId: string;
+  referenceId: string;
   amount: bigint;
-  bankAccount: string;
-  bankCode: string;
+  channelCode: string;
+  accountNumber: string;
+  accountHolderName: string;
+  description: string;
 }
 
 export interface PayoutResult {
   payoutId: string;
+  status: "pending" | "completed" | "failed";
 }
 
 export interface PaymentProvider {

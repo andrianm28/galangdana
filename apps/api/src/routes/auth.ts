@@ -95,7 +95,7 @@ export const authRoute = new Elysia({ prefix: "/auth" })
   .post(
     "/otp/request",
     async ({ body, set }) => {
-      const result = await requestOtp(body.phone);
+      const result = await requestOtp(body.phone, "login");
       if (!result.sent) {
         set.status = result.reason === "invalid_phone" ? 400 : 429;
         return { error: result.reason ?? "too_many_requests" };
@@ -110,7 +110,7 @@ export const authRoute = new Elysia({ prefix: "/auth" })
   .post(
     "/otp/verify",
     async ({ body, cookie, set }) => {
-      const result = await verifyOtp(body.phone, body.code);
+      const result = await verifyOtp(body.phone, body.code, "login");
       if (!result.success || !result.user) {
         set.status = result.reason === "invalid_phone" ? 400 : 401;
         return { error: result.reason ?? "verification_failed" };
