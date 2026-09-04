@@ -17,4 +17,17 @@ const { children }: Props = $props();
   <main class="mx-auto max-w-md px-4 py-6">
     {@render children()}
   </main>
+  <footer class="border-t border-neutral-200 bg-white">
+    <div class="mx-auto max-w-md px-4 py-4 text-center text-xs text-neutral-500">
+      fundforindonesia.org diselenggarakan di bawah naungan
+      <a
+        href="https://yayasanindonesiaemas.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="font-medium text-primary-dark hover:underline"
+      >
+        Yayasan Indonesia Emas
+      </a>
+    </div>
+  </footer>
 </div>

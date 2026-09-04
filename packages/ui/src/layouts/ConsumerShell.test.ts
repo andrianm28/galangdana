@@ -18,6 +18,14 @@ describe("ConsumerShell", () => {
     const main = container.querySelector("main");
     expect(main?.className).toContain("max-w-md");
   });
+
+  test("credits Yayasan Indonesia Emas as the operating foundation, linking to its site", () => {
+    render(ConsumerShell, { props: { children: textSnippet("x") } });
+    const link = screen.getByRole("link", { name: "Yayasan Indonesia Emas" });
+    expect(link.getAttribute("href")).toBe("https://yayasanindonesiaemas.com/");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
 });
 
 function textSnippet(text: string) {
