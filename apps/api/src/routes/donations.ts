@@ -102,9 +102,7 @@ async function processPaymentWebhookEvent(event: WebhookEvent) {
       await tx
         .update(payments)
         .set({ status: event.status, updatedAt: now })
-        .where(
-          and(eq(payments.providerOrderId, event.providerOrderId), ne(payments.status, "paid")),
-        );
+        .where(and(eq(payments.id, payment.id), ne(payments.status, "paid")));
       return { alreadyProcessed: false as const, paid: false as const };
     }
 

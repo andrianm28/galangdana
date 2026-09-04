@@ -869,6 +869,14 @@ describe("provider-scoped webhook payment lookup", () => {
 
 describe("Sumopod webhook secret fails closed when unset", () => {
   test("a webhook signed with the leaked default secret is rejected, not accepted, when SUMOPOD_WEBHOOK_SECRET is unset", async () => {
+    // Forged against a REAL pending donation's providerOrderId -- not a
+    // made-up "irrelevant" one -- so this test can actually distinguish
+    // "signature correctly rejected" from "signature wrongly accepted,
+    // but happens to 500 later because no order matched." Both produce a
+    // non-200 response, so asserting only `not.toBe("200")` against a
+    // fabricated order id doesn't prove the signature check itself held.
+    const { donationId, providerOrderId } = await createTestQrisDonation("65000");
+
     // The exact placeholder value that used to be donations.ts's fail-open
     // fallback -- committed in this repo's own source and tests, so
     // anyone reading the code could compute a valid signature with it. If
@@ -878,7 +886,7 @@ describe("Sumopod webhook secret fails closed when unset", () => {
       event_type: "payment.completed",
       data: {
         payment_id: "fail-closed-regression-test",
-        order_id: "irrelevant",
+        order_id: providerOrderId,
         status: "completed",
       },
     });
@@ -890,13 +898,26 @@ describe("Sumopod webhook secret fails closed when unset", () => {
     // at import time, so this must run in a genuinely fresh process with
     // the env var unset -- deleting it here (this file already imported
     // donations.ts at the top) would not affect the already-bound value.
-    const env = { ...process.env };
-    env.SUMOPOD_WEBHOOK_SECRET = "";
+    // An empty string is still "present" for a `?? "fallback"` check (only
+    // null/undefined trigger it), so this must genuinely OMIT the key --
+    // and setting it to `undefined` doesn't do that either: Bun.spawn's
+    // `env` treats an `undefined`-valued key as "inherit from this
+    // process's real env", which would silently leak the real secret
+    // through and defeat this test. Filtering the key out of the object
+    // entirely is the only option that truly unsets it for the child.
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => key !== "SUMOPOD_WEBHOOK_SECRET"),
+    );
 
     const proc = Bun.spawn({
       cmd: [
         "bun",
         "run",
+        // Bun auto-loads .env from the cwd by default, which would
+        // silently re-supply the real secret to the child even after
+        // it's deleted from `env` above -- point it at /dev/null so the
+        // child genuinely sees no secret.
+        "--env-file=/dev/null",
         `${import.meta.dir}/__fixtures__/sumopod-webhook-fail-closed.fixture.ts`,
         svixId,
         svixTimestamp,
@@ -917,5 +938,10 @@ describe("Sumopod webhook secret fails closed when unset", () => {
     if (exitCode !== 0 && !stdout.trim()) {
       throw new Error(`fixture process failed unexpectedly: ${stderr}`);
     }
+
+    // The property that actually matters: the forged webhook must not
+    // have settled the real donation it targeted.
+    const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donation?.status).toBe("pending");
   });
 });
