@@ -76,7 +76,12 @@ describe("SumopodProvider.createCharge", () => {
           body: await req.json(),
         };
         return Response.json({
-          payment_id: "11111111-1111-1111-1111-111111111111",
+          // Deliberately different from order_id below -- Sumopod's own
+          // internal payment id is NOT what createCharge should return as
+          // providerOrderId (see sumopod-provider.ts's comment); using the
+          // same value for both here would let a regression of that bug
+          // pass silently.
+          payment_id: "sumopod-internal-payment-id-999",
           order_id: "INV-2026-001",
           amount: 50000,
           fee: 750,
@@ -116,7 +121,11 @@ describe("SumopodProvider.createCharge", () => {
     });
 
     expect(result).toEqual({
-      providerOrderId: "11111111-1111-1111-1111-111111111111",
+      // Our own orderId, NOT the mock server's payment_id -- this is the
+      // value parseWebhook's providerOrderId must later agree with (see
+      // "correctly correlates createCharge's providerOrderId with a
+      // matching parseWebhook event" below).
+      providerOrderId: "INV-2026-001",
       method: "qris_redirect",
       redirectUrl: "https://pay.sumopod.com/pay/11111111-1111-1111-1111-111111111111",
       expiresAt: new Date("2026-01-01T12:00:00Z"),
@@ -140,6 +149,61 @@ describe("SumopodProvider.createCharge", () => {
     await expect(
       provider.createCharge({ orderId: "INV-2026-002", grossAmount: 10000n, currency: "IDR" }),
     ).rejects.toThrow(/401/);
+  });
+
+  test("createCharge's providerOrderId matches what parseWebhook later extracts for the same payment", async () => {
+    // Regression coverage for a real bug: createCharge used to return
+    // Sumopod's own payment_id as providerOrderId, while parseWebhook reads
+    // providerOrderId from the webhook's order_id -- two DIFFERENT values
+    // from Sumopod's API, so apps/api's `payments.providerOrderId` lookup
+    // would never match a real webhook delivery. Sumopod's payment_id is
+    // deliberately distinct from order_id in both the createCharge response
+    // and the webhook payload below, so this test only passes if both sides
+    // genuinely correlate via orderId -- not by test-construction coincidence.
+    server = Bun.serve({
+      port: 0,
+      fetch() {
+        return Response.json({
+          payment_id: "sumopod-internal-payment-id-777",
+          order_id: "INV-2026-CORR-001",
+          amount: 25000,
+          fee: 375,
+          net_amount: 24625,
+          payment_link_url: "https://pay.sumopod.com/pay/corr-001",
+          status: "pending",
+          expires_at: "2026-01-01T12:00:00Z",
+        });
+      },
+    });
+
+    const provider = new SumopodProvider({
+      apiKey: "test-api-key",
+      webhookSecret: WEBHOOK_SECRET,
+      baseUrl: `http://localhost:${server.port}`,
+    });
+
+    const charge = await provider.createCharge({
+      orderId: "INV-2026-CORR-001",
+      grossAmount: 25000n,
+      currency: "IDR",
+    });
+
+    const rawBody = webhookRequest(
+      "payment.completed",
+      "INV-2026-CORR-001",
+      "sumopod-internal-payment-id-777",
+    );
+    const svixId = "msg_corr_1";
+    const svixTimestamp = "1700000000";
+    const sig = await computeSignature(WEBHOOK_SECRET, svixId, svixTimestamp, rawBody);
+    const req = new Request("http://localhost/webhooks/sumopod", {
+      method: "POST",
+      headers: { "svix-id": svixId, "svix-timestamp": svixTimestamp, "svix-signature": sig },
+      body: rawBody,
+    });
+    const event = await provider.parseWebhook(req);
+
+    expect(event.providerOrderId).toBe(charge.providerOrderId);
   });
 });
 

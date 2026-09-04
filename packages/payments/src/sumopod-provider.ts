@@ -54,7 +54,13 @@ export class SumopodProvider implements PaymentProvider {
     };
 
     return {
-      providerOrderId: data.payment_id,
+      // Our own order id, not Sumopod's payment_id -- mirrors
+      // MockPaymentProvider's own convention (providerOrderId: input.orderId
+      // there too) so that this same value is what parseWebhook's
+      // `body.data.order_id` echoes back later, and the two sides always
+      // correlate. Sumopod's payment_id is only used as the dedup key for
+      // providerEventId, never for this correlation.
+      providerOrderId: input.orderId,
       method: "qris_redirect",
       redirectUrl: data.payment_link_url,
       expiresAt: new Date(data.expires_at),
