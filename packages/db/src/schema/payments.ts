@@ -11,6 +11,7 @@ export const payments = pgTable("payments", {
   method: text("method").notNull(),
   providerOrderId: text("provider_order_id").notNull().unique(),
   vaNumber: text("va_number"),
+  redirectUrl: text("redirect_url"),
   grossAmount: bigint("gross_amount", { mode: "bigint" }).notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   status: donationStatusEnum("status").notNull().default("pending"),
