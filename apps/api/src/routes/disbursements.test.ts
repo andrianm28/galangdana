@@ -152,6 +152,14 @@ async function createTestCampaign(campaignerId: string, status: "draft" | "activ
       model: "goal",
       goalAmount: 100_000_000n,
       status,
+      // A real active campaign always has these set; a null publishedAt
+      // sorts first under GET /campaigns's default DESC ordering
+      // (Postgres's NULLS FIRST), which previously corrupted
+      // campaigns.test.ts's sort assertions whenever this row was still
+      // present in the shared test database -- see the
+      // campaigns-test-isolation-gap memory this was tracked under.
+      publishedAt: status === "active" ? new Date() : null,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     })
     .returning();
   if (!campaign) throw new Error("campaign insert failed");
@@ -179,6 +187,7 @@ async function createProgramTestCampaign(campaignerId: string) {
       currency: "IDR",
       model: "program",
       status: "active",
+      publishedAt: new Date(),
     })
     .returning();
   if (!campaign) throw new Error("program campaign insert failed");
