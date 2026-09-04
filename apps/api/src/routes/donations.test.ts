@@ -868,7 +868,7 @@ describe("provider-scoped webhook payment lookup", () => {
 });
 
 describe("Sumopod webhook secret fails closed when unset", () => {
-  test("a webhook signed with the leaked default secret is rejected, not accepted, when SUMOPOD_WEBHOOK_SECRET is unset", async () => {
+  test("a forged webhook is rejected, not accepted, when SUMOPOD_WEBHOOK_SECRET is unset", async () => {
     // Forged against a REAL pending donation's providerOrderId -- not a
     // made-up "irrelevant" one -- so this test can actually distinguish
     // "signature correctly rejected" from "signature wrongly accepted,
@@ -877,11 +877,13 @@ describe("Sumopod webhook secret fails closed when unset", () => {
     // fabricated order id doesn't prove the signature check itself held.
     const { donationId, providerOrderId } = await createTestQrisDonation("65000");
 
-    // The exact placeholder value that used to be donations.ts's fail-open
-    // fallback -- committed in this repo's own source and tests, so
-    // anyone reading the code could compute a valid signature with it. If
-    // this is still accepted, the fail-open vulnerability has regressed.
-    const leakedSecret = "whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz";
+    // Any string works here -- the vulnerability under test was a fixed
+    // fail-open DEFAULT (donations.ts silently using some hardcoded value
+    // whenever SUMOPOD_WEBHOOK_SECRET was unset), not that one specific
+    // value. A truly-unset secret must reject every signature, not just
+    // one particular guess, so generating a fresh value each run proves
+    // the broader property and never becomes its own hardcoded credential.
+    const forgedSecret = `whsec_${btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))}`;
     const rawBody = JSON.stringify({
       event_type: "payment.completed",
       data: {
@@ -892,7 +894,7 @@ describe("Sumopod webhook secret fails closed when unset", () => {
     });
     const svixId = `msg_${crypto.randomUUID()}`;
     const svixTimestamp = String(Math.floor(Date.now() / 1000));
-    const sig = await computeSumopodSignature(leakedSecret, svixId, svixTimestamp, rawBody);
+    const sig = await computeSumopodSignature(forgedSecret, svixId, svixTimestamp, rawBody);
 
     // donations.ts binds SUMOPOD_WEBHOOK_SECRET into a module-level const
     // at import time, so this must run in a genuinely fresh process with

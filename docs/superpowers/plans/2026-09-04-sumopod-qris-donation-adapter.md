@@ -454,7 +454,7 @@ Test using a self-computed HMAC (no real Sumopod server needed, per the Global C
 import { describe, expect, test } from "bun:test";
 import { verifySumopodSignature } from "./sumopod-signature";
 
-const SECRET = "whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz"; // "test-secret-key-for-unit-tests" base64
+const SECRET = `whsec_${btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))}`;
 const SVIX_ID = "msg_test123";
 const SVIX_TIMESTAMP = "1700000000";
 const RAW_BODY = JSON.stringify({ event_type: "payment.completed", data: { order_id: "x" } });

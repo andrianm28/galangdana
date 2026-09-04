@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { verifySumopodSignature } from "./sumopod-signature";
 
-const SECRET = "whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz"; // "test-secret-key-for-unit-tests" base64
+// Generated fresh per test run, not a literal -- this test only checks
+// internal self-consistency (sign with SECRET, verify with SECRET), so it
+// never needs to be a fixed, predictable, or shared value. Must stay
+// "whsec_<base64>" -- verifySumopodSignature strips the prefix and
+// base64-decodes the rest.
+const SECRET = `whsec_${btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))}`;
 const SVIX_ID = "msg_test123";
 const SVIX_TIMESTAMP = "1700000000";
 const RAW_BODY = JSON.stringify({ event_type: "payment.completed", data: { order_id: "x" } });

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { SumopodProvider } from "./sumopod-provider";
 
-const WEBHOOK_SECRET = "whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz"; // "test-secret-key-for-unit-tests" base64
+// Generated fresh per test run, not a literal -- see sumopod-signature.test.ts
+// for why (internal self-consistency only, never a fixed/shared value).
+const WEBHOOK_SECRET = `whsec_${btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))}`;
 
 // Independently computes a valid svix-style signature -- mirrors
 // sumopod-signature.test.ts's own local helper rather than importing
