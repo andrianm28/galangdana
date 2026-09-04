@@ -112,12 +112,8 @@
           "name": "bank_accounts_campaigner_id_campaigners_id_fk",
           "tableFrom": "bank_accounts",
           "tableTo": "campaigners",
-          "columnsFrom": [
-            "campaigner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaigner_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -172,9 +168,7 @@
         "campaign_categories_slug_unique": {
           "name": "campaign_categories_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -237,12 +231,8 @@
           "name": "campaigners_user_id_users_id_fk",
           "tableFrom": "campaigners",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -252,9 +242,7 @@
         "campaigners_user_id_unique": {
           "name": "campaigners_user_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_id"
-          ]
+          "columns": ["user_id"]
         }
       },
       "policies": {},
@@ -435,12 +423,8 @@
           "name": "campaigns_category_id_campaign_categories_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "campaign_categories",
-          "columnsFrom": [
-            "category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["category_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -448,12 +432,8 @@
           "name": "campaigns_campaigner_id_campaigners_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "campaigners",
-          "columnsFrom": [
-            "campaigner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaigner_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -461,12 +441,8 @@
           "name": "campaigns_draft_id_campaign_drafts_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "campaign_drafts",
-          "columnsFrom": [
-            "draft_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["draft_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -476,9 +452,7 @@
         "campaigns_slug_unique": {
           "name": "campaigns_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -548,12 +522,8 @@
           "name": "campaign_revisions_campaign_id_campaigns_id_fk",
           "tableFrom": "campaign_revisions",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -661,12 +631,8 @@
           "name": "donations_user_id_users_id_fk",
           "tableFrom": "donations",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -674,12 +640,8 @@
           "name": "donations_campaign_id_campaigns_id_fk",
           "tableFrom": "donations",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -687,12 +649,8 @@
           "name": "donations_allocation_policy_id_allocation_policies_id_fk",
           "tableFrom": "donations",
           "tableTo": "allocation_policies",
-          "columnsFrom": [
-            "allocation_policy_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["allocation_policy_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -823,12 +781,8 @@
           "name": "disbursement_requests_campaign_id_campaigns_id_fk",
           "tableFrom": "disbursement_requests",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -836,12 +790,8 @@
           "name": "disbursement_requests_bank_account_id_bank_accounts_id_fk",
           "tableFrom": "disbursement_requests",
           "tableTo": "bank_accounts",
-          "columnsFrom": [
-            "bank_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bank_account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -849,12 +799,8 @@
           "name": "disbursement_requests_approved_by_users_id_fk",
           "tableFrom": "disbursement_requests",
           "tableTo": "users",
-          "columnsFrom": [
-            "approved_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["approved_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -909,9 +855,7 @@
         "idempotency_keys_key_unique": {
           "name": "idempotency_keys_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "key"
-          ]
+          "columns": ["key"]
         }
       },
       "policies": {},
@@ -1002,16 +946,12 @@
         "users_phone_unique": {
           "name": "users_phone_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "phone"
-          ]
+          "columns": ["phone"]
         },
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -1066,12 +1006,8 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1242,12 +1178,8 @@
           "name": "oauth_accounts_user_id_users_id_fk",
           "tableFrom": "oauth_accounts",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1329,12 +1261,8 @@
           "name": "campaign_drafts_user_id_users_id_fk",
           "tableFrom": "campaign_drafts",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1342,12 +1270,8 @@
           "name": "campaign_drafts_category_id_campaign_categories_id_fk",
           "tableFrom": "campaign_drafts",
           "tableTo": "campaign_categories",
-          "columnsFrom": [
-            "category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["category_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1401,12 +1325,8 @@
           "name": "campaign_story_answers_draft_id_campaign_drafts_id_fk",
           "tableFrom": "campaign_story_answers",
           "tableTo": "campaign_drafts",
-          "columnsFrom": [
-            "draft_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["draft_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1416,10 +1336,7 @@
         "campaign_story_answers_draft_id_question_number_unique": {
           "name": "campaign_story_answers_draft_id_question_number_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "draft_id",
-            "question_number"
-          ]
+          "columns": ["draft_id", "question_number"]
         }
       },
       "policies": {},
@@ -1476,12 +1393,8 @@
           "name": "campaign_documents_draft_id_campaign_drafts_id_fk",
           "tableFrom": "campaign_documents",
           "tableTo": "campaign_drafts",
-          "columnsFrom": [
-            "draft_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["draft_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1489,12 +1402,8 @@
           "name": "campaign_documents_campaign_id_campaigns_id_fk",
           "tableFrom": "campaign_documents",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1554,10 +1463,7 @@
         "payment_events_provider_provider_event_id_unique": {
           "name": "payment_events_provider_provider_event_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "provider",
-            "provider_event_id"
-          ]
+          "columns": ["provider", "provider_event_id"]
         }
       },
       "policies": {},
@@ -1658,12 +1564,8 @@
           "name": "payments_donation_id_donations_id_fk",
           "tableFrom": "payments",
           "tableTo": "donations",
-          "columnsFrom": [
-            "donation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["donation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1673,16 +1575,12 @@
         "payments_donation_id_unique": {
           "name": "payments_donation_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "donation_id"
-          ]
+          "columns": ["donation_id"]
         },
         "payments_provider_order_id_unique": {
           "name": "payments_provider_order_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "provider_order_id"
-          ]
+          "columns": ["provider_order_id"]
         }
       },
       "policies": {},
@@ -1750,12 +1648,8 @@
           "name": "patients_draft_id_campaign_drafts_id_fk",
           "tableFrom": "patients",
           "tableTo": "campaign_drafts",
-          "columnsFrom": [
-            "draft_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["draft_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1765,9 +1659,7 @@
         "patients_draft_id_unique": {
           "name": "patients_draft_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "draft_id"
-          ]
+          "columns": ["draft_id"]
         }
       },
       "policies": {},
@@ -1823,12 +1715,8 @@
           "name": "beneficiaries_draft_id_campaign_drafts_id_fk",
           "tableFrom": "beneficiaries",
           "tableTo": "campaign_drafts",
-          "columnsFrom": [
-            "draft_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["draft_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1838,9 +1726,7 @@
         "beneficiaries_draft_id_unique": {
           "name": "beneficiaries_draft_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "draft_id"
-          ]
+          "columns": ["draft_id"]
         }
       },
       "policies": {},
@@ -1947,12 +1833,8 @@
           "name": "individual_verifications_campaign_id_campaigns_id_fk",
           "tableFrom": "individual_verifications",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1962,9 +1844,7 @@
         "individual_verifications_campaign_id_unique": {
           "name": "individual_verifications_campaign_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "campaign_id"
-          ]
+          "columns": ["campaign_id"]
         }
       },
       "policies": {},
@@ -2022,9 +1902,7 @@
         "help_articles_slug_unique": {
           "name": "help_articles_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -2159,12 +2037,8 @@
           "name": "support_tickets_user_id_users_id_fk",
           "tableFrom": "support_tickets",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2180,27 +2054,17 @@
     "public.campaigner_type": {
       "name": "campaigner_type",
       "schema": "public",
-      "values": [
-        "individual",
-        "yayasan",
-        "platform"
-      ]
+      "values": ["individual", "yayasan", "platform"]
     },
     "public.campaign_currency": {
       "name": "campaign_currency",
       "schema": "public",
-      "values": [
-        "IDR",
-        "USD"
-      ]
+      "values": ["IDR", "USD"]
     },
     "public.campaign_model": {
       "name": "campaign_model",
       "schema": "public",
-      "values": [
-        "goal",
-        "program"
-      ]
+      "values": ["goal", "program"]
     },
     "public.campaign_status": {
       "name": "campaign_status",
@@ -2218,11 +2082,7 @@
     "public.campaign_type": {
       "name": "campaign_type",
       "schema": "public",
-      "values": [
-        "donation",
-        "zakat",
-        "wakaf"
-      ]
+      "values": ["donation", "zakat", "wakaf"]
     },
     "public.campaign_revision_field": {
       "name": "campaign_revision_field",
@@ -2241,21 +2101,12 @@
     "public.campaign_revision_status": {
       "name": "campaign_revision_status",
       "schema": "public",
-      "values": [
-        "open",
-        "resolved"
-      ]
+      "values": ["open", "resolved"]
     },
     "public.donation_status": {
       "name": "donation_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "paid",
-        "expired",
-        "failed",
-        "refunded"
-      ]
+      "values": ["pending", "paid", "expired", "failed", "refunded"]
     },
     "public.disbursement_status": {
       "name": "disbursement_status",
@@ -2274,41 +2125,27 @@
     "public.disbursement_type": {
       "name": "disbursement_type",
       "schema": "public",
-      "values": [
-        "partial",
-        "final"
-      ]
+      "values": ["partial", "final"]
     },
     "public.user_role": {
       "name": "user_role",
       "schema": "public",
-      "values": [
-        "campaigner",
-        "admin"
-      ]
+      "values": ["campaigner", "admin"]
     },
     "public.otp_purpose": {
       "name": "otp_purpose",
       "schema": "public",
-      "values": [
-        "login",
-        "disbursement"
-      ]
+      "values": ["login", "disbursement"]
     },
     "public.oauth_provider": {
       "name": "oauth_provider",
       "schema": "public",
-      "values": [
-        "google"
-      ]
+      "values": ["google"]
     },
     "public.campaign_draft_track": {
       "name": "campaign_draft_track",
       "schema": "public",
-      "values": [
-        "medical",
-        "non_medical"
-      ]
+      "values": ["medical", "non_medical"]
     },
     "public.campaign_document_type": {
       "name": "campaign_document_type",
@@ -2326,19 +2163,12 @@
     "public.individual_verification_status": {
       "name": "individual_verification_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "verified",
-        "rejected"
-      ]
+      "values": ["pending", "verified", "rejected"]
     },
     "public.support_ticket_status": {
       "name": "support_ticket_status",
       "schema": "public",
-      "values": [
-        "open",
-        "resolved"
-      ]
+      "values": ["open", "resolved"]
     }
   },
   "schemas": {},

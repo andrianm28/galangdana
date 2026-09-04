@@ -18,11 +18,13 @@ import { donationsRoute } from "./donations";
 
 const app = donationsRoute;
 
-// Matches donations.ts's own SUMOPOD_WEBHOOK_SECRET fallback default (no
-// SUMOPOD_WEBHOOK_SECRET env var is set for this test run) -- same pattern
-// as MOCK_MIDTRANS_SERVER_KEY's "mock-server-key-for-dev" default below.
-const SUMOPOD_WEBHOOK_SECRET =
-  process.env.SUMOPOD_WEBHOOK_SECRET ?? "whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz";
+// donations.ts now requires SUMOPOD_WEBHOOK_SECRET to be set (fails closed
+// otherwise -- see the "fails closed" describe block below), so this test
+// run relies on .env providing it, same as MOCK_MIDTRANS_SERVER_KEY.
+const SUMOPOD_WEBHOOK_SECRET = process.env.SUMOPOD_WEBHOOK_SECRET;
+if (!SUMOPOD_WEBHOOK_SECRET) {
+  throw new Error("SUMOPOD_WEBHOOK_SECRET must be set to run this test file (see .env)");
+}
 
 // Independently computes a valid svix-style signature -- mirrors
 // sumopod-signature.test.ts's and sumopod-provider.test.ts's own local
@@ -753,5 +755,167 @@ describe("POST /payments/webhook/sumopod", () => {
       .from(paymentEvents)
       .where(eq(paymentEvents.providerEventId, `${sumopodPaymentId}:payment.completed`));
     expect(eventRow?.provider).toBe("sumopod");
+  });
+
+  test("a validly-signed payment.test webhook (Sumopod dashboard 'Save & Test' ping) returns 2xx and never touches a real donation", async () => {
+    // A real pending donation whose providerOrderId a dashboard test ping
+    // could never actually collide with (Sumopod doesn't echo back a real
+    // order_id for this event type) -- proves the ping is a true no-op,
+    // not just "no crash".
+    const { donationId } = await createTestQrisDonation("90000");
+
+    const rawBody = JSON.stringify({ event_type: "payment.test", data: {} });
+    const svixId = `msg_${crypto.randomUUID()}`;
+    const svixTimestamp = String(Math.floor(Date.now() / 1000));
+    const sig = await computeSumopodSignature(
+      SUMOPOD_WEBHOOK_SECRET,
+      svixId,
+      svixTimestamp,
+      rawBody,
+    );
+
+    const resp = await app.handle(
+      new Request("http://localhost/payments/webhook/sumopod", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "svix-id": svixId,
+          "svix-timestamp": svixTimestamp,
+          "svix-signature": sig,
+        },
+        body: rawBody,
+      }),
+    );
+    expect(resp.status).toBeGreaterThanOrEqual(200);
+    expect(resp.status).toBeLessThan(300);
+
+    const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donation?.status).toBe("pending");
+  });
+});
+
+describe("provider-scoped webhook payment lookup", () => {
+  test("a validly-signed sumopod webhook cannot settle a payment that was actually created via mock/VA", async () => {
+    // Both providers use the donation id as providerOrderId, and
+    // payments.provider_order_id is globally UNIQUE -- so before this fix,
+    // a webhook delivered to the sumopod route with a real VA payment's
+    // providerOrderId would settle that VA payment, even though it was
+    // never touched by Sumopod at all.
+    const campaign = await seedTestCampaign();
+    const createResp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "55000",
+          paymentMethod: "bank_transfer_va",
+        }),
+      }),
+    );
+    const { donationId } = (await createResp.json()) as { donationId: string };
+    const [vaPayment] = await db.select().from(payments).where(eq(payments.donationId, donationId));
+    if (!vaPayment) throw new Error("payment row missing");
+
+    const [campaignBefore] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+
+    const rawBody = JSON.stringify({
+      event_type: "payment.completed",
+      data: {
+        payment_id: `sumopod-cross-provider-${crypto.randomUUID()}`,
+        order_id: vaPayment.providerOrderId,
+        status: "completed",
+      },
+    });
+    const svixId = `msg_${crypto.randomUUID()}`;
+    const svixTimestamp = String(Math.floor(Date.now() / 1000));
+    const sig = await computeSumopodSignature(
+      SUMOPOD_WEBHOOK_SECRET,
+      svixId,
+      svixTimestamp,
+      rawBody,
+    );
+
+    const resp = await app.handle(
+      new Request("http://localhost/payments/webhook/sumopod", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "svix-id": svixId,
+          "svix-timestamp": svixTimestamp,
+          "svix-signature": sig,
+        },
+        body: rawBody,
+      }),
+    );
+    // The signature is genuinely valid for the sumopod route -- but the
+    // matched providerOrderId belongs to a "mock" payment, not "sumopod",
+    // so the provider-scoped lookup must find nothing and this must NOT
+    // succeed as a settlement.
+    expect(resp.status).not.toBe(200);
+
+    const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donation?.status).toBe("pending");
+    const [paymentAfter] = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.donationId, donationId));
+    expect(paymentAfter?.status).toBe("pending");
+    const [campaignAfter] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(campaignAfter?.collectedAmount).toBe(campaignBefore?.collectedAmount);
+    expect(campaignAfter?.donationCount).toBe(campaignBefore?.donationCount);
+  });
+});
+
+describe("Sumopod webhook secret fails closed when unset", () => {
+  test("a webhook signed with the leaked default secret is rejected, not accepted, when SUMOPOD_WEBHOOK_SECRET is unset", async () => {
+    // The exact placeholder value that used to be donations.ts's fail-open
+    // fallback -- committed in this repo's own source and tests, so
+    // anyone reading the code could compute a valid signature with it. If
+    // this is still accepted, the fail-open vulnerability has regressed.
+    const leakedSecret = "whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz";
+    const rawBody = JSON.stringify({
+      event_type: "payment.completed",
+      data: {
+        payment_id: "fail-closed-regression-test",
+        order_id: "irrelevant",
+        status: "completed",
+      },
+    });
+    const svixId = `msg_${crypto.randomUUID()}`;
+    const svixTimestamp = String(Math.floor(Date.now() / 1000));
+    const sig = await computeSumopodSignature(leakedSecret, svixId, svixTimestamp, rawBody);
+
+    // donations.ts binds SUMOPOD_WEBHOOK_SECRET into a module-level const
+    // at import time, so this must run in a genuinely fresh process with
+    // the env var unset -- deleting it here (this file already imported
+    // donations.ts at the top) would not affect the already-bound value.
+    const env = { ...process.env };
+    env.SUMOPOD_WEBHOOK_SECRET = "";
+
+    const proc = Bun.spawn({
+      cmd: [
+        "bun",
+        "run",
+        `${import.meta.dir}/__fixtures__/sumopod-webhook-fail-closed.fixture.ts`,
+        svixId,
+        svixTimestamp,
+        sig,
+        rawBody,
+      ],
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+
+    expect(stdout.trim()).not.toBe("200");
+    if (exitCode !== 0 && !stdout.trim()) {
+      throw new Error(`fixture process failed unexpectedly: ${stderr}`);
+    }
   });
 });

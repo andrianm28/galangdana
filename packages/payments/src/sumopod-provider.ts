@@ -9,15 +9,35 @@ import type {
   WebhookEvent,
 } from "./types";
 
+/**
+ * Thrown by parseWebhook for a `payment.test` event -- Sumopod's dashboard
+ * "Save & Test" button, not a real payment. Distinct from a signature
+ * failure so callers can acknowledge it cleanly instead of treating it as
+ * unauthorized or as an unmatched real order.
+ */
+export class SumopodTestEventError extends Error {
+  constructor() {
+    super("Sumopod payment.test webhook event -- not a real payment, no order to process");
+    this.name = "SumopodTestEventError";
+  }
+}
+
 export class SumopodProvider implements PaymentProvider {
   private readonly apiKey: string;
   private readonly webhookSecret: string;
   private readonly baseUrl: string;
+  private readonly timeoutMs: number;
 
-  constructor(config: { apiKey: string; webhookSecret: string; baseUrl?: string }) {
+  constructor(config: {
+    apiKey: string;
+    webhookSecret: string;
+    baseUrl?: string;
+    timeoutMs?: number;
+  }) {
     this.apiKey = config.apiKey;
     this.webhookSecret = config.webhookSecret;
     this.baseUrl = config.baseUrl ?? "https://api-pay-sandbox.sumopod.com";
+    this.timeoutMs = config.timeoutMs ?? 10_000;
   }
 
   async createCharge(input: ChargeInput): Promise<ChargeResult> {
@@ -40,6 +60,13 @@ export class SumopodProvider implements PaymentProvider {
         cancel_return_url: input.cancelReturnUrl,
         payment_method_type_code: "QRIS",
       }),
+      // Without this, a hung sandbox response hangs this call indefinitely
+      // -- and since apps/api only releases the claimed idempotency key in
+      // its own catch block (a rejection), a hang never releases it. The
+      // donor's browser eventually times out and retries with a FRESH
+      // idempotency key, sidestepping the idempotency guard entirely and
+      // risking a second real charge.
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!res.ok) {
@@ -88,6 +115,14 @@ export class SumopodProvider implements PaymentProvider {
       event_type: string;
       data: { payment_id: string; order_id: string; status: string };
     };
+
+    if (body.event_type === "payment.test") {
+      // No real order to correlate -- `data` may not even carry an
+      // order_id for this event type, so bail out before touching it
+      // rather than falling through to "failed" and crashing later on an
+      // unmatched providerOrderId.
+      throw new SumopodTestEventError();
+    }
 
     const status: WebhookEvent["status"] =
       body.event_type === "payment.completed"

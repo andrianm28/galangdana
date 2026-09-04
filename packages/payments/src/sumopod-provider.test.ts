@@ -151,6 +151,42 @@ describe("SumopodProvider.createCharge", () => {
     ).rejects.toThrow(/401/);
   });
 
+  test("rejects within a bounded time when the request hangs, instead of hanging indefinitely", async () => {
+    server = Bun.serve({
+      port: 0,
+      async fetch() {
+        // Deliberately longer than the provider's own configured timeout
+        // below, simulating a sandbox that hangs rather than erroring --
+        // without AbortSignal.timeout wired through createCharge, this
+        // call would hang for the full duration instead of rejecting.
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return Response.json({
+          payment_id: "sumopod-internal-payment-id-timeout",
+          order_id: "INV-2026-TIMEOUT-001",
+          payment_link_url: "https://pay.sumopod.com/pay/timeout",
+          expires_at: new Date().toISOString(),
+        });
+      },
+    });
+
+    const provider = new SumopodProvider({
+      apiKey: "test-api-key",
+      webhookSecret: WEBHOOK_SECRET,
+      baseUrl: `http://localhost:${server.port}`,
+      timeoutMs: 50,
+    });
+
+    const start = Date.now();
+    await expect(
+      provider.createCharge({
+        orderId: "INV-2026-TIMEOUT-001",
+        grossAmount: 10000n,
+        currency: "IDR",
+      }),
+    ).rejects.toThrow();
+    expect(Date.now() - start).toBeLessThan(500);
+  });
+
   test("createCharge's providerOrderId matches what parseWebhook later extracts for the same payment", async () => {
     // Regression coverage for a real bug: createCharge used to return
     // Sumopod's own payment_id as providerOrderId, while parseWebhook reads
@@ -272,6 +308,29 @@ describe("SumopodProvider.parseWebhook", () => {
 
     const event = await provider.parseWebhook(req);
     expect(event.status).toBe("expired");
+  });
+
+  test("a validly-signed payment.test event throws SumopodTestEventError, not a mis-mapped 'failed' status", async () => {
+    // Sumopod's dashboard "Save & Test" button sends this event to confirm
+    // the webhook URL is reachable -- it carries no real order to
+    // process, and may not even include a `data.order_id`. Before this
+    // fix, the status ternary had no case for it and silently fell
+    // through to "failed", which apps/api's processPaymentWebhookEvent
+    // would then crash on (unmatched providerOrderId).
+    const rawBody = JSON.stringify({
+      event_type: "payment.test",
+      data: { message: "Test webhook from Sumopod dashboard" },
+    });
+    const svixId = "msg_5";
+    const svixTimestamp = "1700000000";
+    const sig = await computeSignature(WEBHOOK_SECRET, svixId, svixTimestamp, rawBody);
+    const req = new Request("http://localhost/webhooks/sumopod", {
+      method: "POST",
+      headers: { "svix-id": svixId, "svix-timestamp": svixTimestamp, "svix-signature": sig },
+      body: rawBody,
+    });
+
+    await expect(provider.parseWebhook(req)).rejects.toThrow(/payment\.test/);
   });
 });
 

@@ -15,7 +15,7 @@ import {
   payments,
 } from "@galangdana/db";
 import { moneyToJSON } from "@galangdana/money";
-import { MockPaymentProvider, SumopodProvider } from "@galangdana/payments";
+import { MockPaymentProvider, SumopodProvider, SumopodTestEventError } from "@galangdana/payments";
 import type { PaymentMethod, WebhookEvent } from "@galangdana/payments";
 import type { Static } from "@sinclair/typebox";
 import { and, eq, ne, sql } from "drizzle-orm";
@@ -24,24 +24,20 @@ import { sessionDerive } from "../lib/session";
 
 const SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev";
 const SUMOPOD_API_KEY = process.env.SUMOPOD_API_KEY ?? "";
-// Falls back to the same placeholder secret used across packages/payments's
-// own Sumopod tests (sumopod-signature.test.ts, sumopod-provider.test.ts)
-// rather than "" -- an empty string fails HMAC key import outright ("Zero-
-// length key is not supported"), which would make every Sumopod webhook
-// delivery 401 whenever SUMOPOD_WEBHOOK_SECRET isn't set in the environment,
-// mirroring how SERVER_KEY above always has a usable dev default.
-const SUMOPOD_WEBHOOK_SECRET =
-  process.env.SUMOPOD_WEBHOOK_SECRET ?? "whsec_dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3Rz";
+const SUMOPOD_WEBHOOK_SECRET = process.env.SUMOPOD_WEBHOOK_SECRET ?? "";
+
+function getSumopodProvider() {
+  if (!SUMOPOD_WEBHOOK_SECRET) {
+    throw new Error("SUMOPOD_WEBHOOK_SECRET is not configured");
+  }
+  return new SumopodProvider({ apiKey: SUMOPOD_API_KEY, webhookSecret: SUMOPOD_WEBHOOK_SECRET });
+}
 
 function getProvider(method: PaymentMethod) {
   if (method === "qris_redirect") {
-    return new SumopodProvider({ apiKey: SUMOPOD_API_KEY, webhookSecret: SUMOPOD_WEBHOOK_SECRET });
+    return getSumopodProvider();
   }
   return new MockPaymentProvider({ serverKey: SERVER_KEY });
-}
-
-function getSumopodProvider() {
-  return new SumopodProvider({ apiKey: SUMOPOD_API_KEY, webhookSecret: SUMOPOD_WEBHOOK_SECRET });
 }
 
 async function processPaymentWebhookEvent(event: WebhookEvent) {
@@ -77,7 +73,12 @@ async function processPaymentWebhookEvent(event: WebhookEvent) {
     const [payment] = await tx
       .select()
       .from(payments)
-      .where(eq(payments.providerOrderId, event.providerOrderId));
+      .where(
+        and(
+          eq(payments.providerOrderId, event.providerOrderId),
+          eq(payments.provider, event.provider),
+        ),
+      );
     if (!payment) {
       throw new Error(`webhook for unknown providerOrderId: ${event.providerOrderId}`);
     }
@@ -320,7 +321,16 @@ export const donationsRoute = new Elysia()
       let event: WebhookEvent;
       try {
         event = await provider.parseWebhook(request);
-      } catch {
+      } catch (err) {
+        if (err instanceof SumopodTestEventError) {
+          // Sumopod's dashboard "Save & Test" button sends this ping to
+          // confirm the webhook URL is reachable -- it carries no real
+          // order to process, so acknowledge it cleanly rather than
+          // falling into processPaymentWebhookEvent's unmatched-order
+          // path, which would throw and cause Sumopod to retry (and
+          // eventually auto-disable the endpoint) forever.
+          return { status: "ignored" };
+        }
         set.status = 401;
         return { error: "invalid_signature" };
       }

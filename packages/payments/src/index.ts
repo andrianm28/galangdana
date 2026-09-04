@@ -1,7 +1,7 @@
 export { computeMidtransSignature, verifyMidtransSignature } from "./signature";
 export { MockPaymentProvider } from "./mock-provider";
 export { verifySumopodSignature } from "./sumopod-signature";
-export { SumopodProvider } from "./sumopod-provider";
+export { SumopodProvider, SumopodTestEventError } from "./sumopod-provider";
 export type {
   ChargeInput,
   ChargeResult,
