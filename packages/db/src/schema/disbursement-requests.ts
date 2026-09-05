@@ -37,6 +37,15 @@ export const disbursementRequests = pgTable("disbursement_requests", {
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   rejectedReason: text("rejected_reason"),
   payoutRef: text("payout_ref"),
+  // Who released the money, recorded separately from who approved it.
+  //
+  // Without this column a two-person control cannot be evidenced even when it
+  // was genuinely followed: approvedBy records one half and the other half is
+  // simply absent. Any copy promising that two different people were involved
+  // is unsupported by the record until this is populated -- and the /pay
+  // handler now refuses when payer and approver are the same person, so the
+  // pair (approvedBy, paidBy) is the evidence for that guarantee.
+  paidBy: uuid("paid_by").references(() => users.id),
   paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
