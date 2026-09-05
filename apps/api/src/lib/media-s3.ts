@@ -12,8 +12,8 @@
  */
 export const privateDocumentsS3 = new Bun.S3Client({
   endpoint: process.env.MEDIA_S3_ENDPOINT ?? "http://localhost:9000",
-  accessKeyId: process.env.MEDIA_S3_ACCESS_KEY_ID ?? "galangdana",
-  secretAccessKey: process.env.MEDIA_S3_SECRET_ACCESS_KEY ?? "galangdana-dev-secret",
+  accessKeyId: process.env.MEDIA_S3_ACCESS_KEY_ID ?? "fundforindonesia",
+  secretAccessKey: process.env.MEDIA_S3_SECRET_ACCESS_KEY ?? "fundforindonesia-dev-secret",
   bucket: process.env.MEDIA_S3_PRIVATE_BUCKET ?? "campaign-documents",
   region: "us-east-1",
 });

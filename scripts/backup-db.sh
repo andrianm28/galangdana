@@ -14,19 +14,19 @@
 # is unaffected by the port now being bound to 127.0.0.1 only.
 #
 # Install on the host with (crontab -e):
-#   0 3 * * * /home/ubuntu/galangdana/scripts/backup-db.sh >> /home/ubuntu/galangdana-backups/backup.log 2>&1
+#   0 3 * * * /home/ubuntu/galangdana/scripts/backup-db.sh >> /home/ubuntu/fundforindonesia-backups/backup.log 2>&1
 set -euo pipefail
 
-BACKUP_DIR="${BACKUP_DIR:-/home/ubuntu/galangdana-backups}"
-RETENTION_DAYS="${RETENTION_DAYS:-14}"
-CONTAINER="${POSTGRES_CONTAINER:-galangdana-postgres-1}"
-DB_USER="${POSTGRES_USER:-galangdana}"
-DB_NAME="${POSTGRES_DB:-galangdana}"
+BACKUP_DIR="${BACKUP_DIR:-/home/ubuntu/fundforindonesia-backups}"
+RETENTION_DAYS="${RETENTION_DAYS:-35}"
+CONTAINER="${POSTGRES_CONTAINER:-fundforindonesia-postgres-1}"
+DB_USER="${POSTGRES_USER:-fundforindonesia}"
+DB_NAME="${POSTGRES_DB:-fundforindonesia}"
 
 mkdir -p "$BACKUP_DIR"
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-outfile="$BACKUP_DIR/galangdana-$timestamp.sql.gz"
+outfile="$BACKUP_DIR/fundforindonesia-$timestamp.sql.gz"
 
 echo "[$timestamp] starting backup -> $outfile"
 
@@ -42,4 +42,4 @@ echo "[$timestamp] backup complete: $outfile ($size)"
 # Prune anything older than RETENTION_DAYS. Runs every invocation, not on a
 # separate schedule, so retention stays correct even if the pruning step is
 # ever temporarily disabled and re-enabled.
-find "$BACKUP_DIR" -name 'galangdana-*.sql.gz' -mtime "+$RETENTION_DAYS" -print -delete
+find "$BACKUP_DIR" -name 'fundforindonesia-*.sql.gz' -mtime "+$RETENTION_DAYS" -print -delete

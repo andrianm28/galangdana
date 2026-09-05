@@ -16,8 +16,8 @@ const FIXTURES_DIR = join(import.meta.dir, "fixtures", "covers");
 
 const s3 = new Bun.S3Client({
   endpoint: process.env.MEDIA_S3_ENDPOINT ?? "http://localhost:9000",
-  accessKeyId: process.env.MEDIA_S3_ACCESS_KEY_ID ?? "galangdana",
-  secretAccessKey: process.env.MEDIA_S3_SECRET_ACCESS_KEY ?? "galangdana-dev-secret",
+  accessKeyId: process.env.MEDIA_S3_ACCESS_KEY_ID ?? "fundforindonesia",
+  secretAccessKey: process.env.MEDIA_S3_SECRET_ACCESS_KEY ?? "fundforindonesia-dev-secret",
   bucket: process.env.MEDIA_S3_BUCKET ?? "campaign-media",
   region: "us-east-1",
 });
@@ -40,7 +40,7 @@ async function ensureBucketExists(): Promise<void> {
   // mc mb local/campaign-media` or the MinIO console at :9001 -- fail
   // loudly with that instruction rather than silently skip image upload.
   throw new Error(
-    `Bucket "${bucket}" does not exist at ${endpoint}. Create it once via the MinIO console (http://localhost:9001, login galangdana/galangdana-dev-secret) or \`docker compose exec minio mc mb local/campaign-media\`, then re-run this script.`,
+    `Bucket "${bucket}" does not exist at ${endpoint}. Create it once via the MinIO console (http://localhost:9001, login fundforindonesia/fundforindonesia-dev-secret) or \`docker compose exec minio mc mb local/campaign-media\`, then re-run this script.`,
   );
 }
 

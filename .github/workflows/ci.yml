@@ -12,12 +12,12 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: galangdana
-          POSTGRES_PASSWORD: galangdana
-          POSTGRES_DB: galangdana
+          POSTGRES_USER: fundforindonesia
+          POSTGRES_PASSWORD: fundforindonesia
+          POSTGRES_DB: fundforindonesia
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U galangdana"
+          --health-cmd "pg_isready -U fundforindonesia"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -32,7 +32,7 @@ jobs:
       meilisearch:
         image: getmeili/meilisearch:v1.11
         env:
-          MEILI_MASTER_KEY: galangdana-dev-master-key
+          MEILI_MASTER_KEY: ci-meili-master-key
           MEILI_NO_ANALYTICS: "true"
         ports: ["7700:7700"]
         options: >-
@@ -65,7 +65,7 @@ jobs:
       # container above, bound to the default 5432 with no collision — the
       # 55434 port only exists to dodge an unrelated container on the shared
       # dev machine this plan is executed on (see Task 2's port note).
-      DATABASE_URL: postgres://galangdana:galangdana@localhost:5432/galangdana
+      DATABASE_URL: postgres://fundforindonesia:fundforindonesia@localhost:5432/fundforindonesia
       REDIS_URL: redis://localhost:6379
       # packages/search's tests hit a real Meilisearch instance (no mocking,
       # matching this codebase's established "tests use real infrastructure"
@@ -74,10 +74,10 @@ jobs:
       # explicit here for the same reason DATABASE_URL/REDIS_URL are: this
       # job's services are the source of truth for what "real" means in CI.
       MEILISEARCH_URL: http://localhost:7700
-      MEILISEARCH_API_KEY: galangdana-dev-master-key
+      MEILISEARCH_API_KEY: ci-meili-master-key
       PUBLIC_API_URL: http://localhost:3001
       # apps/api's GET /campaigns (Task 6) signs a real imgproxy URL for
-      # every row server-side via @galangdana/media's buildImgproxyUrl --
+      # every row server-side via @fundforindonesia/media's buildImgproxyUrl --
       # pure HMAC signing, no network call, so no imgproxy/MinIO service
       # container is needed here, but the key/salt must be non-empty or
       # Web Crypto's importKey throws "Zero-length key is not supported".
@@ -93,8 +93,8 @@ jobs:
       # reason: this job's services are the source of truth for "real"
       # here, not a script's hardcoded fallback.
       MEDIA_S3_ENDPOINT: http://localhost:9000
-      MEDIA_S3_ACCESS_KEY_ID: galangdana
-      MEDIA_S3_SECRET_ACCESS_KEY: galangdana-dev-secret
+      MEDIA_S3_ACCESS_KEY_ID: fundforindonesia
+      MEDIA_S3_SECRET_ACCESS_KEY: fundforindonesia-dev-secret
       MEDIA_S3_BUCKET: campaign-media
     steps:
       - uses: actions/checkout@v4
@@ -136,8 +136,8 @@ jobs:
       - name: Start MinIO
         run: |
           docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=galangdana \
-            -e MINIO_ROOT_PASSWORD=galangdana-dev-secret \
+            -e MINIO_ROOT_USER=fundforindonesia \
+            -e MINIO_ROOT_PASSWORD=fundforindonesia-dev-secret \
             minio/minio:latest server /data
 
       - name: Wait for MinIO
@@ -188,7 +188,7 @@ jobs:
         # non-public.
         run: |
           docker run --rm --network host --entrypoint sh minio/mc -c "
-            mc alias set local http://localhost:9000 galangdana galangdana-dev-secret &&
+            mc alias set local http://localhost:9000 fundforindonesia fundforindonesia-dev-secret &&
             mc mb --ignore-existing local/campaign-media &&
             mc anonymous set download local/campaign-media &&
             mc mb --ignore-existing local/campaign-documents

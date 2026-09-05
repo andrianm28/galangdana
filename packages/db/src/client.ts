@@ -3,7 +3,8 @@ import postgres from "postgres";
 import * as schema from "./schema/index";
 
 const connectionString =
-  process.env.DATABASE_URL ?? "postgres://galangdana:galangdana@localhost:55434/galangdana";
+  process.env.DATABASE_URL ??
+  "postgres://fundforindonesia:fundforindonesia@localhost:55434/fundforindonesia";
 
 const queryClient = postgres(connectionString);
 
