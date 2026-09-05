@@ -69,9 +69,13 @@ const app = new Elysia().use(donationsRoute).use(disbursementsRoute);
 const TEST_USER_ID = "44444444-5555-6666-7777-cccccccccc01";
 const OTHER_USER_ID = "44444444-5555-6666-7777-cccccccccc02";
 const ADMIN_USER_ID = "44444444-5555-6666-7777-cccccccccc03";
+// A SECOND admin: the four-eyes guard means the payer must be a different
+// person from the approver, so exercising the happy path needs two of them.
+const ADMIN2_USER_ID = "44444444-5555-6666-7777-cccccccccc04";
 const TEST_TOKEN = "disbursements-test-token";
 const OTHER_TOKEN = "disbursements-other-token";
 const ADMIN_TOKEN = "disbursements-admin-token";
+const ADMIN2_TOKEN = "disbursements-admin2-token";
 const TEST_USER_PHONE = "+6281199990601";
 
 let categoryId: number;
@@ -92,16 +96,20 @@ function authedRequest(url: string, token: string, init: RequestInit = {}) {
 }
 
 beforeAll(async () => {
-  await db.delete(users).where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID, ADMIN_USER_ID]));
+  await db
+    .delete(users)
+    .where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID, ADMIN_USER_ID, ADMIN2_USER_ID]));
   await db.insert(users).values([
     { id: TEST_USER_ID, phone: TEST_USER_PHONE },
     { id: OTHER_USER_ID, phone: "+6281199990602" },
     { id: ADMIN_USER_ID, phone: "+6281199990603", role: "admin" },
+    { id: ADMIN2_USER_ID, phone: "+6281199990604", role: "admin" },
   ]);
   await db.insert(sessions).values([
     { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
     { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
     { id: ADMIN_TOKEN, userId: ADMIN_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    { id: ADMIN2_TOKEN, userId: ADMIN2_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
   ]);
 
   const [category] = await db.select().from(campaignCategories).limit(1);
@@ -163,7 +171,9 @@ afterAll(async () => {
   // ADMIN_USER_ID via approvedBy (no cascade on that FK) -- deleting users
   // after disbursementRequests, same as the existing TEST_USER_ID/OTHER_USER_ID
   // ordering, is what keeps this FK-safe.
-  await db.delete(users).where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID, ADMIN_USER_ID]));
+  await db
+    .delete(users)
+    .where(inArray(users.id, [TEST_USER_ID, OTHER_USER_ID, ADMIN_USER_ID, ADMIN2_USER_ID]));
   await db.delete(otpChallenges).where(eq(otpChallenges.phone, TEST_USER_PHONE));
   await redis.del(`otp:ratelimit:${TEST_USER_PHONE}`);
 });
@@ -1542,6 +1552,64 @@ describe("POST /admin/disbursements/:id/pay", () => {
     expect(row?.status).toBe("approved");
   });
 
+  // The four-eyes guarantee itself, distinct from the owner check above.
+  //
+  // Rejecting self-approval by the CAMPAIGN OWNER does not make a disbursement
+  // a two-person control: nothing stopped the same admin approving and then
+  // paying. Any copy promising "dua orang berbeda menyetujui" was unsupported,
+  // and the record could not have evidenced it either -- there was no paidBy
+  // column, so only one of the two actors was ever stored.
+  test("refuses to let the same admin who approved also pay, and records both actors", async () => {
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id = await driveDisbursementToRequested(campaign.id, withdrawable);
+
+    const approveResp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/approve`, ADMIN_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(approveResp.status).toBe(200);
+
+    // Same admin now tries to release the money.
+    const payResp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(payResp.status).toBe(403);
+    const payBody = (await payResp.json()) as { error: string };
+    expect(payBody.error).toBe("same_approver_forbidden");
+
+    // Money must not have moved.
+    const [blocked] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(blocked?.status).toBe("approved");
+    expect(blocked?.paidAt).toBeNull();
+    expect(blocked?.paidBy).toBeNull();
+
+    // A second, different admin can pay -- and both actors end up on the row,
+    // which is what makes the two-person claim evidenced rather than asserted.
+    const secondPayResp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN2_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(secondPayResp.status).toBe(200);
+
+    const [paid] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, id));
+    expect(paid?.status).toBe("paid");
+    expect(paid?.approvedBy).toBe(ADMIN_USER_ID);
+    expect(paid?.paidBy).toBe(ADMIN2_USER_ID);
+    expect(paid?.approvedBy).not.toBe(paid?.paidBy);
+  });
+
   test("409s on a disbursement that is requested but not yet approved", async () => {
     const campaign = await createTestCampaign(testCampaignerId, "active");
     await createPaidDonation(campaign.id, "500000");
@@ -1568,7 +1636,7 @@ describe("POST /admin/disbursements/:id/pay", () => {
     const id = await driveDisbursementToApproved(campaign.id, withdrawable);
 
     const firstResp = await app.handle(
-      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN2_TOKEN, {
         method: "POST",
       }),
     );
@@ -1591,7 +1659,7 @@ describe("POST /admin/disbursements/:id/pay", () => {
     expect(campaignAfterFirst?.disbursedAmount).toBe(withdrawable);
 
     const secondResp = await app.handle(
-      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN2_TOKEN, {
         method: "POST",
       }),
     );
@@ -1626,7 +1694,7 @@ describe("POST /admin/disbursements/:id/pay", () => {
     // win that race, not just that a repeat call is rejected.
     const pay = () =>
       app.handle(
-        authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+        authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN2_TOKEN, {
           method: "POST",
         }),
       );
@@ -1698,7 +1766,7 @@ describe("POST /admin/disbursements/:id/pay", () => {
 
       const pay = () =>
         app.handle(
-          authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+          authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN2_TOKEN, {
             method: "POST",
           }),
         );
@@ -1737,7 +1805,7 @@ describe("Admin payout execution reconciles the withdrawable-balance formula aga
     const id = await driveDisbursementToApproved(campaign.id, disbursementAmount);
 
     const payResp = await app.handle(
-      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+      authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN2_TOKEN, {
         method: "POST",
       }),
     );

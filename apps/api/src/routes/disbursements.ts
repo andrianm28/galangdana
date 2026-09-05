@@ -818,6 +818,17 @@ export const disbursementsRoute = new Elysia()
         return { error: "invalid_disbursement_status" };
       }
 
+      // Four eyes, for real. Rejecting self-approval by the CAMPAIGN OWNER
+      // (checked above) does not make this a two-person control: without this
+      // guard the same admin could approve a disbursement and then release the
+      // money for it, and `approvedBy` would faithfully record one person while
+      // the copy promised two. The approver and the payer must be different
+      // humans, and `paidBy` below is what evidences it.
+      if (user && row.disbursement.approvedBy === user.id) {
+        set.status = 403;
+        return { error: "same_approver_forbidden" };
+      }
+
       // Claim the right to call the payout provider via a guarded
       // approved -> processing transition BEFORE making any external call,
       // not after. Two concurrent admin "Pay" clicks previously both
@@ -874,7 +885,17 @@ export const disbursementsRoute = new Elysia()
       await db.transaction(async (tx) => {
         await tx
           .update(disbursementRequests)
-          .set({ status: "paid", payoutRef: payout.payoutId, paidAt: now, updatedAt: now })
+          .set({
+            status: "paid",
+            payoutRef: payout.payoutId,
+            paidAt: now,
+            // The other half of the two-person record. Together with
+            // approvedBy -- which the guard above proves is a different
+            // person -- this is what lets the disbursement log say two
+            // people were involved and be able to show it.
+            paidBy: user?.id,
+            updatedAt: now,
+          })
           .where(
             and(
               eq(disbursementRequests.id, row.disbursement.id),
