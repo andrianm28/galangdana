@@ -72,16 +72,25 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
     disbursedAmount: 0n,
     donationCount: 340,
   },
+  // Zakat is a regulated function: only a licensed amil -- BAZNAS or a LAZ
+  // holding a ministerial licence under UU 23/2011 -- may collect and
+  // distribute it. FundForIndonesia holds no such licence, so this fixture is
+  // attributed to a partner institution and worded so the platform is the
+  // CHANNEL, not the collector. The previous version had a campaigner of type
+  // "platform" (FundForIndonesia itself) saying it "menghimpun zakat ... kepada
+  // delapan asnaf", which is a claim of amil standing the organisation cannot
+  // make. Do not reintroduce platform-attributed zakat or wakaf fixtures --
+  // seed data is what the public site actually renders.
   {
     slug: "program-amil-zakat-mitra",
-    title: "Dana Zakat untuk Program Amil Mitra FundForIndonesia",
+    title: "Dana Zakat Yayasan Amanah Ummah",
     shortDescription:
-      "Salurkan zakat Anda melalui amil mitra terpercaya untuk didistribusikan kepada mustahik secara berkelanjutan.",
+      "Tunaikan zakat Anda melalui Yayasan Amanah Ummah, amil mitra yang menghimpun dan menyalurkannya kepada mustahik.",
     story:
-      "Program ini menghimpun zakat dari para donatur dan menyalurkannya secara berkelanjutan kepada delapan asnaf melalui jaringan amil mitra. Karena sifatnya berkelanjutan, program ini tidak memiliki target atau tenggat waktu -- dana yang tersedia langsung disalurkan sesuai kebutuhan mustahik yang terverifikasi.",
+      "Zakat pada program ini dihimpun dan disalurkan oleh Yayasan Amanah Ummah sebagai amil, kepada delapan asnaf yang telah diverifikasi. FundForIndonesia berperan sebagai kanal penyaluran, bukan sebagai amil: dana diteruskan kepada lembaga tersebut, dan pencairannya tercatat di halaman ini. Karena sifatnya berkelanjutan, program ini tidak memiliki target atau tenggat waktu -- dana yang tersedia langsung disalurkan sesuai kebutuhan mustahik.",
     coverMediaUrl: "campaigns/covers/program-amil-zakat-mitra.15f20114.jpg",
     categorySlug: "zakat",
-    campaignerName: "FundForIndonesia Program Mitra",
+    campaignerName: "Yayasan Amanah Ummah",
     model: "program",
     goalAmount: null,
     expiresAt: null,
