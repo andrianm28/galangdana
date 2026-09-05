@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
 
 jobs:
@@ -260,3 +260,89 @@ jobs:
           # categories.seed.ts + campaigns.seed.ts), so this exercises a
           # real, non-empty /explore/[category] page.
           CHECK_LINKS_EXTRA_ROUTES: /search?q=banjir,/explore/bencana-alam
+
+  deploy:
+    name: Deploy to fundforindonesia.org
+    needs: test
+    # Runs ONLY on a real push to master, never for a pull_request -- this
+    # job executes on a self-hosted runner living on the production host
+    # itself, and this repo is public. A self-hosted runner triggered by
+    # pull_request (or pull_request_target) would let anyone who can open a
+    # PR run arbitrary code on this host via a malicious workflow-file
+    # change in their fork. Gating on push+master instead means this job
+    # only ever runs for someone who already has write access and merged
+    # through the now-protected branch (required PR + required checks) --
+    # the same trust level as SSH access to this host, not "anyone with a
+    # GitHub account."
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, galangdana-deploy]
+    concurrency:
+      # Prevents two overlapping deploys (e.g. two merges in quick
+      # succession) from racing each other's git reset/build/restart.
+      group: galangdana-production-deploy
+      cancel-in-progress: false
+    steps:
+      # Deliberately not actions/checkout@v4: that checks out into the
+      # runner's own _work/ workspace, which the running systemd services
+      # (galangdana-api.service / galangdana-web.service) know nothing
+      # about -- their WorkingDirectory is /home/ubuntu/galangdana, the
+      # same real checkout used throughout this project's manual deploys
+      # so far. This job updates that checkout in place instead.
+      - name: Update the live checkout
+        working-directory: /home/ubuntu/galangdana
+        run: |
+          git fetch origin master
+          git reset --hard origin/master
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: /home/ubuntu/galangdana
+        run: bun install
+
+      - name: Run database migrations
+        working-directory: /home/ubuntu/galangdana
+        # Explicit --env-file rather than relying on Bun's ambient .env
+        # auto-load: .env.production is what the live services actually
+        # run with (see galangdana-api.service / galangdana-web.service's
+        # EnvironmentFile=), and today it happens to point at the same
+        # database as local dev .env -- but being explicit here means this
+        # keeps doing the right thing once dev/staging/prod databases
+        # actually split (see the project's own "single environment until
+        # launch" note), rather than silently depending on which .env file
+        # Bun's auto-load happens to prefer.
+        run: bun --env-file=.env.production run db:migrate
+
+      - name: Build web
+        working-directory: /home/ubuntu/galangdana
+        run: bun run build
+
+      - name: Restart services
+        # systemctl --user needs XDG_RUNTIME_DIR explicitly set here: this
+        # job runs inside the runner's own systemd *system* service (see
+        # actions.runner.*.service, installed via svc.sh), which doesn't
+        # automatically inherit the ubuntu user's systemd --user session
+        # environment the way an interactive login shell would. Verified
+        # this exact env var is sufficient via `sudo systemd-run --uid=ubuntu
+        # -p Environment=XDG_RUNTIME_DIR=/run/user/1000 systemctl --user
+        # status galangdana-web.service` before wiring this up.
+        run: |
+          export XDG_RUNTIME_DIR=/run/user/$(id -u)
+          systemctl --user restart galangdana-api.service
+          systemctl --user restart galangdana-web.service
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 30); do
+            api_code=$(curl -sf -o /dev/null -w "%{http_code}" https://api.fundforindonesia.org/healthz || echo "000")
+            web_code=$(curl -sf -o /dev/null -w "%{http_code}" https://fundforindonesia.org/ || echo "000")
+            if [ "$api_code" = "200" ] && [ "$web_code" = "200" ]; then
+              echo "Deploy healthy (api=$api_code web=$web_code)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Health check failed after restart (api=$api_code web=$web_code)" >&2
+          exit 1
