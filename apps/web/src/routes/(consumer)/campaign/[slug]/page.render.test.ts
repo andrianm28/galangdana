@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { render, screen } from "@testing-library/svelte";
-import { describe, expect, test } from "vitest";
+import { fireEvent } from "@testing-library/svelte";
+import { describe, expect, test, vi } from "vitest";
 import Page from "./+page.svelte";
+
+vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
 
 const GOAL_CAMPAIGN = {
   id: "1",
@@ -70,5 +73,12 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, { props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } } });
     const link = screen.getByText("Riwayat Pencairan Dana");
     expect(link.getAttribute("href")).toBe("/campaign/test-goal/pencairan-dana");
+  });
+
+  test("the donate button navigates to this campaign's donation-amount step", async () => {
+    const { goto } = await import("$app/navigation");
+    render(Page, { props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } } });
+    await fireEvent.click(screen.getByText("Donasi Sekarang"));
+    expect(goto).toHaveBeenCalledWith("/campaign/test-goal/donation-amount");
   });
 });

@@ -1,9 +1,14 @@
 <script lang="ts">
+import { goto } from "$app/navigation";
 import { formatMoney, moneyFromJSON } from "@galangdana/money";
-import { Badge, Card } from "@galangdana/ui";
+import { Badge, Button, Card } from "@galangdana/ui";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
+
+function donate() {
+  goto(`/campaign/${data.campaign.slug}/donation-amount`);
+}
 const campaign = $derived(data.campaign);
 
 const collected = $derived(moneyFromJSON(campaign.collectedAmount));
@@ -61,6 +66,9 @@ const daysLeft = $derived.by(() => {
         <p class="font-sans text-sm text-neutral-600">Donasi tersedia</p>
       {/if}
       <p class="mt-2 font-sans text-sm text-neutral-600">{campaign.donationCount} donatur</p>
+      <div class="mt-4 flex">
+        <Button onclick={donate} size="lg">Donasi Sekarang</Button>
+      </div>
     </div>
   </Card>
 
