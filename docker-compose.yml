@@ -1,5 +1,15 @@
 name: galangdana
 
+# Every published port below is bound to 127.0.0.1 explicitly, not left as
+# the bare "host:container" form (which Docker publishes on 0.0.0.0 by
+# default). This host runs this compose file in production, and the bare
+# form was found, on audit, published on all interfaces with this host's
+# own firewall unable to stop it -- Docker's NAT/FORWARD rules bypass UFW's
+# INPUT chain entirely, which is a well-known Docker+UFW interaction, not a
+# misconfiguration specific to this host. Every consumer of these services
+# (this repo's own apps, `bun run db:migrate`, etc.) already connects via
+# "localhost"/127.0.0.1, so this has no functional effect on local dev or
+# on the deployed services -- it only removes the external-facing bind.
 services:
   postgres:
     image: postgres:16-alpine
@@ -7,7 +17,7 @@ services:
       POSTGRES_USER: galangdana
       POSTGRES_PASSWORD: galangdana
       POSTGRES_DB: galangdana
-    ports: ["55434:5432"]
+    ports: ["127.0.0.1:55434:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U galangdana"]
@@ -17,7 +27,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports: ["127.0.0.1:6379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -30,7 +40,7 @@ services:
     environment:
       MINIO_ROOT_USER: galangdana
       MINIO_ROOT_PASSWORD: galangdana-dev-secret
-    ports: ["9000:9000", "9001:9001"]
+    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
     volumes: ["miniodata:/data"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -40,7 +50,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    ports: ["1025:1025", "8025:8025"]
+    ports: ["127.0.0.1:1025:1025", "127.0.0.1:8025:8025"]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8025/api/v1/info"]
       interval: 5s
@@ -91,7 +101,7 @@ services:
     environment:
       MEILI_MASTER_KEY: galangdana-dev-master-key
       MEILI_NO_ANALYTICS: "true"
-    ports: ["7700:7700"]
+    ports: ["127.0.0.1:7700:7700"]
     volumes: ["meilidata:/meili_data"]
     healthcheck:
       # 127.0.0.1, not localhost: the getmeili/meilisearch image binds
