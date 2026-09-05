@@ -28,6 +28,8 @@ Run:  python3 generate-cover-placeholders.py
 Needs: Pillow  (pip install Pillow)
 """
 
+import hashlib
+from io import BytesIO
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -119,12 +121,47 @@ def render(category: str, subject: str) -> Image.Image:
 
 
 def main() -> None:
+    """
+    Writes each cover as `<base>.<sha256[:8]>.jpg`.
+
+    The hash is in the FILENAME on purpose. imgproxy signs the source *path*,
+    not the source *bytes*, and serves `cache-control: max-age=31536000`. So
+    replacing an image in place keeps the same URL, and every browser that
+    already fetched the old one keeps showing it for a year. Putting the
+    content hash in the key means changed bytes always produce a new URL, and
+    caches miss correctly.
+
+    Stale variants of the same base name are deleted, so a regeneration leaves
+    exactly one file per cover.
+    """
     out_dir = Path(__file__).parent / "covers"
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    literals = []
     for name, (category, subject) in sorted(COVERS.items()):
-        img = render(category, subject)
-        img.save(out_dir / name, "JPEG", quality=88, optimize=True, progressive=True)
-        print(f"wrote {name}")
+        base = name[: -len(".jpg")]
+        buf = BytesIO()
+        render(category, subject).save(
+            buf, "JPEG", quality=88, optimize=True, progressive=True
+        )
+        data = buf.getvalue()
+        digest = hashlib.sha256(data).hexdigest()[:8]
+        final = out_dir / f"{base}.{digest}.jpg"
+
+        for stale in out_dir.glob(f"{base}.*.jpg"):
+            if stale != final:
+                stale.unlink()
+                print(f"removed stale {stale.name}")
+
+        final.write_bytes(data)
+        print(f"wrote {final.name}")
+        literals.append(f'    coverMediaUrl: "campaigns/covers/{final.name}",')
+
+    print(
+        "\nIf any hash changed, update the matching coverMediaUrl in "
+        "campaigns.seed.ts:\n"
+    )
+    print("\n".join(literals))
 
 
 if __name__ == "__main__":
