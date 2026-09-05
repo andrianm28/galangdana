@@ -28,7 +28,7 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
       "Ratusan keluarga kehilangan tempat tinggal akibat banjir bandang. Bantu mereka mendapatkan kebutuhan darurat.",
     story:
       "Banjir bandang yang melanda beberapa desa di Kalimantan Selatan telah memaksa ratusan keluarga mengungsi. Dana yang terkumpul akan disalurkan untuk logistik darurat, tempat tinggal sementara, dan kebutuhan sanitasi bagi para pengungsi.",
-    coverMediaUrl: "campaigns/covers/banjir-kalimantan-selatan.jpg",
+    coverMediaUrl: "campaigns/covers/banjir-kalimantan-selatan.47344aab.jpg",
     categorySlug: "bencana-alam",
     campaignerName: "Yayasan Peduli Sesama",
     model: "goal",
@@ -45,7 +45,7 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
       "Aldi (2 tahun) membutuhkan operasi jantung segera. Keluarganya tidak mampu menanggung biaya operasi.",
     story:
       "Aldi didiagnosis kelainan jantung bawaan sejak lahir dan membutuhkan tindakan operasi secepatnya. Biaya yang dibutuhkan jauh di luar kemampuan keluarganya. Setiap donasi akan langsung disalurkan ke rumah sakit tempat Aldi dirawat.",
-    coverMediaUrl: "campaigns/covers/aldi-kelainan-jantung.jpg",
+    coverMediaUrl: "campaigns/covers/aldi-kelainan-jantung.85328047.jpg",
     categorySlug: "balita-anak-sakit",
     campaignerName: "Rina Wijaya",
     model: "goal",
@@ -62,7 +62,7 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
       "Atap musala bocor dan lantai retak sejak lama. Warga sekitar ingin merenovasinya agar layak dipakai kembali.",
     story:
       "Musala Al-Ikhlas telah berdiri lebih dari 20 tahun dan menjadi pusat kegiatan ibadah warga sekitar. Kondisinya kini memprihatinkan: atap bocor saat hujan dan lantai mulai retak. Dana akan digunakan untuk perbaikan atap, lantai, dan fasilitas wudu.",
-    coverMediaUrl: "campaigns/covers/renovasi-musala-al-ikhlas.jpg",
+    coverMediaUrl: "campaigns/covers/renovasi-musala-al-ikhlas.9724e66a.jpg",
     categorySlug: "rumah-ibadah",
     campaignerName: "Budi Santoso",
     model: "goal",
@@ -79,7 +79,7 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
       "Salurkan zakat Anda melalui amil mitra terpercaya untuk didistribusikan kepada mustahik secara berkelanjutan.",
     story:
       "Program ini menghimpun zakat dari para donatur dan menyalurkannya secara berkelanjutan kepada delapan asnaf melalui jaringan amil mitra. Karena sifatnya berkelanjutan, program ini tidak memiliki target atau tenggat waktu -- dana yang tersedia langsung disalurkan sesuai kebutuhan mustahik yang terverifikasi.",
-    coverMediaUrl: "campaigns/covers/program-amil-zakat-mitra.jpg",
+    coverMediaUrl: "campaigns/covers/program-amil-zakat-mitra.15f20114.jpg",
     categorySlug: "zakat",
     campaignerName: "FundForIndonesia Program Mitra",
     model: "program",
@@ -96,7 +96,7 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
       "Bangun sumur bor wakaf untuk desa yang setiap musim kemarau kesulitan air bersih.",
     story:
       "Setiap musim kemarau, warga desa ini harus berjalan berkilo-kilometer untuk mendapatkan air bersih. Wakaf sumur bor ini akan memberikan akses air bersih jangka panjang bagi ratusan keluarga, dan hasilnya dapat dirasakan turun-temurun.",
-    coverMediaUrl: "campaigns/covers/wakaf-sumur-bor.jpg",
+    coverMediaUrl: "campaigns/covers/wakaf-sumur-bor.aa962d7e.jpg",
     categorySlug: "wakaf",
     campaignerName: "Yayasan Bina Umat Sejahtera",
     model: "goal",
@@ -113,7 +113,7 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
       "Dukung kebutuhan harian 34 anak di Panti Asuhan Kasih Bunda secara berkelanjutan.",
     story:
       "Panti Asuhan Kasih Bunda menampung 34 anak dari berbagai latar belakang. Program ini menghimpun donasi rutin untuk kebutuhan sehari-hari: makan, pendidikan, dan kesehatan. Karena kebutuhannya berkelanjutan, program ini tidak memiliki target akhir -- dana yang tersedia langsung digunakan untuk operasional panti.",
-    coverMediaUrl: "campaigns/covers/panti-asuhan-kasih-bunda.jpg",
+    coverMediaUrl: "campaigns/covers/panti-asuhan-kasih-bunda.c3761293.jpg",
     categorySlug: "panti-asuhan",
     campaignerName: "Yayasan Peduli Sesama",
     model: "program",
@@ -130,7 +130,7 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
       "Bantu anak-anak yatim berprestasi melanjutkan pendidikan mereka tanpa terbebani biaya sekolah.",
     story:
       "Banyak anak yatim berprestasi terpaksa putus sekolah karena keterbatasan biaya. Program beasiswa ini menanggung biaya pendidikan bagi 20 anak terpilih selama satu tahun ajaran penuh, mulai dari SPP hingga perlengkapan sekolah.",
-    coverMediaUrl: "campaigns/covers/beasiswa-anak-yatim.jpg",
+    coverMediaUrl: "campaigns/covers/beasiswa-anak-yatim.7db6cc00.jpg",
     categorySlug: "beasiswa-pendidikan",
     campaignerName: "Rina Wijaya",
     model: "goal",
@@ -147,7 +147,7 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
       "Nenek Sari (78) membutuhkan perawatan intensif namun tidak memiliki keluarga yang dapat membantu.",
     story:
       "Nenek Sari tinggal sendiri dan didiagnosis membutuhkan perawatan intensif. Tanpa keluarga yang dapat membantu membiayai pengobatannya, warga sekitar berinisiatif menggalang dana untuk memastikan beliau mendapat perawatan yang layak.",
-    coverMediaUrl: "campaigns/covers/nenek-sari-pengobatan.jpg",
+    coverMediaUrl: "campaigns/covers/nenek-sari-pengobatan.54344116.jpg",
     categorySlug: "bantuan-medis",
     campaignerName: "Budi Santoso",
     model: "goal",
