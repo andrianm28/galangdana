@@ -1,17 +1,24 @@
 import { basename, join } from "node:path";
 import { CAMPAIGN_SEED_DATA } from "./campaigns.seed";
 
-// Vendored fixture photos, one per seeded campaign (filename matches each
-// campaign's coverMediaUrl basename in campaigns.seed.ts). These used to be
-// fetched live from picsum.photos on every fresh seed run -- reliable
-// enough for local dev, but a real GitHub Actions run hit two consecutive
-// failures against it (a 503, then a 522) fetching the very first image,
-// which also failed to load from this same sandbox at the same time,
-// confirming a real availability problem with depending on that external
-// service rather than a one-off blip. Seed data must be reproducible
-// without live third-party network access, so these bytes -- captured from
-// an earlier successful picsum.photos fetch -- are checked into the repo
-// instead.
+// Vendored fixture cover images, one per seeded campaign (filename matches
+// each campaign's coverMediaUrl basename in campaigns.seed.ts). Checked into
+// the repo rather than fetched at seed time: these were once pulled live from
+// picsum.photos, which cost a real GitHub Actions run two consecutive failures
+// (a 503, then a 522) on the very first image. Seed data must be reproducible
+// without live third-party network access.
+//
+// They are deliberately LABELLED PLACEHOLDERS, not photographs. The picsum
+// images were arbitrary stock with no relation to the campaign they illustrated
+// -- which was harmless while nothing rendered them, and actively misleading
+// once the seeded campaigns became visible on a public domain (a snowy European
+// rooftop was illustrating an appeal for an elderly medical patient). An
+// unrelated photograph of real people attached to a fabricated appeal is worse
+// than no photograph on a platform selling trust.
+//
+// Regenerate with fixtures/generate-cover-placeholders.py. Replace any single
+// file with a real, rights-cleared photograph once its campaign is real -- this
+// script uploads whatever bytes are on disk.
 const FIXTURES_DIR = join(import.meta.dir, "fixtures", "covers");
 
 const s3 = new Bun.S3Client({
