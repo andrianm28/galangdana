@@ -128,6 +128,31 @@ async function findOwnedDisbursement(disbursementId: string, userId: string) {
   return row ?? null;
 }
 
+/**
+ * Segregation of duties for the two admin actions that move money.
+ *
+ * `checkAdmin` only answers "is this user an admin?", and
+ * `getOrCreateCampaignerForUser` hands a campaigners row to ANY authenticated
+ * user with no role check -- an admin who opens the campaign wizard silently
+ * becomes a campaigner too. Without this guard a single person holding the
+ * admin role could create the campaign, request the disbursement, take their
+ * own OTP, approve it and pay it: four steps, one human, no code objection.
+ * `approvedBy` recorded who clicked, which is not the same as recording that
+ * two people were involved -- and recording it is the entire point.
+ *
+ * Returns true when `userId` is the campaigner behind this disbursement's
+ * campaign, i.e. when approving or paying would be self-dealing.
+ */
+async function isOwnDisbursement(disbursementId: string, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ ownerUserId: campaigners.userId })
+    .from(disbursementRequests)
+    .innerJoin(campaigns, eq(disbursementRequests.campaignId, campaigns.id))
+    .innerJoin(campaigners, eq(campaigns.campaignerId, campaigners.id))
+    .where(eq(disbursementRequests.id, disbursementId));
+  return row?.ownerUserId === userId;
+}
+
 export const disbursementsRoute = new Elysia()
   .use(sessionDerive)
   .post(
@@ -706,6 +731,10 @@ export const disbursementsRoute = new Elysia()
         set.status = adminError.status;
         return { error: adminError.status === 401 ? "not_authenticated" : "not_authorized" };
       }
+      if (user && (await isOwnDisbursement(params.id, user.id))) {
+        set.status = 403;
+        return { error: "self_approval_forbidden" };
+      }
       const now = new Date();
       const transitioned = await db
         .update(disbursementRequests)
@@ -769,6 +798,10 @@ export const disbursementsRoute = new Elysia()
       if (adminError) {
         set.status = adminError.status;
         return { error: adminError.status === 401 ? "not_authenticated" : "not_authorized" };
+      }
+      if (user && (await isOwnDisbursement(params.id, user.id))) {
+        set.status = 403;
+        return { error: "self_approval_forbidden" };
       }
       const [row] = await db
         .select({ disbursement: disbursementRequests, bankAccount: bankAccounts })
