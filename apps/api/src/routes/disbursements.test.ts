@@ -22,6 +22,21 @@ import { redis } from "../lib/redis-client";
 import { computeWithdrawableAmount, disbursementsRoute } from "./disbursements";
 import { donationsRoute } from "./donations";
 
+// donations.ts's mock provider fails closed if this is unset (see
+// donations.ts's getMockProvider) -- this test run relies on .env
+// providing it, same as donations.test.ts. Typed as a genuine `string` via
+// this IIFE, not `string | undefined` narrowed by a guard: createPaidDonation
+// below is a hoisted `function` declaration, and TypeScript doesn't carry a
+// module-level guard's narrowing through a hoisted function's body (it's
+// conservative about the function being callable before the guard runs).
+const MOCK_MIDTRANS_SERVER_KEY: string = (() => {
+  const value = process.env.MOCK_MIDTRANS_SERVER_KEY;
+  if (!value) {
+    throw new Error("MOCK_MIDTRANS_SERVER_KEY must be set to run this test file (see .env)");
+  }
+  return value;
+})();
+
 class CapturingSmsProvider implements SmsProvider {
   lastCode: string | null = null;
   async sendOtp(_phone: string, code: string): Promise<void> {
@@ -221,9 +236,7 @@ async function createPaidDonation(campaignId: string, amountStr: string) {
   const [payment] = await db.select().from(payments).where(eq(payments.donationId, donationId));
   if (!payment) throw new Error("payment row missing");
 
-  const provider = new MockPaymentProvider({
-    serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
-  });
+  const provider = new MockPaymentProvider({ serverKey: MOCK_MIDTRANS_SERVER_KEY });
   const payload = await provider.simulateWebhookPayload(payment.providerOrderId, BigInt(amountStr));
   const webhookResp = await app.handle(
     new Request("http://localhost/payments/webhook", {

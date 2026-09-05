@@ -12,18 +12,22 @@ import {
   sessions,
   users,
 } from "@galangdana/db";
-import { MockPaymentProvider } from "@galangdana/payments";
+import { MockPaymentProvider, computeMidtransSignature } from "@galangdana/payments";
 import { eq, inArray } from "drizzle-orm";
 import { donationsRoute } from "./donations";
 
 const app = donationsRoute;
 
-// donations.ts now requires SUMOPOD_WEBHOOK_SECRET to be set (fails closed
-// otherwise -- see the "fails closed" describe block below), so this test
-// run relies on .env providing it, same as MOCK_MIDTRANS_SERVER_KEY.
+// donations.ts now requires SUMOPOD_WEBHOOK_SECRET and MOCK_MIDTRANS_SERVER_KEY
+// to be set (fails closed otherwise -- see the "fails closed" describe block
+// below), so this test run relies on .env providing both.
 const SUMOPOD_WEBHOOK_SECRET = process.env.SUMOPOD_WEBHOOK_SECRET;
 if (!SUMOPOD_WEBHOOK_SECRET) {
   throw new Error("SUMOPOD_WEBHOOK_SECRET must be set to run this test file (see .env)");
+}
+const MOCK_MIDTRANS_SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY;
+if (!MOCK_MIDTRANS_SERVER_KEY) {
+  throw new Error("MOCK_MIDTRANS_SERVER_KEY must be set to run this test file (see .env)");
 }
 
 // Independently computes a valid svix-style signature -- mirrors
@@ -527,7 +531,7 @@ describe("POST /payments/webhook", () => {
   test("a valid webhook marks the donation paid and increments campaign totals", async () => {
     const { campaign, donationId, providerOrderId } = await createTestDonation("50000");
     const provider = new MockPaymentProvider({
-      serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+      serverKey: MOCK_MIDTRANS_SERVER_KEY,
     });
     const payload = await provider.simulateWebhookPayload(providerOrderId, 50000n);
 
@@ -564,7 +568,7 @@ describe("POST /payments/webhook", () => {
   test("a duplicate webhook delivery is a 200 no-op, not a double-processed donation", async () => {
     const { campaign, donationId, providerOrderId } = await createTestDonation("30000");
     const provider = new MockPaymentProvider({
-      serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+      serverKey: MOCK_MIDTRANS_SERVER_KEY,
     });
     const payload = await provider.simulateWebhookPayload(providerOrderId, 30000n);
 
@@ -622,7 +626,7 @@ describe("POST /payments/webhook", () => {
   test("enqueues one notifications_outbox row on a successful paid transition", async () => {
     const { donationId, providerOrderId } = await createTestDonation("60000");
     const provider = new MockPaymentProvider({
-      serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+      serverKey: MOCK_MIDTRANS_SERVER_KEY,
     });
     const payload = await provider.simulateWebhookPayload(providerOrderId, 60000n);
     await app.handle(
@@ -644,7 +648,7 @@ describe("POST /payments/webhook", () => {
   test("an 'expire' webhook transitions a pending donation's status to expired", async () => {
     const { donationId, providerOrderId } = await createTestDonation("35000");
     const provider = new MockPaymentProvider({
-      serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+      serverKey: MOCK_MIDTRANS_SERVER_KEY,
     });
     const payload = await provider.simulateWebhookPayload(providerOrderId, 35000n, "expire");
 
@@ -666,7 +670,7 @@ describe("POST /payments/webhook", () => {
   test("a delayed 'expire' webhook arriving after the donation is already paid does not regress its status", async () => {
     const { donationId, providerOrderId } = await createTestDonation("45000");
     const provider = new MockPaymentProvider({
-      serverKey: process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev",
+      serverKey: MOCK_MIDTRANS_SERVER_KEY,
     });
 
     const paidPayload = await provider.simulateWebhookPayload(providerOrderId, 45000n);
@@ -696,6 +700,90 @@ describe("POST /payments/webhook", () => {
     expect(donation?.status).toBe("paid");
     const [payment] = await db.select().from(payments).where(eq(payments.donationId, donationId));
     expect(payment?.status).toBe("paid");
+  });
+});
+
+describe("Mock payment provider webhook secret fails closed when unset", () => {
+  test("a forged webhook is rejected, not accepted, when MOCK_MIDTRANS_SERVER_KEY is unset", async () => {
+    // Forged against a REAL pending donation's providerOrderId, not a
+    // made-up one -- see the identical Sumopod test above for why that
+    // matters (a fabricated order id can't distinguish "signature
+    // correctly rejected" from "signature wrongly accepted, but happens to
+    // fail later because no order matched").
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "65000",
+          paymentMethod: "bank_transfer_va",
+        }),
+      }),
+    );
+    const { donationId } = (await resp.json()) as { donationId: string };
+    const [payment] = await db.select().from(payments).where(eq(payments.donationId, donationId));
+    if (!payment) throw new Error("payment row missing");
+
+    // Must be the EXACT literal that used to be donations.ts's fail-open
+    // fallback -- unlike a "some string was hardcoded" vulnerability, a
+    // signature forged with a random guess would be rejected under BOTH
+    // the vulnerable and the fixed code (it doesn't match either the
+    // specific leaked literal or a genuinely-required real key), so a
+    // random value here couldn't actually distinguish the two states.
+    // This is the real, previously-committed value; asserting it's dead is
+    // the whole point of this regression test.
+    const forgedKey = "mock-server-key-for-dev";
+    const signature = await computeMidtransSignature(
+      { orderId: payment.providerOrderId, statusCode: "200", grossAmount: "65000.00" },
+      forgedKey,
+    );
+    const rawBody = JSON.stringify({
+      order_id: payment.providerOrderId,
+      status_code: "200",
+      gross_amount: "65000.00",
+      transaction_status: "settlement",
+      transaction_id: `evt-fail-closed-${Date.now()}`,
+      signature_key: signature,
+    });
+
+    // donations.ts binds MOCK_MIDTRANS_SERVER_KEY into a module-level const
+    // at import time (see getMockProvider), so this must run in a
+    // genuinely fresh process with the env var unset -- see the identical
+    // Sumopod test above for why each step here (filtering the key out of
+    // the env object rather than deleting/undefining it, and
+    // --env-file=/dev/null) is necessary rather than cosmetic.
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => key !== "MOCK_MIDTRANS_SERVER_KEY"),
+    );
+    const proc = Bun.spawn({
+      cmd: [
+        "bun",
+        "run",
+        "--env-file=/dev/null",
+        `${import.meta.dir}/__fixtures__/mock-webhook-fail-closed.fixture.ts`,
+        rawBody,
+      ],
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+
+    expect(stdout.trim()).not.toBe("200");
+    if (exitCode !== 0 && !stdout.trim()) {
+      throw new Error(`fixture process failed unexpectedly: ${stderr}`);
+    }
+
+    // The property that actually matters: the forged webhook must not
+    // have settled the real donation it targeted.
+    const [donationAfter] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donationAfter?.status).toBe("pending");
   });
 });
 

@@ -22,7 +22,7 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { sessionDerive } from "../lib/session";
 
-const SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev";
+const SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY ?? "";
 const SUMOPOD_API_KEY = process.env.SUMOPOD_API_KEY ?? "";
 const SUMOPOD_WEBHOOK_SECRET = process.env.SUMOPOD_WEBHOOK_SECRET ?? "";
 
@@ -33,11 +33,24 @@ function getSumopodProvider() {
   return new SumopodProvider({ apiKey: SUMOPOD_API_KEY, webhookSecret: SUMOPOD_WEBHOOK_SECRET });
 }
 
+// Previously fell back to the literal "mock-server-key-for-dev" when unset --
+// that literal is committed in plaintext across this repo's own tests and
+// plan docs, and .env.production never overrode it, so the production
+// webhook endpoint was verifying signatures against a secret anyone reading
+// the public repo already knew. Fails closed now, matching the Sumopod
+// provider just below (which already got this right).
+function getMockProvider() {
+  if (!SERVER_KEY) {
+    throw new Error("MOCK_MIDTRANS_SERVER_KEY is not configured");
+  }
+  return new MockPaymentProvider({ serverKey: SERVER_KEY });
+}
+
 function getProvider(method: PaymentMethod) {
   if (method === "qris_redirect") {
     return getSumopodProvider();
   }
-  return new MockPaymentProvider({ serverKey: SERVER_KEY });
+  return getMockProvider();
 }
 
 async function processPaymentWebhookEvent(event: WebhookEvent) {
