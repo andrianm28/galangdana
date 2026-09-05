@@ -450,6 +450,11 @@ describe("GET /donations/:id", () => {
     expect(resp.status).toBe(404);
   });
 
+  test("422s for a malformed donation id, instead of a 500 from a raw Postgres uuid-syntax error", async () => {
+    const resp = await app.handle(new Request("http://localhost/donations/not-a-uuid"));
+    expect(resp.status).toBe(422);
+  });
+
   test("returns a user-owned donation's status when accessed by the owner", async () => {
     const campaign = await seedTestCampaign();
     const resp = await app.handle(

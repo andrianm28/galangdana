@@ -173,7 +173,7 @@ export const adminRoute = new Elysia()
       };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: AdminCampaignDetailResponseSchema,
         401: CampaignErrorSchema,
@@ -244,7 +244,7 @@ export const adminRoute = new Elysia()
       return { status: "active" };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: AdminActionResponseSchema,
         401: CampaignErrorSchema,
@@ -296,7 +296,7 @@ export const adminRoute = new Elysia()
       return { status: "needs_revision" };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: AdminRequestRevisionBodySchema,
       response: {
         200: AdminActionResponseSchema,
