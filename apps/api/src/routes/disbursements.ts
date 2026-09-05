@@ -33,8 +33,17 @@ import { checkAdmin } from "../lib/admin";
 import { extractDocumentExtension, privateDocumentsS3 } from "../lib/media-s3";
 import { sessionDerive } from "../lib/session";
 
-const SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY ?? "mock-server-key-for-dev";
+// createPayout() below never reads serverKey (only createCharge/parseWebhook
+// do), but this still fails closed rather than falling back to a
+// publicly-known literal: MockPaymentProvider is a stand-in for a real
+// payment provider, and requiring real configuration before any of its
+// methods run in production is the safer default regardless of which
+// specific method happens to need which specific field today.
+const SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY ?? "";
 function getProvider() {
+  if (!SERVER_KEY) {
+    throw new Error("MOCK_MIDTRANS_SERVER_KEY is not configured");
+  }
   return new MockPaymentProvider({ serverKey: SERVER_KEY });
 }
 

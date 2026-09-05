@@ -118,6 +118,13 @@ jobs:
       - name: Generate ephemeral Sumopod webhook test secret
         run: echo "SUMOPOD_WEBHOOK_SECRET=whsec_$(openssl rand -base64 32)" >> "$GITHUB_ENV"
 
+      # Same reasoning as the Sumopod secret above: donations.ts's mock
+      # provider (getMockProvider) now fails closed if this is unset,
+      # closing a real forged-webhook vulnerability where it previously
+      # fell back to a literal committed in this repo's own source.
+      - name: Generate ephemeral mock payment provider test secret
+        run: echo "MOCK_MIDTRANS_SERVER_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
       # Not a services: entry: that schema has no command/entrypoint
       # override (confirmed against GitHub's own docs and community
       # discussion #52675), and the plain minio/minio image's default CMD
