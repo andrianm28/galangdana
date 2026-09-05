@@ -5,11 +5,11 @@ import ConsumerShell from "./ConsumerShell.svelte";
 afterEach(() => cleanup());
 
 describe("ConsumerShell", () => {
-  test("renders the GalangDana wordmark and the page content", () => {
+  test("renders the FundForIndonesia wordmark and the page content", () => {
     const { container } = render(ConsumerShell, {
       props: { children: textSnippet("Homepage content") },
     });
-    expect(screen.getByText("GalangDana")).not.toBeNull();
+    expect(screen.getByText("FundForIndonesia")).not.toBeNull();
     expect(screen.getByText("Homepage content")).not.toBeNull();
   });
 

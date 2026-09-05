@@ -11,7 +11,7 @@ const { title, children }: Props = $props();
 
 <div class="flex min-h-screen bg-neutral-50">
   <aside class="w-56 shrink-0 border-r border-neutral-200 bg-white px-4 py-6">
-    <span class="font-sans text-lg font-bold text-primary-dark">GalangDana</span>
+    <span class="font-sans text-lg font-bold text-primary-dark">FundForIndonesia</span>
   </aside>
   <div class="flex-1">
     {#if title}
