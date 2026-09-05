@@ -227,10 +227,20 @@ describe("GET /campaigns", () => {
   });
 
   test("cover image URLs are real, fully-formed imgproxy URLs, not raw object keys", async () => {
-    const resp = await app.handle(new Request("http://localhost/campaigns?limit=1"));
-    const body = (await resp.json()) as { campaigns: Array<{ coverImageUrl: string }> };
-    expect(body.campaigns[0]?.coverImageUrl).toMatch(/^http:\/\/localhost:8090\//);
-    expect(body.campaigns[0]?.coverImageUrl).not.toContain("campaigns/covers/");
+    // Hits a specific known-seeded slug directly rather than
+    // `?limit=1`'s first list result: other apps/api test files create
+    // real "active" campaigns of their own (with no cover image, since
+    // that's not what they're testing), and default list ordering is
+    // "newest first" -- a fixture campaign created moments ago by another
+    // file would otherwise sort ahead of this suite's seed data and make
+    // this assertion depend on cross-file execution order/cleanup rather
+    // than on this endpoint's own behavior.
+    const resp = await app.handle(
+      new Request("http://localhost/campaigns/bantu-korban-banjir-bandang-kalimantan-selatan"),
+    );
+    const body = (await resp.json()) as { coverImageUrl: string };
+    expect(body.coverImageUrl).toMatch(/^http:\/\/localhost:8090\//);
+    expect(body.coverImageUrl).not.toContain("campaigns/covers/");
   });
 
   test("pagination: limit and page narrow the result set", async () => {
@@ -748,7 +758,11 @@ describe("POST /campaigns/:id/submit", () => {
     );
     await db
       .update(campaigns)
-      .set({ status: "active", publishedAt: new Date() })
+      .set({
+        status: "active",
+        publishedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      })
       .where(eq(campaigns.id, campaign.id));
 
     const resp = await app.handle(
@@ -924,7 +938,14 @@ describe("PUT /campaigns/:id/story", () => {
 
   test("409s once the campaign is active", async () => {
     const campaign = await createTestCampaign(TEST_TOKEN);
-    await db.update(campaigns).set({ status: "active" }).where(eq(campaigns.id, campaign.id));
+    await db
+      .update(campaigns)
+      .set({
+        status: "active",
+        publishedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      })
+      .where(eq(campaigns.id, campaign.id));
     const resp = await app.handle(
       authedRequest(`http://localhost/campaigns/${campaign.id}/story`, TEST_TOKEN, {
         method: "PUT",
@@ -1031,7 +1052,14 @@ describe("POST /campaigns/:id/documents/presign + /confirm", () => {
 
   test("409s presign once the campaign is no longer editable", async () => {
     const campaign = await createTestCampaign(TEST_TOKEN);
-    await db.update(campaigns).set({ status: "active" }).where(eq(campaigns.id, campaign.id));
+    await db
+      .update(campaigns)
+      .set({
+        status: "active",
+        publishedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      })
+      .where(eq(campaigns.id, campaign.id));
     const resp = await app.handle(
       authedRequest(`http://localhost/campaigns/${campaign.id}/documents/presign`, TEST_TOKEN, {
         method: "POST",

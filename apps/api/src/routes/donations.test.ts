@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   campaignCategories,
   campaigners,
@@ -13,7 +13,7 @@ import {
   users,
 } from "@galangdana/db";
 import { MockPaymentProvider } from "@galangdana/payments";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { donationsRoute } from "./donations";
 
 const app = donationsRoute;
@@ -43,6 +43,19 @@ function authedRequest(url: string, token: string, init: RequestInit = {}) {
   });
 }
 
+// Every campaign this creates is tracked here and deleted in `afterAll`,
+// along with any donations/payments created against it -- previously this
+// leaked a real "active" campaign per call (15 call sites, so 15 per test
+// run) with no cleanup at all, and with no publishedAt/expiresAt set. Under
+// Postgres's default NULLS FIRST for a DESC ORDER BY, those null-publishedAt
+// rows sorted to the front of GET /campaigns's default and "newest" listings
+// and (being a "goal" model with no expiresAt) broke campaigns.test.ts's
+// sort=urgent assertion too -- see the campaigns-test-isolation-gap memory
+// this was tracked under. Fixed at the source (a realistic fixture) rather
+// than by making campaigns.test.ts's assertions defensive, since a real
+// active campaign genuinely should have a real publishedAt.
+const campaignIds: string[] = [];
+
 async function seedTestCampaign() {
   const [category] = await db.select().from(campaignCategories).limit(1);
   if (!category) throw new Error("no seeded category -- run db:seed first");
@@ -62,11 +75,28 @@ async function seedTestCampaign() {
       model: "goal",
       goalAmount: 10000000n,
       status: "active",
+      publishedAt: new Date(),
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     })
     .returning();
   if (!campaign) throw new Error("campaign insert failed");
+  campaignIds.push(campaign.id);
   return campaign;
 }
+
+afterAll(async () => {
+  if (campaignIds.length === 0) return;
+  const campaignDonations = await db
+    .select({ id: donations.id })
+    .from(donations)
+    .where(inArray(donations.campaignId, campaignIds));
+  const donationIds = campaignDonations.map((d) => d.id);
+  if (donationIds.length > 0) {
+    await db.delete(payments).where(inArray(payments.donationId, donationIds));
+    await db.delete(donations).where(inArray(donations.id, donationIds));
+  }
+  await db.delete(campaigns).where(inArray(campaigns.id, campaignIds));
+});
 
 describe("POST /donations", () => {
   test("creates a pending donation and a payment with a VA number, for a guest", async () => {

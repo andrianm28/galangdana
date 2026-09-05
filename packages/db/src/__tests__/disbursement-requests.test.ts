@@ -46,6 +46,13 @@ describe("disbursement_requests", () => {
         model: "goal",
         goalAmount: 1_000_000n,
         status: "active",
+        // A real active campaign always has these set; a null publishedAt
+        // sorts first under GET /campaigns's default DESC ordering
+        // (Postgres's NULLS FIRST), which corrupts apps/api's
+        // campaigns.test.ts sort assertions whenever this row is still
+        // present in the shared test database.
+        publishedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         categoryId: category.id,
         campaignerId,
       })

@@ -63,6 +63,15 @@ async function seedPendingCampaign() {
       campaignerId: campaigner.id,
       model: "goal",
       goalAmount: 5000000n,
+      // A real goal-model campaign set up through the wizard has a
+      // deadline by the time it's submitted; POST /admin/campaigns/:id/
+      // approve doesn't touch expiresAt (that's set at campaign creation,
+      // not approval), so a null value here stays null through every test
+      // in this file that approves this fixture -- and null expiresAt on
+      // an active goal campaign corrupts apps/api's campaigns.test.ts
+      // sort=urgent assertion whenever this row is still present in the
+      // shared test database.
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       status: "pending_review",
       submittedAt: new Date(),
     })
@@ -203,7 +212,19 @@ describe("POST /admin/campaigns/:id/approve", () => {
 
   test("409s when the campaign isn't pending_review", async () => {
     const campaign = await seedPendingCampaign();
-    await db.update(campaigns).set({ status: "active" }).where(eq(campaigns.id, campaign.id));
+    // publishedAt matters here, not just status: a real approve sets it,
+    // and GET /campaigns's default + "newest" sort order by it DESC. A
+    // null publishedAt sorts first under Postgres's NULLS FIRST default,
+    // which previously corrupted campaigns.test.ts's sort assertions
+    // whenever this row was still present in the shared test database.
+    await db
+      .update(campaigns)
+      .set({
+        status: "active",
+        publishedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      })
+      .where(eq(campaigns.id, campaign.id));
     const token = ADMIN_TOKEN;
     const resp = await app.handle(
       authedRequest(`http://localhost/admin/campaigns/${campaign.id}/approve`, token, {
