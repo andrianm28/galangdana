@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { User } from "@galangdana/db";
+import type { User } from "@fundforindonesia/db";
 import { checkAdmin } from "./admin";
 
 function fakeUser(overrides: Partial<User> = {}): User {

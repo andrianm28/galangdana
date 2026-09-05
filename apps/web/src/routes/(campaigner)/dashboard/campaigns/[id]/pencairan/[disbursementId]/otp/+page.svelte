@@ -2,7 +2,7 @@
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { api } from "$lib/api-client";
-import { Button, FormField, TextInput } from "@galangdana/ui";
+import { Button, FormField, TextInput } from "@fundforindonesia/ui";
 
 let sent = $state(false);
 // biome-ignore lint/style/useConst: Svelte binding requires mutable let

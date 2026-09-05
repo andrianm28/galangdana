@@ -1,6 +1,6 @@
-import { SearchQuerySchema, SearchResponseSchema } from "@galangdana/contracts";
-import { campaignCategories, campaigners, campaigns, db } from "@galangdana/db";
-import { searchCampaigns } from "@galangdana/search";
+import { SearchQuerySchema, SearchResponseSchema } from "@fundforindonesia/contracts";
+import { campaignCategories, campaigners, campaigns, db } from "@fundforindonesia/db";
+import { searchCampaigns } from "@fundforindonesia/search";
 import { and, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { toCampaignSummary } from "../lib/campaign-response";

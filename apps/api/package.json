@@ -1,5 +1,5 @@
 {
-  "name": "@galangdana/api",
+  "name": "@fundforindonesia/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,12 +13,12 @@
   },
   "dependencies": {
     "@elysiajs/cors": "1.1.1",
-    "@galangdana/contracts": "workspace:*",
-    "@galangdana/db": "workspace:*",
-    "@galangdana/media": "workspace:*",
-    "@galangdana/money": "workspace:*",
-    "@galangdana/payments": "workspace:*",
-    "@galangdana/search": "workspace:*",
+    "@fundforindonesia/contracts": "workspace:*",
+    "@fundforindonesia/db": "workspace:*",
+    "@fundforindonesia/media": "workspace:*",
+    "@fundforindonesia/money": "workspace:*",
+    "@fundforindonesia/payments": "workspace:*",
+    "@fundforindonesia/search": "workspace:*",
     "drizzle-orm": "^0.36.4",
     "elysia": "1.1.26"
   },

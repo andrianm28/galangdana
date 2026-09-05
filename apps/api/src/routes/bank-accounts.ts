@@ -2,8 +2,8 @@ import {
   BankAccountListResponseSchema,
   CreateBankAccountBodySchema,
   DisbursementErrorSchema,
-} from "@galangdana/contracts";
-import { bankAccounts, campaigners, db } from "@galangdana/db";
+} from "@fundforindonesia/contracts";
+import { bankAccounts, campaigners, db } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { sessionDerive } from "../lib/session";

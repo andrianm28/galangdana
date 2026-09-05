@@ -1,4 +1,4 @@
-import type { User } from "@galangdana/db";
+import type { User } from "@fundforindonesia/db";
 
 /**
  * The admin authorization gate, checked inline at the top of every

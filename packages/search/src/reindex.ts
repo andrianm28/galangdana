@@ -1,4 +1,4 @@
-import { campaignCategories, campaigns, db } from "@galangdana/db";
+import { campaignCategories, campaigns, db } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 import { syncCampaignsIndex } from "./campaigns-index";
 

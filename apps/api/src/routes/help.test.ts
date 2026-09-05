@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import { db, helpArticles, sessions, supportTickets, users } from "@galangdana/db";
+import { db, helpArticles, sessions, supportTickets, users } from "@fundforindonesia/db";
 import { eq, inArray } from "drizzle-orm";
 import { helpRoute } from "./help";
 

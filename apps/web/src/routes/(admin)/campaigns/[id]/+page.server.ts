@@ -1,6 +1,6 @@
 import { createServerApiClient } from "$lib/server-api-client";
 import type { Treaty } from "@elysiajs/eden";
-import type { AdminCampaignDetailResponse } from "@galangdana/contracts";
+import type { AdminCampaignDetailResponse } from "@fundforindonesia/contracts";
 import { error } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 
@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
   // into the inferred response type instead of respecting the declared
   // `Type.String()`/`Type.Union(...)` contract. Narrow cast on the callable,
   // then re-cast the awaited result to the real response shape from
-  // @galangdana/contracts.
+  // @fundforindonesia/contracts.
   // biome-ignore lint/suspicious/noExplicitAny: Eden response-type over-narrowing requires casting
   const detailClient = client.admin.campaigns({ id: params.id }) as any;
   const { data, error: apiError } = (await detailClient.get()) as Treaty.TreatyResponse<{

@@ -1,4 +1,4 @@
-import { campaigns, db } from "@galangdana/db";
+import { campaigns, db } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 
 // Every top-level route segment named anywhere in the master plan's Module

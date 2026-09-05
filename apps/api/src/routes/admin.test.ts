@@ -10,7 +10,7 @@ import {
   individualVerifications,
   sessions,
   users,
-} from "@galangdana/db";
+} from "@fundforindonesia/db";
 import { eq, inArray } from "drizzle-orm";
 import { adminRoute } from "./admin";
 

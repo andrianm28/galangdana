@@ -1,6 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
 
-// Mirrors @galangdana/money's MoneyJSON shape exactly -- contracts can't
+// Mirrors @fundforindonesia/money's MoneyJSON shape exactly -- contracts can't
 // import a runtime value from another package's *type* declaration
 // through TypeBox, so this is a parallel schema definition that must stay
 // in sync with packages/money/src/money.ts's MoneyJSON interface by hand.

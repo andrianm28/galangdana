@@ -1,5 +1,5 @@
 <script lang="ts">
-import { AdminShell } from "@galangdana/ui";
+import { AdminShell } from "@fundforindonesia/ui";
 
 const { children } = $props();
 </script>

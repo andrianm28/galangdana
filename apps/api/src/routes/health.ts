@@ -1,4 +1,4 @@
-import { HealthResponseSchema } from "@galangdana/contracts";
+import { HealthResponseSchema } from "@fundforindonesia/contracts";
 import { Elysia } from "elysia";
 
 export const healthRoute = new Elysia().get(

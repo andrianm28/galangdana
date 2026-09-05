@@ -2,7 +2,7 @@
 import { goto } from "$app/navigation";
 import { api } from "$lib/api-client";
 import type { Treaty } from "@elysiajs/eden";
-import type { SubmitCampaignResponse } from "@galangdana/contracts";
+import type { SubmitCampaignResponse } from "@fundforindonesia/contracts";
 import { previousKycStep } from "../kyc-step-order";
 import type { PageProps } from "./$types";
 

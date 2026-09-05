@@ -1,5 +1,5 @@
 <script lang="ts">
-import { type MoneyJSON, formatMoney, moneyFromJSON } from "@galangdana/money";
+import { type MoneyJSON, formatMoney, moneyFromJSON } from "@fundforindonesia/money";
 import Badge from "./Badge.svelte";
 import Card from "./Card.svelte";
 

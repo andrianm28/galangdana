@@ -57,7 +57,7 @@ describe("CampaignCard", () => {
     expect(screen.getByText("Bencana Alam")).not.toBeNull();
   });
 
-  test("formats the collected amount using id-ID Rupiah grouping via @galangdana/money", () => {
+  test("formats the collected amount using id-ID Rupiah grouping via @fundforindonesia/money", () => {
     render(CampaignCard, { props: { campaign: GOAL_CAMPAIGN } });
     // formatMoney({amount: 45000000n, currency: "IDR"}) -> "Rp45.000.000" (id-ID grouping)
     expect(screen.getByText("Rp45.000.000")).not.toBeNull();

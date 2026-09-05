@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type HealthResponse, HealthResponseSchema } from "@galangdana/contracts";
+import { type HealthResponse, HealthResponseSchema } from "@fundforindonesia/contracts";
 import { Value } from "@sinclair/typebox/value";
 import { app } from "../index";
 

@@ -8,8 +8,13 @@ import {
   SubmitSupportTicketBodySchema,
   SubmitSupportTicketResponseSchema,
   UpdateHelpArticleBodySchema,
-} from "@galangdana/contracts";
-import { db, helpArticles, type supportTicketStatusEnum, supportTickets } from "@galangdana/db";
+} from "@fundforindonesia/contracts";
+import {
+  db,
+  helpArticles,
+  type supportTicketStatusEnum,
+  supportTickets,
+} from "@fundforindonesia/db";
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { checkAdmin } from "../lib/admin";

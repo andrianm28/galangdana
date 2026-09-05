@@ -6,8 +6,8 @@ import {
   OtpVerifyBodySchema,
   RegisterBodySchema,
   SimpleSuccessSchema,
-} from "@galangdana/contracts";
-import type { User } from "@galangdana/db";
+} from "@fundforindonesia/contracts";
+import type { User } from "@fundforindonesia/db";
 import { type Cookie, Elysia, t } from "elysia";
 import {
   buildGoogleAuthUrl,

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { api } from "$lib/api-client";
-import { formatMoney, money } from "@galangdana/money";
+import { formatMoney, money } from "@fundforindonesia/money";
 import { getDocumentTypes } from "../dokumen/document-types";
 import { previousStep } from "../step-order";
 import type { PageProps } from "./$types";

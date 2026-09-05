@@ -1,6 +1,6 @@
 import { createServerApiClient } from "$lib/server-api-client";
 import type { Treaty } from "@elysiajs/eden";
-import type { DisbursementDetailResponse } from "@galangdana/contracts";
+import type { DisbursementDetailResponse } from "@fundforindonesia/contracts";
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 

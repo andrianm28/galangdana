@@ -1,5 +1,5 @@
-import { CampaignCategorySchema } from "@galangdana/contracts";
-import { campaignCategories, db } from "@galangdana/db";
+import { CampaignCategorySchema } from "@fundforindonesia/contracts";
+import { campaignCategories, db } from "@fundforindonesia/db";
 import { Elysia, t } from "elysia";
 
 export const categoriesRoute = new Elysia().get(

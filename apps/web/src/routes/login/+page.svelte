@@ -2,7 +2,7 @@
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { api } from "$lib/api-client";
-import { Alert, Button, FormField, TextInput } from "@galangdana/ui";
+import { Alert, Button, FormField, TextInput } from "@fundforindonesia/ui";
 
 type Stage = "phone" | "code";
 

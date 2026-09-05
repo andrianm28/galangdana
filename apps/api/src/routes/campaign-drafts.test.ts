@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import { campaignCategories, db, sessions, users } from "@galangdana/db";
+import { campaignCategories, db, sessions, users } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 import { app } from "../index";
 

@@ -12,7 +12,7 @@ import {
   SaveGuidedStoryBodySchema,
   SaveManualStoryBodySchema,
   SavePatientBodySchema,
-} from "@galangdana/contracts";
+} from "@fundforindonesia/contracts";
 import {
   beneficiaries,
   campaignDocuments,
@@ -20,7 +20,7 @@ import {
   campaignStoryAnswers,
   db,
   patients,
-} from "@galangdana/db";
+} from "@fundforindonesia/db";
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { sessionDerive } from "../lib/session";

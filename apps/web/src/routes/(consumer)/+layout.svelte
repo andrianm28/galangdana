@@ -1,5 +1,5 @@
 <script lang="ts">
-import { ConsumerShell } from "@galangdana/ui";
+import { ConsumerShell } from "@fundforindonesia/ui";
 
 const { children } = $props();
 </script>

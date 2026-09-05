@@ -1,4 +1,4 @@
-import { type Money, money } from "@galangdana/money";
+import { type Money, money } from "@fundforindonesia/money";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -15,7 +15,7 @@ import { campaignDrafts } from "./campaign-drafts";
 import { campaigners } from "./campaigners";
 import { campaignCategories } from "./categories";
 
-// Matches @galangdana/money's Currency type exactly ("IDR" | "USD").
+// Matches @fundforindonesia/money's Currency type exactly ("IDR" | "USD").
 // Campaigns in this platform are IDR in practice -- the column defaults to
 // IDR below -- but USD support exists here for schema honesty and
 // future-proofing, matching how the wider design's CSR/grants module needs

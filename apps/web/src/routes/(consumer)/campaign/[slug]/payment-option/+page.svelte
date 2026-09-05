@@ -1,7 +1,7 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
-import { Button } from "@galangdana/ui";
+import { Button } from "@fundforindonesia/ui";
 
 const amount = $derived(page.url.searchParams.get("amount") ?? "");
 // biome-ignore lint/style/useConst: Svelte binding requires mutable let

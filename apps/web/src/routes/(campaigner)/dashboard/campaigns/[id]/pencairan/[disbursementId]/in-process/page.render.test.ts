@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { DisbursementDetailResponse } from "@galangdana/contracts";
+import type { DisbursementDetailResponse } from "@fundforindonesia/contracts";
 import { render, screen } from "@testing-library/svelte";
 import { describe, expect, test } from "vitest";
 import Page from "./+page.svelte";

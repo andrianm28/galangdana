@@ -2,7 +2,7 @@
 import { goto, invalidateAll } from "$app/navigation";
 import { api } from "$lib/api-client";
 import type { Treaty } from "@elysiajs/eden";
-import type { PresignKycDocumentResponse } from "@galangdana/contracts";
+import type { PresignKycDocumentResponse } from "@fundforindonesia/contracts";
 import { nextKycStep, previousKycStep } from "../kyc-step-order";
 
 interface Props {

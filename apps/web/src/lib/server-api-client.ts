@@ -1,6 +1,6 @@
 import { env } from "$env/dynamic/public";
 import { treaty } from "@elysiajs/eden";
-import type { App } from "@galangdana/api";
+import type { App } from "@fundforindonesia/api";
 
 const API_URL = env.PUBLIC_API_URL ?? "http://localhost:3001";
 

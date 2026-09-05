@@ -1,5 +1,5 @@
 <script lang="ts">
-import { CampaignCard } from "@galangdana/ui";
+import { CampaignCard } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();

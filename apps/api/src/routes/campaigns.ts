@@ -20,7 +20,7 @@ import {
   SaveKycContactBodySchema,
   SaveKycIdentityBodySchema,
   SubmitCampaignResponseSchema,
-} from "@galangdana/contracts";
+} from "@fundforindonesia/contracts";
 import {
   campaignCategories,
   campaignDocuments,
@@ -32,8 +32,8 @@ import {
   db,
   disbursementRequests,
   individualVerifications,
-} from "@galangdana/db";
-import { moneyToJSON } from "@galangdana/money";
+} from "@fundforindonesia/db";
+import { moneyToJSON } from "@fundforindonesia/money";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { toCampaignDetail, toCampaignSummary } from "../lib/campaign-response";

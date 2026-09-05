@@ -1,4 +1,4 @@
-import { type Campaigner, campaigners, db, users } from "@galangdana/db";
+import { type Campaigner, campaigners, db, users } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 
 /**

@@ -14,7 +14,7 @@ import {
   SaveDisbursementDetailBodySchema,
   VerifyDisbursementOtpBodySchema,
   VerifyDisbursementOtpResponseSchema,
-} from "@galangdana/contracts";
+} from "@fundforindonesia/contracts";
 import {
   bankAccounts,
   campaigners,
@@ -23,9 +23,9 @@ import {
   disbursementRequests,
   type disbursementStatusEnum,
   donations,
-} from "@galangdana/db";
-import { moneyToJSON } from "@galangdana/money";
-import { MockPaymentProvider } from "@galangdana/payments";
+} from "@fundforindonesia/db";
+import { moneyToJSON } from "@fundforindonesia/money";
+import { MockPaymentProvider } from "@fundforindonesia/payments";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { requestOtp, verifyOtp } from "../auth/otp";

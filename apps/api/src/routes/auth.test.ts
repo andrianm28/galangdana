@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { db, oauthAccounts, otpChallenges, sessions, users } from "@galangdana/db";
+import { db, oauthAccounts, otpChallenges, sessions, users } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 import { app } from "../index";
 import { redis } from "../lib/redis-client";
