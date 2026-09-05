@@ -291,7 +291,7 @@ jobs:
     steps:
       # Deliberately not actions/checkout@v4: that checks out into the
       # runner's own _work/ workspace, which the running systemd services
-      # (galangdana-api.service / galangdana-web.service) know nothing
+      # (fundforindonesia-api.service / fundforindonesia-web.service) know nothing
       # about -- their WorkingDirectory is /home/ubuntu/galangdana, the
       # same real checkout used throughout this project's manual deploys
       # so far. This job updates that checkout in place instead.
@@ -313,7 +313,7 @@ jobs:
         working-directory: /home/ubuntu/galangdana
         # Explicit --env-file rather than relying on Bun's ambient .env
         # auto-load: .env.production is what the live services actually
-        # run with (see galangdana-api.service / galangdana-web.service's
+        # run with (see fundforindonesia-api.service / fundforindonesia-web.service's
         # EnvironmentFile=), and today it happens to point at the same
         # database as local dev .env -- but being explicit here means this
         # keeps doing the right thing once dev/staging/prod databases
@@ -334,11 +334,11 @@ jobs:
         # environment the way an interactive login shell would. Verified
         # this exact env var is sufficient via `sudo systemd-run --uid=ubuntu
         # -p Environment=XDG_RUNTIME_DIR=/run/user/1000 systemctl --user
-        # status galangdana-web.service` before wiring this up.
+        # status fundforindonesia-web.service` before wiring this up.
         run: |
           export XDG_RUNTIME_DIR=/run/user/$(id -u)
-          systemctl --user restart galangdana-api.service
-          systemctl --user restart galangdana-web.service
+          systemctl --user restart fundforindonesia-api.service
+          systemctl --user restart fundforindonesia-web.service
 
       - name: Health check
         run: |
