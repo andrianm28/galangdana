@@ -1,4 +1,10 @@
-name: galangdana
+# Changing this `name:` changes the Docker volume prefix (pgdata ->
+# fundforindonesia_pgdata). The galangdana_* volumes were copied, not
+# recreated, when this was renamed -- see docs/superpowers/plans/
+# 2026-09-05-rename-galangdana-to-fundforindonesia.md Task 5. Never change
+# `name:` and run `docker compose up` without migrating volumes first: compose
+# silently creates new empty ones and the database appears to vanish.
+name: fundforindonesia
 
 # Every published port below is bound to 127.0.0.1 explicitly, not left as
 # the bare "host:container" form (which Docker publishes on 0.0.0.0 by
@@ -14,13 +20,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: galangdana
-      POSTGRES_PASSWORD: galangdana
-      POSTGRES_DB: galangdana
+      POSTGRES_USER: fundforindonesia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env} # ggignore
+      POSTGRES_DB: fundforindonesia
     ports: ["127.0.0.1:55434:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U galangdana"]
+      test: ["CMD-SHELL", "pg_isready -U fundforindonesia"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -38,8 +44,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: galangdana
-      MINIO_ROOT_PASSWORD: galangdana-dev-secret
+      MINIO_ROOT_USER: fundforindonesia
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env} # ggignore
     ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
     volumes: ["miniodata:/data"]
     healthcheck:
@@ -99,7 +105,7 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.11
     environment:
-      MEILI_MASTER_KEY: galangdana-dev-master-key
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY in .env}
       MEILI_NO_ANALYTICS: "true"
     ports: ["127.0.0.1:7700:7700"]
     volumes: ["meilidata:/meili_data"]

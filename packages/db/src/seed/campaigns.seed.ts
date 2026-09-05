@@ -74,14 +74,14 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
   },
   {
     slug: "program-amil-zakat-mitra",
-    title: "Dana Zakat untuk Program Amil Mitra GalangDana",
+    title: "Dana Zakat untuk Program Amil Mitra FundForIndonesia",
     shortDescription:
       "Salurkan zakat Anda melalui amil mitra terpercaya untuk didistribusikan kepada mustahik secara berkelanjutan.",
     story:
       "Program ini menghimpun zakat dari para donatur dan menyalurkannya secara berkelanjutan kepada delapan asnaf melalui jaringan amil mitra. Karena sifatnya berkelanjutan, program ini tidak memiliki target atau tenggat waktu -- dana yang tersedia langsung disalurkan sesuai kebutuhan mustahik yang terverifikasi.",
     coverMediaUrl: "campaigns/covers/program-amil-zakat-mitra.jpg",
     categorySlug: "zakat",
-    campaignerName: "GalangDana Program Mitra",
+    campaignerName: "FundForIndonesia Program Mitra",
     model: "program",
     goalAmount: null,
     expiresAt: null,

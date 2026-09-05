@@ -5,5 +5,5 @@ export const CAMPAIGNER_SEED_DATA: NewCampaigner[] = [
   { type: "individual", displayName: "Rina Wijaya" },
   { type: "yayasan", displayName: "Yayasan Peduli Sesama" },
   { type: "yayasan", displayName: "Yayasan Bina Umat Sejahtera" },
-  { type: "platform", displayName: "GalangDana Program Mitra" },
+  { type: "platform", displayName: "FundForIndonesia Program Mitra" },
 ];

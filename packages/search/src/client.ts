@@ -7,6 +7,6 @@ import { Meilisearch } from "meilisearch";
 export function getMeilisearchClient(): Meilisearch {
   return new Meilisearch({
     host: process.env.MEILISEARCH_URL ?? "http://localhost:7700",
-    apiKey: process.env.MEILISEARCH_API_KEY ?? "galangdana-dev-master-key",
+    apiKey: process.env.MEILISEARCH_API_KEY ?? "fundforindonesia-dev-master-key",
   });
 }
