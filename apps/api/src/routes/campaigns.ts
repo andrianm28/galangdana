@@ -301,7 +301,7 @@ export const campaignsRoute = new Elysia()
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: SaveKycIdentityBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -352,7 +352,7 @@ export const campaignsRoute = new Elysia()
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: SaveKycContactBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -390,7 +390,7 @@ export const campaignsRoute = new Elysia()
       return { uploadUrl, objectKey, expiresInSeconds };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: PresignKycDocumentBodySchema,
       response: {
         200: PresignKycDocumentResponseSchema,
@@ -443,7 +443,7 @@ export const campaignsRoute = new Elysia()
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: ConfirmKycDocumentBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -494,7 +494,7 @@ export const campaignsRoute = new Elysia()
       };
     },
     {
-      params: t.Object({ slug: t.String() }),
+      params: t.Object({ slug: t.String({ format: "uuid" }) }),
       response: {
         200: KycStatusSchema,
         401: CampaignErrorSchema,
@@ -557,7 +557,7 @@ export const campaignsRoute = new Elysia()
       return { status: "pending_review" };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: SubmitCampaignResponseSchema,
         400: CampaignErrorSchema,
@@ -607,7 +607,7 @@ export const campaignsRoute = new Elysia()
       };
     },
     {
-      params: t.Object({ slug: t.String() }),
+      params: t.Object({ slug: t.String({ format: "uuid" }) }),
       response: {
         200: CampaignRevisionListResponseSchema,
         401: CampaignErrorSchema,
@@ -640,7 +640,7 @@ export const campaignsRoute = new Elysia()
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: SaveCampaignStoryBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -675,7 +675,7 @@ export const campaignsRoute = new Elysia()
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: SaveCampaignGoalAmountBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -717,7 +717,7 @@ export const campaignsRoute = new Elysia()
       return { uploadUrl, objectKey, expiresInSeconds };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: PresignCampaignDocumentBodySchema,
       response: {
         200: PresignCampaignDocumentResponseSchema,
@@ -757,7 +757,7 @@ export const campaignsRoute = new Elysia()
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: ConfirmCampaignDocumentBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),

@@ -154,7 +154,7 @@ export const disbursementsRoute = new Elysia()
       return { id: row!.id };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: CreateDisbursementResponseSchema,
         401: DisbursementErrorSchema,
@@ -205,7 +205,7 @@ export const disbursementsRoute = new Elysia()
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: SaveDisbursementBankAccountBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -264,7 +264,7 @@ export const disbursementsRoute = new Elysia()
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: SaveDisbursementDetailBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -304,7 +304,7 @@ export const disbursementsRoute = new Elysia()
       return { uploadUrl, objectKey, expiresInSeconds };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: PresignDisbursementProofBodySchema,
       response: {
         200: PresignDisbursementProofResponseSchema,
@@ -351,7 +351,7 @@ export const disbursementsRoute = new Elysia()
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: ConfirmDisbursementProofBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -394,7 +394,7 @@ export const disbursementsRoute = new Elysia()
       };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: DisbursementDetailSchema,
         401: DisbursementErrorSchema,
@@ -499,7 +499,7 @@ export const disbursementsRoute = new Elysia()
       return { sent: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: RequestDisbursementOtpResponseSchema,
         401: DisbursementErrorSchema,
@@ -541,7 +541,7 @@ export const disbursementsRoute = new Elysia()
       return { verified: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: VerifyDisbursementOtpBodySchema,
       response: {
         200: VerifyDisbursementOtpResponseSchema,
@@ -585,7 +585,7 @@ export const disbursementsRoute = new Elysia()
       return { status: "requested" as const };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: DisbursementActionResponseSchema,
         401: DisbursementErrorSchema,
@@ -689,7 +689,7 @@ export const disbursementsRoute = new Elysia()
       };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: AdminDisbursementDetailSchema,
         401: DisbursementErrorSchema,
@@ -721,7 +721,7 @@ export const disbursementsRoute = new Elysia()
       return { status: "approved" as const };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: DisbursementActionResponseSchema,
         401: DisbursementErrorSchema,
@@ -752,7 +752,7 @@ export const disbursementsRoute = new Elysia()
       return { status: "rejected" as const };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: AdminRejectDisbursementBodySchema,
       response: {
         200: DisbursementActionResponseSchema,
@@ -857,7 +857,7 @@ export const disbursementsRoute = new Elysia()
       return { status: "paid" as const };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: DisbursementActionResponseSchema,
         401: DisbursementErrorSchema,

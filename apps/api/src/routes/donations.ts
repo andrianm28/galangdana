@@ -383,7 +383,7 @@ export const donationsRoute = new Elysia()
       };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: { 200: GetDonationResponseSchema, 404: PaymentErrorSchema },
     },
   );

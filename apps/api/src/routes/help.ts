@@ -121,7 +121,7 @@ export const helpRoute = new Elysia()
       };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: UpdateHelpArticleBodySchema,
       response: {
         200: HelpArticleSchema,
@@ -150,7 +150,7 @@ export const helpRoute = new Elysia()
       return { status: "deleted" };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: AdminActionResponseSchema,
         401: HelpErrorSchema,
@@ -220,7 +220,7 @@ export const helpRoute = new Elysia()
       return { status: "resolved" };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: AdminActionResponseSchema,
         401: HelpErrorSchema,

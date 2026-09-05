@@ -153,7 +153,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
       };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       response: {
         200: CampaignDraftDetailSchema,
         401: CampaignDraftErrorSchema,
@@ -194,7 +194,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
       return toDraftResponse(updated);
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: SaveDraftAnswersBodySchema,
       response: {
         200: CampaignDraftSchema,
@@ -247,7 +247,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: t.Union([SaveGuidedStoryBodySchema, SaveManualStoryBodySchema]),
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -280,7 +280,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: SavePatientBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -313,7 +313,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
       return { success: true };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: SaveBeneficiaryBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
@@ -354,7 +354,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
       return { uploadUrl, objectKey, expiresInSeconds };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: PresignDocumentUploadBodySchema,
       response: {
         200: PresignDocumentUploadResponseSchema,
@@ -405,7 +405,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
       };
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: ConfirmDocumentUploadBodySchema,
       response: {
         200: CampaignDocumentSchema,
