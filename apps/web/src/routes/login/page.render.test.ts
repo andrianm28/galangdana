@@ -12,7 +12,7 @@ vi.mock("$env/dynamic/public", () => ({
 describe("(login) page rendering", () => {
   test("shows the phone input by default", () => {
     render(Page);
-    expect(screen.getByText("Masuk ke GalangDana")).not.toBeNull();
+    expect(screen.getByText("Masuk ke FundForIndonesia")).not.toBeNull();
     expect(screen.getByLabelText("Nomor telepon")).not.toBeNull();
   });
 });

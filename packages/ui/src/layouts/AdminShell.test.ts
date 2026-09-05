@@ -5,9 +5,9 @@ import AdminShell from "./AdminShell.svelte";
 afterEach(() => cleanup());
 
 describe("AdminShell", () => {
-  test("renders a sidebar with the GalangDana wordmark, a title, and the page content", () => {
+  test("renders a sidebar with the FundForIndonesia wordmark, a title, and the page content", () => {
     render(AdminShell, { props: { title: "Dashboard", children: textSnippet("Panel content") } });
-    expect(screen.getByText("GalangDana")).not.toBeNull();
+    expect(screen.getByText("FundForIndonesia")).not.toBeNull();
     expect(screen.getByText("Dashboard")).not.toBeNull();
     expect(screen.getByText("Panel content")).not.toBeNull();
   });

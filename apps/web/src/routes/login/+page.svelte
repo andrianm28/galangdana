@@ -51,7 +51,7 @@ async function verifyOtp() {
 </script>
 
 <div class="mx-auto max-w-sm py-12">
-  <h1 class="mb-6 font-sans text-xl font-bold text-neutral-900">Masuk ke GalangDana</h1>
+  <h1 class="mb-6 font-sans text-xl font-bold text-neutral-900">Masuk ke FundForIndonesia</h1>
 
   {#if error}
     <div class="mb-4">
