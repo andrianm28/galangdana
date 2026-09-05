@@ -55,24 +55,45 @@ function getProvider() {
  * (collectedAmount - disbursedAmount only) and is never changed by this
  * plan. This is the server-side gate for how much a NEW disbursement
  * request may ask for.
+ *
+ * Takes an optional transaction executor so callers that need this
+ * computed under a row lock (see /otp/request below) can run it against
+ * the same `tx` that holds the lock, rather than a separate unlocked
+ * connection that would defeat the lock's purpose.
  */
-export async function computeWithdrawableAmount(campaignId: string): Promise<bigint> {
-  const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, campaignId));
+export async function computeWithdrawableAmount(
+  campaignId: string,
+  // Narrowed to just the one method this function actually calls, rather
+  // than `typeof db`: a transaction callback's `tx` parameter is
+  // structurally compatible with `db` for `.select()`, but isn't
+  // assignable to `typeof db` itself (it's missing db's own `$client`
+  // property), so `typeof db` would reject exactly the call this parameter
+  // exists to support.
+  executor: Pick<typeof db, "select"> = db,
+): Promise<bigint> {
+  const [campaign] = await executor.select().from(campaigns).where(eq(campaigns.id, campaignId));
   if (!campaign) return 0n;
 
-  const [feesRow] = await db
+  const [feesRow] = await executor
     .select({ total: sql<string>`COALESCE(SUM(${donations.platformFee}), 0)` })
     .from(donations)
     .where(and(eq(donations.campaignId, campaignId), eq(donations.status, "paid")));
   const totalFees = BigInt(feesRow?.total ?? "0");
 
-  const [pendingRow] = await db
+  const [pendingRow] = await executor
     .select({ total: sql<string>`COALESCE(SUM(${disbursementRequests.amount}), 0)` })
     .from(disbursementRequests)
     .where(
       and(
         eq(disbursementRequests.campaignId, campaignId),
-        sql`${disbursementRequests.status} IN ('otp_pending', 'requested', 'approved')`,
+        // 'processing' included alongside the others: a disbursement
+        // claimed by /pay (see that handler's approved->processing
+        // transition, which happens before the payout provider call) has
+        // left 'approved' but hasn't reached 'paid' yet -- dropping it from
+        // this sum would inflate withdrawable for the duration of the
+        // payout call, and permanently if the provider call ever fails and
+        // leaves the row stuck in 'processing' for manual reconciliation.
+        sql`${disbursementRequests.status} IN ('otp_pending', 'requested', 'approved', 'processing')`,
       ),
     );
   const pending = BigInt(pendingRow?.total ?? "0");
@@ -406,41 +427,74 @@ export const disbursementsRoute = new Elysia()
         set.status = 422;
         return { error: "disbursement_incomplete" };
       }
-      // Re-check the withdrawable balance here, immediately before the
-      // transition that reserves funds against the pool. The detail-save
-      // check (PATCH .../detail) only holds at save time -- a campaigner
-      // can save the full withdrawable amount on two separate drafts (each
-      // correctly excluded from computeWithdrawableAmount while still
-      // `draft`), then walk both through this route. This disbursement is
-      // still `draft` here, so its own amount is not yet counted in the
-      // pending sum -- no self-subtraction needed.
-      const withdrawable = await computeWithdrawableAmount(row.campaign.id);
-      if (row.disbursement.amount > withdrawable) {
-        set.status = 422;
-        return { error: "amount_exceeds_withdrawable_balance" };
-      }
       if (!user.phone) {
         set.status = 422;
         return { error: "no_phone_on_file" };
       }
+      // The balance check and the reservation transition happen inside one
+      // transaction, holding a row lock on the campaign for its duration --
+      // this closes a real race the previous re-check-then-write shape had:
+      // a campaigner could save the full withdrawable amount on two
+      // separate drafts (each correctly excluded from
+      // computeWithdrawableAmount while still `draft`), then fire this
+      // route for both concurrently. Two unlocked reads could both see the
+      // same withdrawable figure before either transition committed. With
+      // the lock, the second request's SELECT ... FOR UPDATE blocks until
+      // the first's transaction commits, and by then the first
+      // disbursement has moved to `otp_pending` -- which IS counted in
+      // computeWithdrawableAmount's pending sum -- so the second request
+      // correctly sees a reduced balance. The OTP send (a network call, no
+      // need to hold a DB lock across it) happens after this commits, not
+      // inside it -- see the revert-on-send-failure step below.
+      const reserved = await db.transaction(async (tx) => {
+        await tx
+          .select({ id: campaigns.id })
+          .from(campaigns)
+          .where(eq(campaigns.id, row.campaign.id))
+          .for("update");
+        const withdrawable = await computeWithdrawableAmount(row.campaign.id, tx);
+        // biome-ignore lint/style/noNonNullAssertion: guarded above (422s if amount is falsy)
+        if (row.disbursement.amount! > withdrawable) {
+          return { ok: false as const, error: "amount_exceeds_withdrawable_balance" as const };
+        }
+        const transitioned = await tx
+          .update(disbursementRequests)
+          .set({ status: "otp_pending", updatedAt: new Date() })
+          .where(
+            and(
+              eq(disbursementRequests.id, row.disbursement.id),
+              eq(disbursementRequests.status, "draft"),
+            ),
+          )
+          .returning();
+        if (transitioned.length === 0) {
+          return { ok: false as const, error: "disbursement_not_editable" as const };
+        }
+        return { ok: true as const };
+      });
+      if (!reserved.ok) {
+        set.status = reserved.error === "disbursement_not_editable" ? 409 : 422;
+        return { error: reserved.error };
+      }
       const otpResult = await requestOtp(user.phone, "disbursement");
       if (!otpResult.sent) {
+        // Release the reservation -- funds were only tentatively held
+        // pending a successful OTP send, and an unreachable/rate-limited
+        // phone number is unrelated to whether the balance was genuinely
+        // available. Guarded the same way as every other transition here,
+        // though in practice nothing else can race this row back out of
+        // `otp_pending` between the two statements above and this one.
+        await db
+          .update(disbursementRequests)
+          .set({ status: "draft", updatedAt: new Date() })
+          .where(
+            and(
+              eq(disbursementRequests.id, row.disbursement.id),
+              eq(disbursementRequests.status, "otp_pending"),
+            ),
+          );
         set.status = 422;
         return { error: otpResult.reason ?? "otp_send_failed" };
-      }
-      const transitioned = await db
-        .update(disbursementRequests)
-        .set({ status: "otp_pending", updatedAt: new Date() })
-        .where(
-          and(
-            eq(disbursementRequests.id, row.disbursement.id),
-            eq(disbursementRequests.status, "draft"),
-          ),
-        )
-        .returning();
-      if (transitioned.length === 0) {
-        set.status = 409;
-        return { error: "disbursement_not_editable" };
       }
       return { sent: true };
     },
@@ -731,6 +785,31 @@ export const disbursementsRoute = new Elysia()
         return { error: "invalid_disbursement_status" };
       }
 
+      // Claim the right to call the payout provider via a guarded
+      // approved -> processing transition BEFORE making any external call,
+      // not after. Two concurrent admin "Pay" clicks previously both
+      // passed the !row check above, both called createPayout below, and
+      // only THEN raced a guarded update -- the DB-level guard was correct
+      // but ran after the irreversible side effect, so both real payouts
+      // would have gone out for a single approved request (invisible with
+      // the mock provider, which is a pure function with no side effect --
+      // a real adapter sends two real bank transfers). `processing` exists
+      // in the enum specifically reserved for this.
+      const claimed = await db
+        .update(disbursementRequests)
+        .set({ status: "processing", updatedAt: new Date() })
+        .where(
+          and(
+            eq(disbursementRequests.id, row.disbursement.id),
+            eq(disbursementRequests.status, "approved"),
+          ),
+        )
+        .returning();
+      if (claimed.length === 0) {
+        set.status = 409;
+        return { error: "invalid_disbursement_status" };
+      }
+
       const provider = getProvider();
       // Field names match what Task 4 actually shipped (packages/payments/src/types.ts),
       // NOT this plan's own original sketch -- Task 4's research found Xendit's real API
@@ -740,6 +819,15 @@ export const disbursementsRoute = new Elysia()
       // channelCode format differs (e.g. "ID_BCA") -- a known, deliberate simplification
       // Task 4 flagged: the mock never validates this value's format, and mapping it
       // correctly is a real adapter's problem, out of this slice's scope entirely.
+      //
+      // A failure here (thrown, uncaught) deliberately leaves the row in
+      // `processing` rather than reverting to `approved` -- reverting would
+      // invite a retry, and a retry can't tell "the provider never received
+      // this" apart from "the provider paid it and only the response was
+      // lost" (the same ambiguity documented for the donation charge path
+      // in donations.ts). A stuck `processing` row for an operator to
+      // reconcile by hand is a strictly better failure mode than a second
+      // real payout.
       const payout = await provider.createPayout({
         referenceId: row.disbursement.id,
         amount: row.disbursement.amount,
@@ -750,31 +838,22 @@ export const disbursementsRoute = new Elysia()
       });
 
       const now = new Date();
-      const transitioned = await db.transaction(async (tx) => {
-        const updated = await tx
+      await db.transaction(async (tx) => {
+        await tx
           .update(disbursementRequests)
           .set({ status: "paid", payoutRef: payout.payoutId, paidAt: now, updatedAt: now })
           .where(
             and(
               eq(disbursementRequests.id, row.disbursement.id),
-              eq(disbursementRequests.status, "approved"),
+              eq(disbursementRequests.status, "processing"),
             ),
-          )
-          .returning();
-        if (updated.length === 0) {
-          return false;
-        }
+          );
         await tx
           .update(campaigns)
           .set({ disbursedAmount: sql`${campaigns.disbursedAmount} + ${row.disbursement.amount}` })
           .where(eq(campaigns.id, row.disbursement.campaignId));
-        return true;
       });
 
-      if (!transitioned) {
-        set.status = 409;
-        return { error: "invalid_disbursement_status" };
-      }
       return { status: "paid" as const };
     },
     {

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   bankAccounts,
   campaignCategories,
@@ -896,6 +896,94 @@ describe("Disbursement OTP request/verify + submit", () => {
     expect(afterSecond?.status).toBe("draft");
   });
 
+  test("two genuinely concurrent otp/request calls on two over-committing drafts: exactly one succeeds", async () => {
+    // The test above proves the re-check works SEQUENTIALLY -- the first
+    // request fully completes (including its draft->otp_pending
+    // transition) before the second ever starts, so id1's reservation is
+    // already visible to id2's read. That can't catch the actual race: two
+    // unlocked reads of computeWithdrawableAmount both seeing the same
+    // pre-reservation balance before either request's transition commits.
+    //
+    // A plain Promise.all does NOT reliably force this race either --
+    // verified empirically: against the vulnerable code (balance check and
+    // transition NOT wrapped in a lock-holding transaction), this same
+    // Promise.all shape still observed the two requests resolving without
+    // genuinely overlapping in Postgres, purely from how Bun schedules two
+    // direct .handle() calls against a low-latency local database. So
+    // this test forces the overlap directly: it takes the SAME
+    // `SELECT ... FOR UPDATE` lock on the campaign FIRST, in its own
+    // transaction, before firing either real request. Both real requests
+    // then genuinely block trying to acquire that same lock (this is a
+    // real Postgres wait, not a JS scheduling hope) until the test
+    // releases it -- at which point Postgres hands the lock to exactly one
+    // waiter, which completes its check+transition and commits, and only
+    // THEN does the second waiter acquire the lock and see the
+    // now-correctly-reduced balance. Under the vulnerable (unlocked) code,
+    // this setup proves nothing extra either way -- a plain unlocked
+    // SELECT is never blocked by another transaction's row lock, so both
+    // requests would proceed immediately regardless -- which is exactly
+    // the bug.
+    const campaign = await createTestCampaign(testCampaignerId, "active");
+    await createPaidDonation(campaign.id, "500000");
+    const withdrawable = await computeWithdrawableAmount(campaign.id);
+    const id1 = await makeOtpReadyDraft(campaign.id, withdrawable);
+    const id2 = await makeOtpReadyDraft(campaign.id, withdrawable);
+
+    const request = (id: string) =>
+      app.handle(
+        authedRequest(`http://localhost/disbursements/${id}/otp/request`, TEST_TOKEN, {
+          method: "POST",
+        }),
+      );
+
+    let releaseLock: () => void = () => {};
+    const lockHeld = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    let lockAcquired: () => void = () => {};
+    const lockAcquiredPromise = new Promise<void>((resolve) => {
+      lockAcquired = resolve;
+    });
+    const lockingTx = db.transaction(async (tx) => {
+      await tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(eq(campaigns.id, campaign.id))
+        .for("update");
+      lockAcquired();
+      await lockHeld;
+    });
+    await lockAcquiredPromise;
+
+    const respAPromise = request(id1);
+    const respBPromise = request(id2);
+    // Give both requests time to genuinely reach and block on their own
+    // SELECT ... FOR UPDATE before releasing the test's lock -- without
+    // this, releasing immediately risks one request not having issued its
+    // lock-acquisition query yet, which would just reintroduce the
+    // sequential-not-concurrent gap this test exists to close.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    releaseLock();
+    await lockingTx;
+
+    const [respA, respB] = await Promise.all([respAPromise, respBPromise]);
+    const statuses = [respA.status, respB.status].sort();
+    expect(statuses).toEqual([200, 422]);
+
+    const winnerId = respA.status === 200 ? id1 : id2;
+    const loserId = respA.status === 200 ? id2 : id1;
+    const [winnerRow] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, winnerId));
+    expect(winnerRow?.status).toBe("otp_pending");
+    const [loserRow] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, loserId));
+    expect(loserRow?.status).toBe("draft");
+  });
+
   test("otp/verify with an incorrect code does not advance past otp_pending", async () => {
     const campaign = await createTestCampaign(testCampaignerId, "active");
     await createPaidDonation(campaign.id, "500000");
@@ -1461,6 +1549,61 @@ describe("POST /admin/disbursements/:id/pay", () => {
       .from(campaigns)
       .where(eq(campaigns.id, campaign.id));
     expect(campaignAfterConcurrentPay?.disbursedAmount).toBe(withdrawable);
+  });
+
+  test("two genuinely concurrent pay calls invoke the payout provider exactly once, not twice", async () => {
+    // The test above proves the LEDGER ends up correct (disbursedAmount
+    // incremented exactly once) -- it can't prove the payout provider
+    // itself was only called once, because MockPaymentProvider.createPayout
+    // is a pure function with no observable side effect. Before the fix,
+    // both concurrent requests called createPayout and only THEN raced a
+    // guarded update that happened to make the ledger look right
+    // regardless. A real payout adapter would have sent two real bank
+    // transfers for one approved request.
+    //
+    // A plain Promise.all (no injected delay) does NOT reliably force this
+    // race: verified empirically that against the vulnerable code (the
+    // guard moved to after the provider call), this same test with no
+    // delay still observed exactly one createPayout call, not two -- one
+    // request's whole handler chain resolves before the other reaches the
+    // provider call, purely from how Bun schedules two direct .handle()
+    // invocations against a low-latency local Postgres, not because the
+    // vulnerability was actually closed. Injecting a real delay inside
+    // createPayout widens the window enough that, under the vulnerable
+    // ordering, the second request's OWN unguarded call genuinely lands
+    // while the first is still "in flight" inside the provider.
+    //
+    // Under the fix (guard before the provider call), this delay changes
+    // nothing: the second request's claim attempt finds the row already
+    // `processing` and 409s before ever reaching createPayout, regardless
+    // of how long the first call takes.
+    const originalCreatePayout = MockPaymentProvider.prototype.createPayout;
+    const createPayoutSpy = spyOn(MockPaymentProvider.prototype, "createPayout").mockImplementation(
+      async function (this: MockPaymentProvider, input) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return originalCreatePayout.call(this, input);
+      },
+    );
+    try {
+      const campaign = await createTestCampaign(testCampaignerId, "active");
+      await createPaidDonation(campaign.id, "500000");
+      const withdrawable = await computeWithdrawableAmount(campaign.id);
+      const id = await driveDisbursementToApproved(campaign.id, withdrawable);
+
+      const pay = () =>
+        app.handle(
+          authedRequest(`http://localhost/admin/disbursements/${id}/pay`, ADMIN_TOKEN, {
+            method: "POST",
+          }),
+        );
+      const [respA, respB] = await Promise.all([pay(), pay()]);
+      const statuses = [respA.status, respB.status].sort();
+      expect(statuses).toEqual([200, 409]);
+
+      expect(createPayoutSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      createPayoutSpy.mockRestore();
+    }
   });
 });
 
