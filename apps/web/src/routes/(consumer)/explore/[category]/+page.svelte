@@ -64,7 +64,7 @@ function filterHref(overrides: { sort?: string; type?: string | null }): string 
   <p class="font-sans text-sm text-neutral-600">{data.totalCount} campaign ditemukan</p>
 
   {#if data.campaigns.length > 0}
-    <div class="grid grid-cols-1 gap-4">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {#each data.campaigns as campaign (campaign.slug)}
         <CampaignCard {campaign} />
       {/each}
