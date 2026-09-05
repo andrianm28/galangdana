@@ -1,6 +1,6 @@
-# Recommendations from the EffortX (effort.giving) research — applied to GalangDana
+# Recommendations from the EffortX (effort.giving) research — applied to FundForIndonesia
 
-**Source:** deep content/business-model + visual/UX audit of effort.giving, a competing donation-crowdfunding platform (2026-09-02). Full research artifact published separately; this document distills only the parts actionable for GalangDana, organized by when they're actionable.
+**Source:** deep content/business-model + visual/UX audit of effort.giving, a competing donation-crowdfunding platform (2026-09-02). Full research artifact published separately; this document distills only the parts actionable for FundForIndonesia, organized by when they're actionable.
 
 **Status of each item below:** ✅ already satisfied · 🔜 design input for a not-yet-built phase · ❓ open business/legal question for the project owner · 💡 cheap idea worth prototyping
 
@@ -8,7 +8,7 @@
 
 ## ✅ Already satisfied (Phase 3, checked 2026-09-03)
 
-**Never claim "independently verified" for admin-reviewed status.** EffortX's homepage says "independently verified" while its own FAQ admits internal staff do the review — the single biggest trust-copy mistake found. Checked GalangDana's current campaigner-facing status labels (`apps/web/src/routes/(campaigner)/dashboard/campaigns/+page.svelte`): `pending_review` renders as **"Menunggu Peninjauan"** ("Awaiting review") — already the safe phrasing, not a claim of independent verification. No fix needed. Keep this as a standing copy constraint for any future admin/moderation-facing text: describe review as internal ("ditinjau tim kami"), never as independent third-party verification, unless it genuinely is.
+**Never claim "independently verified" for admin-reviewed status.** EffortX's homepage says "independently verified" while its own FAQ admits internal staff do the review — the single biggest trust-copy mistake found. Checked FundForIndonesia's current campaigner-facing status labels (`apps/web/src/routes/(campaigner)/dashboard/campaigns/+page.svelte`): `pending_review` renders as **"Menunggu Peninjauan"** ("Awaiting review") — already the safe phrasing, not a claim of independent verification. No fix needed. Keep this as a standing copy constraint for any future admin/moderation-facing text: describe review as internal ("ditinjau tim kami"), never as independent third-party verification, unless it genuinely is.
 
 ---
 
@@ -22,13 +22,13 @@
 
 ## ❓ Open business/legal question (not code — needs the project owner's call)
 
-**Two-entity structure (nonprofit recipient + for-profit operator taking an open fee) is the cleanest legal pattern EffortX uses to combine escrow and monetization.** Whether GalangDana adopts something similar is a legal/business-structure decision, not an engineering one — raised here only so it's on record before Phase 9 (CSR module) or any entity-structure decision gets made elsewhere. No action needed from this plan; surface it to the project owner if/when that decision point actually arrives.
+**Two-entity structure (nonprofit recipient + for-profit operator taking an open fee) is the cleanest legal pattern EffortX uses to combine escrow and monetization.** Whether FundForIndonesia adopts something similar is a legal/business-structure decision, not an engineering one — raised here only so it's on record before Phase 9 (CSR module) or any entity-structure decision gets made elsewhere. No action needed from this plan; surface it to the project owner if/when that decision point actually arrives.
 
 ---
 
 ## 💡 Cheap UX ideas worth prototyping (no fixed phase — pick up in Phase 4, 7, or 8 planning)
 
-**Denominate progress in impact units, not just Rupiah.** E.g. "22,091 meals delivered of 100,000" alongside the money figure — fits GalangDana's medical/social campaign categories well. Candidate for whichever phase designs campaign-detail progress display (already shipped in Phase 1, could be a follow-up enhancement).
+**Denominate progress in impact units, not just Rupiah.** E.g. "22,091 meals delivered of 100,000" alongside the money figure — fits FundForIndonesia's medical/social campaign categories well. Candidate for whichever phase designs campaign-detail progress display (already shipped in Phase 1, could be a follow-up enhancement).
 
 **Recurring donations that overflow to a community fund when their target campaign ends,** instead of the subscription just silently lapsing. Directly relevant to `recurring_schedules`, already in the master plan for Phase 7 (Donor account). Worth designing in when that phase is planned rather than bolted on after.
 
@@ -36,4 +36,4 @@
 
 ## Process lesson (applies whenever a "transparency" or public-reporting feature is built)
 
-EffortX shipped a `/transparency` page that's still just "Loading..." with no real data — their single biggest credibility claim, unfulfilled in production. If GalangDana ever builds a similar public transparency/impact-reporting surface (candidates: the CSR module's impact reports in Phase 9, or a public disbursement log in Phase 6), do not publish the page until the underlying data is real. Treat this as a standing constraint on that class of feature, not a one-time reminder.
+EffortX shipped a `/transparency` page that's still just "Loading..." with no real data — their single biggest credibility claim, unfulfilled in production. If FundForIndonesia ever builds a similar public transparency/impact-reporting surface (candidates: the CSR module's impact reports in Phase 9, or a public disbursement log in Phase 6), do not publish the page until the underlying data is real. Treat this as a standing constraint on that class of feature, not a one-time reminder.
