@@ -1,7 +1,7 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { api } from "$lib/api-client";
-import { Button } from "@galangdana/ui";
+import { Button } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
 const { data, params }: PageProps = $props();

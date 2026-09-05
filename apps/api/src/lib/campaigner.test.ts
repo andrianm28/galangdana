@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { db, users } from "@galangdana/db";
+import { db, users } from "@fundforindonesia/db";
 import { getOrCreateCampaignerForUser } from "./campaigner";
 
 describe("getOrCreateCampaignerForUser", () => {

@@ -1,6 +1,6 @@
 import { createServerApiClient } from "$lib/server-api-client";
 import type { Treaty } from "@elysiajs/eden";
-import type { CampaignRevisionListResponse } from "@galangdana/contracts";
+import type { CampaignRevisionListResponse } from "@fundforindonesia/contracts";
 import { error, redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 
@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
   // position -- see apps/api/src/routes/campaigns.ts), which merges into
   // Eden's generated call signature as `{ id, slug }` both required.
   // Narrow cast on the callable, then re-cast the awaited result to the
-  // real response shape from @galangdana/contracts (same two-part fix as
+  // real response shape from @fundforindonesia/contracts (same two-part fix as
   // apps/web/src/routes/(admin)/campaigns/[id]/+page.server.ts).
   // biome-ignore lint/suspicious/noExplicitAny: Eden merged-param-name cast
   const revisionsClient = (client.campaigns as any)({ id: params.id }).revisions;

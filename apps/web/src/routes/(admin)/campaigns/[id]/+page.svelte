@@ -1,7 +1,7 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { api } from "$lib/api-client";
-import { formatMoney, moneyFromJSON } from "@galangdana/money";
+import { formatMoney, moneyFromJSON } from "@fundforindonesia/money";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();

@@ -1,5 +1,5 @@
-import { db, otpChallenges, type otpPurposeEnum, users } from "@galangdana/db";
-import type { User } from "@galangdana/db";
+import { db, otpChallenges, type otpPurposeEnum, users } from "@fundforindonesia/db";
+import type { User } from "@fundforindonesia/db";
 import { and, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import { normalizePhone } from "./normalize";
 import { checkOtpRateLimit } from "./rate-limit";

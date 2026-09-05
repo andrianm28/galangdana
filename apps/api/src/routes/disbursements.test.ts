@@ -12,8 +12,8 @@ import {
   payments,
   sessions,
   users,
-} from "@galangdana/db";
-import { MockPaymentProvider } from "@galangdana/payments";
+} from "@fundforindonesia/db";
+import { MockPaymentProvider } from "@fundforindonesia/payments";
 import { eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { requestOtp } from "../auth/otp";

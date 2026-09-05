@@ -1,5 +1,5 @@
 {
-  "name": "@galangdana/db",
+  "name": "@fundforindonesia/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "db:seed": "bun run src/seed/run-seed.ts"
   },
   "dependencies": {
-    "@galangdana/money": "workspace:*",
+    "@fundforindonesia/money": "workspace:*",
     "drizzle-orm": "^0.36.4",
     "postgres": "^3.4.5"
   },

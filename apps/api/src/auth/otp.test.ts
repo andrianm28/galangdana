@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { db, otpChallenges, users } from "@galangdana/db";
+import { db, otpChallenges, users } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 import { redis } from "../lib/redis-client";
 import { normalizePhone } from "./normalize";

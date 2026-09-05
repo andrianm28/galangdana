@@ -4,7 +4,7 @@ import {
   AdminCampaignListResponseSchema,
   AdminRequestRevisionBodySchema,
   CampaignErrorSchema,
-} from "@galangdana/contracts";
+} from "@fundforindonesia/contracts";
 import {
   campaignCategories,
   campaignDocuments,
@@ -14,8 +14,8 @@ import {
   campaigns,
   db,
   individualVerifications,
-} from "@galangdana/db";
-import { syncCampaignsIndex } from "@galangdana/search";
+} from "@fundforindonesia/db";
+import { syncCampaignsIndex } from "@fundforindonesia/search";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { checkAdmin } from "../lib/admin";

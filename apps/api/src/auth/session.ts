@@ -1,5 +1,5 @@
-import { db, sessions, users } from "@galangdana/db";
-import type { Session, User } from "@galangdana/db";
+import { db, sessions, users } from "@fundforindonesia/db";
+import type { Session, User } from "@fundforindonesia/db";
 import { and, eq, gt } from "drizzle-orm";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days

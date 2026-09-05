@@ -11,8 +11,8 @@ import {
   payments,
   sessions,
   users,
-} from "@galangdana/db";
-import { MockPaymentProvider, computeMidtransSignature } from "@galangdana/payments";
+} from "@fundforindonesia/db";
+import { MockPaymentProvider, computeMidtransSignature } from "@fundforindonesia/payments";
 import { eq, inArray } from "drizzle-orm";
 import { donationsRoute } from "./donations";
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 import { page } from "$app/state";
-import { Card } from "@galangdana/ui";
+import { Card } from "@fundforindonesia/ui";
 import type { LayoutProps } from "./$types";
 import { getStepOrder } from "./step-order";
 

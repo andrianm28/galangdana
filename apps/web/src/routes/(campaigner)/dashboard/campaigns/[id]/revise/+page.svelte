@@ -5,7 +5,7 @@ import type { Treaty } from "@elysiajs/eden";
 import type {
   PresignCampaignDocumentResponse,
   SubmitCampaignResponse,
-} from "@galangdana/contracts";
+} from "@fundforindonesia/contracts";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();

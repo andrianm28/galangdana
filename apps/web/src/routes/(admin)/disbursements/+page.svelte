@@ -1,9 +1,9 @@
 <script lang="ts">
 import { api } from "$lib/api-client";
 import type { Treaty } from "@elysiajs/eden";
-import type { AdminDisbursementDetailResponse } from "@galangdana/contracts";
-import { formatMoney, moneyFromJSON } from "@galangdana/money";
-import { Button } from "@galangdana/ui";
+import type { AdminDisbursementDetailResponse } from "@fundforindonesia/contracts";
+import { formatMoney, moneyFromJSON } from "@fundforindonesia/money";
+import { Button } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
 type DisbursementDetailResult = Treaty.TreatyResponse<{

@@ -1,5 +1,5 @@
-import { db, oauthAccounts, users } from "@galangdana/db";
-import type { User } from "@galangdana/db";
+import { db, oauthAccounts, users } from "@fundforindonesia/db";
+import type { User } from "@fundforindonesia/db";
 import { and, eq } from "drizzle-orm";
 import { normalizeEmail } from "./normalize";
 

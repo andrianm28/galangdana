@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { db } from "@galangdana/db";
-import { campaignCategories, campaigners, campaigns } from "@galangdana/db";
+import { db } from "@fundforindonesia/db";
+import { campaignCategories, campaigners, campaigns } from "@fundforindonesia/db";
 import { RESERVED_SLUGS, generateUniqueSlug } from "./slug";
 
 describe("generateUniqueSlug", () => {

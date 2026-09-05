@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import { money } from "@galangdana/money";
+import { money } from "@fundforindonesia/money";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../client";
 import { campaigners } from "../schema/campaigners";

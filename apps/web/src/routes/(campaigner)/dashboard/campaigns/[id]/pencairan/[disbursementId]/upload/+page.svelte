@@ -2,7 +2,7 @@
 import { goto } from "$app/navigation";
 import { api } from "$lib/api-client";
 import type { Treaty } from "@elysiajs/eden";
-import { Button } from "@galangdana/ui";
+import { Button } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
 const { params }: PageProps = $props();

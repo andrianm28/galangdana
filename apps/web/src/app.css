@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "@galangdana/ui/src/theme.css";
+@import "@fundforindonesia/ui/src/theme.css";
 
 /* Not strictly required: verified empirically that @tailwindcss/vite
    running under sveltekit() already auto-detects classes used inside

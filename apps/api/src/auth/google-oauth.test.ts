@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { db, oauthAccounts, users } from "@galangdana/db";
+import { db, oauthAccounts, users } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 import {
   type GoogleFetch,

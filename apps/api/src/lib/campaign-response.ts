@@ -1,8 +1,8 @@
-import type { CampaignSummaryResponse } from "@galangdana/contracts";
-import type { Campaign, CampaignCategory, Campaigner } from "@galangdana/db";
-import { displayAmount } from "@galangdana/db";
-import { buildImgproxyUrl } from "@galangdana/media";
-import { moneyToJSON } from "@galangdana/money";
+import type { CampaignSummaryResponse } from "@fundforindonesia/contracts";
+import type { Campaign, CampaignCategory, Campaigner } from "@fundforindonesia/db";
+import { displayAmount } from "@fundforindonesia/db";
+import { buildImgproxyUrl } from "@fundforindonesia/media";
+import { moneyToJSON } from "@fundforindonesia/money";
 
 export interface CampaignRow {
   campaign: Campaign;

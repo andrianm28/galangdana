@@ -18,7 +18,7 @@ export const campaignDraftTrackEnum = pgEnum("campaign_draft_track", ["medical",
 // line, the goal amount) rather than one dedicated column per step -- this
 // matches the master plan's own domain model ("campaign_drafts -- track,
 // current_step, answers jsonb"). A goal amount inside this jsonb is always
-// a DECIMAL STRING (e.g. "15000000"), matching @galangdana/money's
+// a DECIMAL STRING (e.g. "15000000"), matching @fundforindonesia/money's
 // MoneyJSON wire convention -- never a raw JS number, and never parsed to
 // bigint until a real `campaigns` row is created in a later sub-phase.
 // Steps with real relational shape (guided story Q&A, patient/beneficiary

@@ -1,6 +1,6 @@
 import { createServerApiClient } from "$lib/server-api-client";
 import type { Treaty } from "@elysiajs/eden";
-import type { AdminCampaignListItem } from "@galangdana/contracts";
+import type { AdminCampaignListItem } from "@fundforindonesia/contracts";
 import { error } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 
@@ -15,7 +15,7 @@ export const load: PageServerLoad = async ({ cookies }) => {
   // union, which then leaks into this route's generated `PageData` (seen in
   // +page.svelte and page.render.test.ts) as a type stricter than the real
   // contract. Narrow cast on the callable, then re-cast the awaited result to
-  // the real response shape from @galangdana/contracts, matching the
+  // the real response shape from @fundforindonesia/contracts, matching the
   // identical fix already used in the KYC layout load
   // (apps/web/src/routes/(campaigner)/kyc/[campaignId]/step/+layout.server.ts)
   // for the same class of Eden inference conflict.

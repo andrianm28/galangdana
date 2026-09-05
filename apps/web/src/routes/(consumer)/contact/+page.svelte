@@ -1,6 +1,6 @@
 <script lang="ts">
 import { api } from "$lib/api-client";
-import { Alert, Button, FormField, TextInput } from "@galangdana/ui";
+import { Alert, Button, FormField, TextInput } from "@fundforindonesia/ui";
 
 // biome-ignore lint/style/useConst: Svelte binding requires mutable let
 let name = $state("");

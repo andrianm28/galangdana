@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import { bankAccounts, campaigners, db, sessions, users } from "@galangdana/db";
+import { bankAccounts, campaigners, db, sessions, users } from "@fundforindonesia/db";
 import { eq, inArray } from "drizzle-orm";
 import { bankAccountsRoute } from "./bank-accounts";
 

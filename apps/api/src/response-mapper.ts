@@ -1,4 +1,4 @@
-import { bigIntSafeJSONStringify } from "@galangdana/money";
+import { bigIntSafeJSONStringify } from "@fundforindonesia/money";
 import type { AnyElysia } from "elysia";
 
 /**

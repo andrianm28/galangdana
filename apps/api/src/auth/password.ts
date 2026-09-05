@@ -1,5 +1,5 @@
-import { db, users } from "@galangdana/db";
-import type { User } from "@galangdana/db";
+import { db, users } from "@fundforindonesia/db";
+import type { User } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 import { normalizeEmail } from "./normalize";
 import { checkLoginRateLimit, checkRegisterRateLimit } from "./rate-limit";

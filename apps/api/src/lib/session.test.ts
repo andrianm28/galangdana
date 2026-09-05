@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { db, sessions, users } from "@galangdana/db";
+import { db, sessions, users } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { sessionDerive } from "./session";
