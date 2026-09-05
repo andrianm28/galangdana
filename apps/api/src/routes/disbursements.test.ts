@@ -212,7 +212,7 @@ async function createPaidDonation(campaignId: string, amountStr: string) {
     new Request("http://localhost/donations", {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({ campaignId, amountStr }),
+      body: JSON.stringify({ campaignId, amountStr, paymentMethod: "bank_transfer_va" }),
     }),
   );
   const { donationId } = (await donationResp.json()) as { donationId: string };

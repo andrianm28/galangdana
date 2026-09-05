@@ -106,6 +106,18 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      # apps/api/src/routes/donations.ts fails closed (throws) if this is
+      # unset, by design (a Sumopod QRIS payment security fix -- see that
+      # file's SUMOPOD_WEBHOOK_SECRET guard) -- donations.test.ts has its
+      # own top-level guard that throws the same way, so this must be set
+      # for the whole file to even load. Generated fresh every run rather
+      # than hardcoded: nothing here is a real credential (Sumopod's real
+      # servers have no knowledge of this value, it only needs to be
+      # self-consistent within this one job run), so there's no reason to
+      # commit a fixed value that secret scanners would flag forever.
+      - name: Generate ephemeral Sumopod webhook test secret
+        run: echo "SUMOPOD_WEBHOOK_SECRET=whsec_$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+
       # Not a services: entry: that schema has no command/entrypoint
       # override (confirmed against GitHub's own docs and community
       # discussion #52675), and the plain minio/minio image's default CMD

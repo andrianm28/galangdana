@@ -12,15 +12,39 @@ vi.mock("$app/state", () => ({
 }));
 
 describe("(consumer) campaign/[slug]/payment-option rendering", () => {
-  test("shows the one available payment method", () => {
+  test("shows both available payment methods", () => {
     render(Page);
     expect(screen.getByText(/Transfer Bank \(Virtual Account\)/)).not.toBeNull();
+    expect(screen.getByText("QRIS")).not.toBeNull();
   });
 
-  test("continuing goes to the contribute step with the amount preserved", async () => {
+  test("leaving the default selection and continuing goes to contribute with bank_transfer_va", async () => {
     const { goto } = await import("$app/navigation");
     render(Page);
     await fireEvent.click(screen.getByText("Lanjutkan"));
-    expect(goto).toHaveBeenCalledWith("/campaign/test-campaign/contribute?amount=50000");
+    expect(goto).toHaveBeenCalledWith(
+      "/campaign/test-campaign/contribute?amount=50000&paymentMethod=bank_transfer_va",
+    );
+  });
+
+  test("selecting QRIS and continuing goes to contribute with qris_redirect", async () => {
+    const { goto } = await import("$app/navigation");
+    render(Page);
+    await fireEvent.click(screen.getByDisplayValue("qris_redirect"));
+    await fireEvent.click(screen.getByText("Lanjutkan"));
+    expect(goto).toHaveBeenCalledWith(
+      "/campaign/test-campaign/contribute?amount=50000&paymentMethod=qris_redirect",
+    );
+  });
+
+  test("selecting Bank Transfer explicitly and continuing goes to contribute with bank_transfer_va", async () => {
+    const { goto } = await import("$app/navigation");
+    render(Page);
+    await fireEvent.click(screen.getByDisplayValue("qris_redirect"));
+    await fireEvent.click(screen.getByDisplayValue("bank_transfer_va"));
+    await fireEvent.click(screen.getByText("Lanjutkan"));
+    expect(goto).toHaveBeenCalledWith(
+      "/campaign/test-campaign/contribute?amount=50000&paymentMethod=bank_transfer_va",
+    );
   });
 });

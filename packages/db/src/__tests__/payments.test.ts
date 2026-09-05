@@ -1,7 +1,19 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { db } from "../client";
+import { allocationPolicies } from "../schema/allocation-policies";
+import { campaigners } from "../schema/campaigners";
+import { campaigns } from "../schema/campaigns";
+import { campaignCategories } from "../schema/categories";
+import { donations } from "../schema/donations";
 import { paymentEvents } from "../schema/payment-events";
+import { payments } from "../schema/payments";
+import { users } from "../schema/users";
+import { runSeed } from "../seed/run-seed";
+
+beforeAll(async () => {
+  await runSeed();
+});
 
 describe("payment_events", () => {
   test("provider + providerEventId is unique -- a duplicate insert rejects", async () => {
@@ -27,5 +39,94 @@ describe("payment_events", () => {
       }
     }
     expect(errorThrown).toBe(true);
+  });
+});
+
+describe("payments", () => {
+  test("redirectUrl stores hosted checkout link for redirect-based payment methods", async () => {
+    const testOrderId = `test-order-redirect-${Date.now()}`;
+    await db.delete(payments).where(eq(payments.providerOrderId, testOrderId));
+
+    const [category] = await db.select().from(campaignCategories).limit(1);
+    if (!category) throw new Error("no seeded category found -- run db:seed first");
+
+    const [testUser] = await db
+      .insert(users)
+      .values({ phone: `+62812${Date.now() % 100000000}` })
+      .returning();
+    if (!testUser) throw new Error("user insert failed");
+
+    const [campaigner] = await db
+      .insert(campaigners)
+      .values({
+        userId: testUser.id,
+        type: "individual",
+        displayName: `Test Campaigner ${Date.now()}`,
+      })
+      .returning();
+    if (!campaigner) throw new Error("campaigner insert failed");
+
+    const [campaign] = await db
+      .insert(campaigns)
+      .values({
+        slug: `test-payment-campaign-${Date.now()}`,
+        title: "Test Campaign",
+        shortDescription: "Test",
+        story: "Test",
+        categoryId: category.id,
+        campaignerId: campaigner.id,
+        type: "donation",
+        currency: "IDR",
+        model: "goal",
+        goalAmount: 10000000n,
+        status: "active",
+        // A real active campaign always has these set; a null publishedAt
+        // sorts first under GET /campaigns's default DESC ordering
+        // (Postgres's NULLS FIRST), which corrupts apps/api's
+        // campaigns.test.ts sort assertions whenever this row is still
+        // present in the shared test database.
+        publishedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      })
+      .returning();
+    if (!campaign) throw new Error("campaign insert failed");
+
+    const [policy] = await db
+      .select()
+      .from(allocationPolicies)
+      .where(eq(allocationPolicies.isDefault, true));
+    if (!policy) throw new Error("no default allocation policy seeded");
+
+    const [donation] = await db
+      .insert(donations)
+      .values({
+        userId: testUser.id,
+        campaignId: campaign.id,
+        allocationPolicyId: policy.id,
+        amount: 50000n,
+        currency: "IDR",
+      })
+      .returning();
+    if (!donation) throw new Error("donation insert failed");
+
+    const redirectUrl = "https://checkout.sumopod.test/pay/abc123";
+    const [payment] = await db
+      .insert(payments)
+      .values({
+        donationId: donation.id,
+        provider: "sumopod",
+        method: "qris_redirect",
+        providerOrderId: testOrderId,
+        redirectUrl,
+        vaNumber: null,
+        grossAmount: 50000n,
+        expiresAt: new Date(Date.now() + 3600000),
+      })
+      .returning();
+
+    expect(payment?.redirectUrl).toBe(redirectUrl);
+    expect(payment?.vaNumber).toBeNull();
+    expect(payment?.method).toBe("qris_redirect");
+    expect(payment?.provider).toBe("sumopod");
   });
 });

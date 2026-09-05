@@ -102,6 +102,7 @@ export class MockPaymentProvider implements PaymentProvider {
           : "failed";
 
     return {
+      provider: "mock",
       providerEventId: String(body.transaction_id ?? ""),
       providerOrderId: orderId,
       status,
