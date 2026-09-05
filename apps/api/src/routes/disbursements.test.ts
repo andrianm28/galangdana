@@ -77,6 +77,7 @@ const TEST_USER_PHONE = "+6281199990601";
 let categoryId: number;
 let testCampaignerId: string;
 let otherCampaignerId: string;
+let adminCampaignerId: string;
 
 // Every row this file creates is tracked here and deleted in `afterAll`, in
 // FK-safe order -- there is no existing precedent to copy for this (see
@@ -124,6 +125,20 @@ beforeAll(async () => {
     .returning();
   if (!otherCampaigner) throw new Error("other campaigner insert failed");
   otherCampaignerId = otherCampaigner.id;
+
+  // campaigners.userId is unique, so the admin gets exactly one campaigner
+  // row -- which is precisely the situation the segregation-of-duties tests
+  // below exercise: one human who is both the admin and the campaigner.
+  const [adminCampaigner] = await db
+    .insert(campaigners)
+    .values({
+      type: "individual",
+      displayName: "Admin Wearing A Campaigner Hat",
+      userId: ADMIN_USER_ID,
+    })
+    .returning();
+  if (!adminCampaigner) throw new Error("admin campaigner insert failed");
+  adminCampaignerId = adminCampaigner.id;
 });
 
 afterAll(async () => {
@@ -143,6 +158,7 @@ afterAll(async () => {
   // what actually references bankAccountId) cleans them up too.
   if (testCampaignerId) await db.delete(campaigners).where(eq(campaigners.id, testCampaignerId));
   if (otherCampaignerId) await db.delete(campaigners).where(eq(campaigners.id, otherCampaignerId));
+  if (adminCampaignerId) await db.delete(campaigners).where(eq(campaigners.id, adminCampaignerId));
   // disbursementRequests (deleted above, ahead of users) is what references
   // ADMIN_USER_ID via approvedBy (no cascade on that FK) -- deleting users
   // after disbursementRequests, same as the existing TEST_USER_ID/OTHER_USER_ID
@@ -1326,6 +1342,50 @@ describe("POST /admin/disbursements/:id/approve", () => {
     expect(row?.approvedAt).not.toBeNull();
   });
 
+  // Segregation of duties. checkAdmin() only asks "is this user an admin?",
+  // and getOrCreateCampaignerForUser() hands a campaigner row to ANY
+  // authenticated user with no role check -- so before this guard, a single
+  // person holding the admin role could create the campaign, request the
+  // disbursement, take their own OTP, approve it and pay it. approvedBy
+  // faithfully recorded who clicked; it did not record that two people were
+  // involved, which is the whole point of recording it.
+  test("refuses to let an admin approve a disbursement on a campaign they own", async () => {
+    const campaign = await createTestCampaign(adminCampaignerId, "active");
+    const [disbursement] = await db
+      .insert(disbursementRequests)
+      .values({
+        campaignId: campaign.id,
+        amount: 100000n,
+        status: "requested",
+        type: "final",
+      })
+      .returning();
+    if (!disbursement) throw new Error("disbursement insert failed");
+    disbursementIds.push(disbursement.id);
+
+    const resp = await app.handle(
+      authedRequest(
+        `http://localhost/admin/disbursements/${disbursement.id}/approve`,
+        ADMIN_TOKEN,
+        {
+          method: "POST",
+        },
+      ),
+    );
+    expect(resp.status).toBe(403);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("self_approval_forbidden");
+
+    // And the money must not have moved a step closer.
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, disbursement.id));
+    expect(row?.status).toBe("requested");
+    expect(row?.approvedBy).toBeNull();
+    expect(row?.approvedAt).toBeNull();
+  });
+
   test("409s on a disbursement that is not requested (e.g. still draft)", async () => {
     const campaign = await createTestCampaign(testCampaignerId, "active");
     const id = await createDraftDisbursement(campaign.id, TEST_TOKEN);
@@ -1434,6 +1494,52 @@ describe("POST /admin/disbursements/:id/pay", () => {
       ),
     );
     expect(resp.status).toBe(403);
+  });
+
+  // The same segregation-of-duties guard as /approve. Paying is the step that
+  // actually calls the payout provider, so an admin must not be able to pay a
+  // disbursement on their own campaign even if someone else approved it.
+  test("refuses to let an admin pay a disbursement on a campaign they own", async () => {
+    const campaign = await createTestCampaign(adminCampaignerId, "active");
+    const [bankAccount] = await db
+      .insert(bankAccounts)
+      .values({
+        campaignerId: adminCampaignerId,
+        bankCode: "bca",
+        bankName: "Bank Central Asia",
+        accountNumber: "1234567890",
+        accountHolderName: "Admin Paying Themselves",
+      })
+      .returning();
+    if (!bankAccount) throw new Error("bank account insert failed");
+
+    const [disbursement] = await db
+      .insert(disbursementRequests)
+      .values({
+        campaignId: campaign.id,
+        amount: 100000n,
+        status: "approved",
+        type: "final",
+        bankAccountId: bankAccount.id,
+      })
+      .returning();
+    if (!disbursement) throw new Error("disbursement insert failed");
+    disbursementIds.push(disbursement.id);
+
+    const resp = await app.handle(
+      authedRequest(`http://localhost/admin/disbursements/${disbursement.id}/pay`, ADMIN_TOKEN, {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(403);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toBe("self_approval_forbidden");
+
+    const [row] = await db
+      .select()
+      .from(disbursementRequests)
+      .where(eq(disbursementRequests.id, disbursement.id));
+    expect(row?.status).toBe("approved");
   });
 
   test("409s on a disbursement that is requested but not yet approved", async () => {
