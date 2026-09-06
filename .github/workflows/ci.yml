@@ -322,6 +322,19 @@ jobs:
         # Bun's auto-load happens to prefer.
         run: bun --env-file=.env.production run db:migrate
 
+      # The production Meilisearch index used to drift silently. It is
+      # populated only by an explicit reindex, and the only reindex step in
+      # this workflow ran in the `test` job -- against CI's own ephemeral
+      # Meilisearch, never against production's. So when the seed data was
+      # recreated with new UUIDs, the live index kept the old ones. Every
+      # hit then failed GET /search's `inArray(campaigns.id, hits)` join and
+      # the site returned zero results for every query, including exact
+      # words from campaign titles. Nothing alerted; search simply answered
+      # "nothing found" forever.
+      - name: Reindex search
+        working-directory: /home/ubuntu/galangdana/packages/search
+        run: bun --env-file=../../.env.production run src/reindex.ts
+
       - name: Build web
         working-directory: /home/ubuntu/galangdana
         run: bun run build

@@ -1,6 +1,6 @@
 import { campaignCategories, campaigns, db } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
-import { syncCampaignsIndex } from "./campaigns-index";
+import { pruneCampaignsIndex, syncCampaignsIndex } from "./campaigns-index";
 
 async function reindex(): Promise<void> {
   const rows = await db
@@ -32,7 +32,12 @@ async function reindex(): Promise<void> {
     }));
 
   await syncCampaignsIndex(documents);
-  console.log(`Reindexed ${documents.length} active campaigns into Meilisearch.`);
+  // syncCampaignsIndex only ever adds. Without this, a campaign that was
+  // deleted or deactivated stays searchable forever, and the index drifts
+  // further from the database on every run.
+  const pruned = await pruneCampaignsIndex(documents.map((d) => d.id));
+  const prunedNote = pruned > 0 ? `, pruned ${pruned} stale document(s).` : ".";
+  console.log(`Reindexed ${documents.length} active campaigns into Meilisearch${prunedNote}`);
 }
 
 if (import.meta.main) {

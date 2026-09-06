@@ -1,4 +1,5 @@
 <script lang="ts">
+import SeoHead from "$lib/SeoHead.svelte";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
@@ -24,3 +25,5 @@ const { data }: PageProps = $props();
     Tidak menemukan jawaban? <a href="/contact" class="text-primary hover:underline">Hubungi kami</a>.
   </p>
 </div>
+
+<SeoHead title={"Pusat Bantuan"} description={"Jawaban atas pertanyaan yang paling sering ditanyakan tentang berdonasi di fundforindonesia.org."} />

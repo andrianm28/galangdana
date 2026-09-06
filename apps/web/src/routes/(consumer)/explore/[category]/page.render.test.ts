@@ -41,7 +41,10 @@ describe("(consumer) explore/[category] rendering", () => {
         },
       },
     });
-    expect(screen.getByText("bencana alam")).not.toBeNull();
+    // The heading used to be the raw slug with `capitalize` applied in CSS, so
+    // the DOM text -- what a screen reader announces, and what the <title>
+    // would have had to reuse -- stayed lowercase "bencana alam".
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Bencana Alam");
     expect(screen.getByText("1 campaign ditemukan")).not.toBeNull();
     expect(screen.getByText("Test Campaign")).not.toBeNull();
   });

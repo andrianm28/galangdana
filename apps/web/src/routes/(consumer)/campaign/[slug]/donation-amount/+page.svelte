@@ -1,5 +1,6 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
+import PageTitle from "$lib/PageTitle.svelte";
 import {
   MAX_DONATION_RUPIAH,
   MIN_DONATION_RUPIAH,
@@ -90,3 +91,5 @@ function proceed() {
     </p>
   </div>
 </div>
+
+<PageTitle title={"Pilih nominal donasi"} />

@@ -1,4 +1,5 @@
 <script lang="ts">
+import SeoHead from "$lib/SeoHead.svelte";
 import { formatMoney, moneyFromJSON } from "@fundforindonesia/money";
 import type { PageProps } from "./$types";
 
@@ -113,3 +114,5 @@ const currency = $derived(data.disbursements[0]?.amount.currency ?? "IDR");
     </p>
   {/if}
 </div>
+
+<SeoHead title={"Jejak dana"} description={"Setiap rupiah yang keluar dari kampanye ini, beserta tanggal dan dokumennya."} />

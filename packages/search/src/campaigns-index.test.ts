@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { CAMPAIGNS_INDEX_NAME, searchCampaigns, syncCampaignsIndex } from "./campaigns-index";
+import {
+  CAMPAIGNS_INDEX_NAME,
+  pruneCampaignsIndex,
+  searchCampaigns,
+  syncCampaignsIndex,
+} from "./campaigns-index";
 import { getMeilisearchClient } from "./client";
 
 const TEST_DOCS = [
@@ -81,5 +86,46 @@ describe("campaigns search index", () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results.every((r) => r.categoryId === 8)).toBe(true);
     expect(results.some((r) => r.slug === "test-anak-sakit")).toBe(true);
+  });
+});
+
+describe("pruneCampaignsIndex", () => {
+  // syncCampaignsIndex only adds. Production accumulated 309 documents of
+  // which 301 named campaigns that no longer existed, and the eight real ones
+  // carried ids from an earlier seed -- so every search hit failed the
+  // hydrating join and the site answered "nothing found" for every query.
+  const KEEP = TEST_DOCS[0] as (typeof TEST_DOCS)[number];
+  const DROP = TEST_DOCS[1] as (typeof TEST_DOCS)[number];
+
+  test("removes a document whose id is not in the keep set", async () => {
+    await syncCampaignsIndex(TEST_DOCS);
+    const client = getMeilisearchClient();
+    const index = client.index(CAMPAIGNS_INDEX_NAME);
+
+    const before = await index.getDocuments({ limit: 1000, fields: ["id"] });
+    const keepIds = (before.results as Array<{ id: string }>)
+      .map((d) => d.id)
+      .filter((id) => id !== DROP.id);
+
+    const pruned = await pruneCampaignsIndex(keepIds);
+    expect(pruned).toBe(1);
+
+    const results = await searchCampaigns("Anak Sakit");
+    expect(results.some((r) => r.slug === DROP.slug)).toBe(false);
+  });
+
+  test("leaves everything alone when nothing is stale", async () => {
+    await syncCampaignsIndex(TEST_DOCS);
+    const client = getMeilisearchClient();
+    const index = client.index(CAMPAIGNS_INDEX_NAME);
+    const all = await index.getDocuments({ limit: 1000, fields: ["id"] });
+
+    const pruned = await pruneCampaignsIndex(
+      (all.results as Array<{ id: string }>).map((d) => d.id),
+    );
+    expect(pruned).toBe(0);
+
+    const results = await searchCampaigns("Banjir Jakarta");
+    expect(results.some((r) => r.slug === KEEP.slug)).toBe(true);
   });
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+import PageTitle from "$lib/PageTitle.svelte";
 import { formatMoney, moneyFromJSON, terbilangRupiah } from "@fundforindonesia/money";
 import type { PageProps } from "./$types";
 
@@ -37,11 +38,6 @@ const method = $derived(METHOD_LABEL[donation.method] ?? donation.method);
 // leave a blank line that looks like a bug.
 const donorName = $derived(donation.displayName?.trim() || "Sesama (tanpa nama)");
 </script>
-
-<svelte:head>
-  <title>Kuitansi donasi · fundforindonesia.org</title>
-  <meta name="robots" content="noindex" />
-</svelte:head>
 
 <div class="mx-auto flex max-w-2xl flex-col gap-4 py-8 print:py-0">
   <div class="flex items-center justify-between print:hidden">
@@ -127,3 +123,5 @@ const donorName = $derived(donation.displayName?.trim() || "Sesama (tanpa nama)"
     </footer>
   </article>
 </div>
+
+<PageTitle title="Kuitansi donasi" />

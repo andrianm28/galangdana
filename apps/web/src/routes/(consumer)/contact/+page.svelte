@@ -1,4 +1,5 @@
 <script lang="ts">
+import SeoHead from "$lib/SeoHead.svelte";
 import { api } from "$lib/api-client";
 import { Alert, Button, FormField, TextInput } from "@fundforindonesia/ui";
 
@@ -63,3 +64,5 @@ async function submit() {
     {/if}
   {/key}
 </div>
+
+<SeoHead title={"Hubungi Kami"} description={"Kirim pertanyaan atau laporan Anda ke tim fundforindonesia.org."} />

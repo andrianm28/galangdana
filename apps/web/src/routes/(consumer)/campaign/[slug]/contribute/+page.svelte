@@ -1,6 +1,7 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import PageTitle from "$lib/PageTitle.svelte";
 import { api } from "$lib/api-client";
 import { formatMoney } from "@fundforindonesia/money";
 import { Button, FormField, TextInput } from "@fundforindonesia/ui";
@@ -137,3 +138,5 @@ async function confirm() {
     {submitting ? "Memproses…" : "Lanjut ke pembayaran"}
   </Button>
 </div>
+
+<PageTitle title={"Konfirmasi donasi"} />

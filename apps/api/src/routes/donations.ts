@@ -3,6 +3,7 @@ import {
   CreateDonationResponseSchema,
   GetDonationResponseSchema,
   PaymentErrorSchema,
+  PaymentMethodSchema,
   validateDonationAmount,
 } from "@fundforindonesia/contracts";
 import {
@@ -56,6 +57,27 @@ function getProvider(method: PaymentMethod) {
     return getSumopodProvider();
   }
   return getMockProvider();
+}
+
+/**
+ * Which payment methods this deployment can actually fulfil.
+ *
+ * Production offered QRIS on the payment-option screen while
+ * SUMOPOD_WEBHOOK_SECRET was unset, so `getSumopodProvider()` threw and
+ * POST /donations answered 500. The donor saw "Gagal memproses donasi.
+ * Silakan coba lagi." -- an instruction that could never work, because the
+ * cause was missing configuration, not a transient failure. Half of
+ * checkout was a wall, and nothing said so.
+ *
+ * A method the server cannot complete must not be offered. Configuration is
+ * read at module load, same as the keys above, so this is a deployment fact
+ * rather than a per-request one.
+ */
+export function availablePaymentMethods(): PaymentMethod[] {
+  const methods: PaymentMethod[] = [];
+  if (SERVER_KEY) methods.push("bank_transfer_va");
+  if (SUMOPOD_WEBHOOK_SECRET) methods.push("qris_redirect");
+  return methods;
 }
 
 async function processPaymentWebhookEvent(event: WebhookEvent) {
@@ -249,6 +271,17 @@ export const donationsRoute = new Elysia()
           return { error: amountCheck.error };
         }
 
+        // A method this deployment cannot fulfil answers 503, not the 500 an
+        // unconfigured provider used to throw. 500 reads as "something broke,
+        // try again"; this will never succeed until someone changes the
+        // configuration, and the caller deserves to be told which it is.
+        // Releases the idempotency claim, like the checks above.
+        if (!availablePaymentMethods().includes(body.paymentMethod)) {
+          await db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, idempotencyKey));
+          set.status = 503;
+          return { error: "payment_method_unavailable" };
+        }
+
         const [policy] = await db
           .select()
           .from(allocationPolicies)
@@ -340,9 +373,16 @@ export const donationsRoute = new Elysia()
         400: PaymentErrorSchema,
         404: PaymentErrorSchema,
         409: PaymentErrorSchema,
+        422: PaymentErrorSchema,
+        503: PaymentErrorSchema,
       },
     },
   )
+  .get("/payment-methods", () => ({ methods: availablePaymentMethods() }), {
+    response: {
+      200: t.Object({ methods: t.Array(PaymentMethodSchema) }),
+    },
+  })
   .post(
     "/payments/webhook",
     async ({ request, set }) => {

@@ -1,5 +1,6 @@
 <script lang="ts">
 import { invalidateAll } from "$app/navigation";
+import PageTitle from "$lib/PageTitle.svelte";
 import { formatMoney, moneyFromJSON } from "@fundforindonesia/money";
 import { onMount } from "svelte";
 import type { PageProps } from "./$types";
@@ -185,3 +186,5 @@ const remaining = $derived.by(() => {
     </p>
   {/if}
 </div>
+
+<PageTitle title={"Status donasi"} />
