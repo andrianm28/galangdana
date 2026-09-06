@@ -136,6 +136,26 @@ export const ConfirmKycDocumentBodySchema = Type.Object({
   objectKey: Type.String({ minLength: 1 }),
 });
 
+// Campaign cover photo. Covers live in the PUBLIC campaign-media bucket
+// (anonymous download by design), unlike verification documents -- but the
+// flow shape is identical: server-generated key at presign, prefix check
+// plus content verification at confirm. Defined once here and reused by
+// the draft-wizard presign in campaign-drafts.ts.
+export const PresignCoverUploadBodySchema = Type.Object({
+  fileName: Type.String({ minLength: 1 }),
+});
+
+export const PresignCoverUploadResponseSchema = Type.Object({
+  uploadUrl: Type.String(),
+  objectKey: Type.String(),
+  expiresInSeconds: Type.Number(),
+});
+export type PresignCoverUploadResponse = Static<typeof PresignCoverUploadResponseSchema>;
+
+export const ConfirmCoverUploadBodySchema = Type.Object({
+  objectKey: Type.String({ minLength: 1 }),
+});
+
 export const KycStatusSchema = Type.Object({
   campaignId: Type.String({ format: "uuid" }),
   campaignTitle: Type.String(),

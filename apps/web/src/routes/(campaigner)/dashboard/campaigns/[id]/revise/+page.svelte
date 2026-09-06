@@ -1,9 +1,11 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
+import CoverUpload from "$lib/CoverUpload.svelte";
 import { api } from "$lib/api-client";
 import type { Treaty } from "@elysiajs/eden";
 import type {
   PresignCampaignDocumentResponse,
+  PresignCoverUploadResponse,
   SubmitCampaignResponse,
 } from "@fundforindonesia/contracts";
 import type { PageProps } from "./$types";
@@ -54,6 +56,7 @@ let submitting = $state(false);
 let error = $state<string | null>(null);
 const selectedFiles = $state<Record<string, File | null>>({});
 let savedField = $state<string | null>(null);
+let coverSaved = $state(false);
 
 async function saveStory() {
   if (!storyValue.trim()) {
@@ -168,6 +171,38 @@ async function uploadDocument(documentType: string) {
   savedField = documentType;
 }
 
+async function presignCover(fileName: string) {
+  // Same narrowing as saveStory(), matching POST /campaigns/:id/cover/presign's
+  // actual `response: { 200, 401, 404, 409, 422 }` map.
+  const { data: presign, error: apiError } = (await campaignClient(
+    data.campaignId,
+  ).cover.presign.post({ fileName })) as Treaty.TreatyResponse<{
+    200: PresignCoverUploadResponse;
+    401: { error: string };
+    404: { error: string };
+    409: { error: string };
+    422: { error: string };
+  }>;
+  if (apiError || !presign || "error" in presign) return null;
+  return { uploadUrl: presign.uploadUrl, objectKey: presign.objectKey };
+}
+
+async function confirmCover(objectKey: string): Promise<string | null> {
+  const { error: apiError } = (await campaignClient(data.campaignId).cover.confirm.post({
+    objectKey,
+  })) as Treaty.TreatyResponse<{
+    200: { success: boolean };
+    400: { error: string };
+    401: { error: string };
+    404: { error: string };
+    409: { error: string };
+    422: { error: string };
+  }>;
+  if (apiError) return "Gagal menyimpan sampul. Silakan coba lagi.";
+  coverSaved = true;
+  return null;
+}
+
 async function resubmit() {
   error = null;
   submitting = true;
@@ -278,4 +313,16 @@ async function resubmit() {
   >
     Ajukan Ulang
   </button>
+
+  <section class="mt-8 border-t border-neutral-200 pt-6">
+    <h3 class="mb-3 font-sans text-base font-semibold text-neutral-900">Foto Sampul</h3>
+    <CoverUpload
+      presign={presignCover}
+      confirm={confirmCover}
+      onUploaded={() => (coverSaved = true)}
+    />
+    {#if coverSaved}
+      <p class="mt-2 font-sans text-xs font-medium text-success">Sampul baru tersimpan.</p>
+    {/if}
+  </section>
 </div>

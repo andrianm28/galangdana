@@ -193,6 +193,30 @@ async function createTestCampaign(token: string) {
       body: JSON.stringify({ mode: "manual", text: "Cerita lengkap Aldi." }),
     }),
   );
+  // Covers are mandatory since the sampul step: presign, PUT real JPEG
+  // bytes, and record the key -- mirroring exactly what the wizard does.
+  const coverPresign = await app.handle(
+    authedRequest(`http://localhost/campaign-drafts/${draft.id}/cover/presign`, token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fileName: "sampul-aldi.jpg" }),
+    }),
+  );
+  const { uploadUrl, objectKey } = (await coverPresign.json()) as {
+    uploadUrl: string;
+    objectKey: string;
+  };
+  await fetch(uploadUrl, {
+    method: "PUT",
+    body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+  });
+  await app.handle(
+    authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, token, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ step: "sampul", answers: { coverObjectKey: objectKey } }),
+    }),
+  );
 
   const resp = await app.handle(
     authedRequest("http://localhost/campaigns", token, {
@@ -926,6 +950,29 @@ describe("POST /campaigns idempotency", () => {
         body: JSON.stringify({ mode: "manual", text: "Cerita lengkap Aldi." }),
       }),
     );
+    // Covers are mandatory: same presign → PUT → answers flow as the wizard.
+    const coverPresign = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/cover/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "sampul.jpg" }),
+      }),
+    );
+    const { uploadUrl, objectKey } = (await coverPresign.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+    await fetch(uploadUrl, {
+      method: "PUT",
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+    });
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ step: "sampul", answers: { coverObjectKey: objectKey } }),
+      }),
+    );
 
     const makeRequest = () =>
       app.handle(
@@ -1372,5 +1419,198 @@ describe("GET /campaigns/:slug/disbursements", () => {
     // Still verify no account details leak even with empty results
     const responseStr = JSON.stringify(body);
     expect(responseStr).not.toContain("bankAccountId");
+  });
+});
+
+describe("POST /campaigns cover requirement", () => {
+  async function createCoverlessDraft() {
+    const createDraftResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const draft = (await createDraftResp.json()) as { id: string };
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          step: "rangkuman",
+          answers: {
+            title: "Tanpa Sampul",
+            purpose: "Biaya operasi",
+            goalAmountStr: "5000000",
+          },
+        }),
+      }),
+    );
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/story`, TEST_TOKEN, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "manual", text: "Cerita." }),
+      }),
+    );
+    return draft;
+  }
+
+  test("400s when the draft has no cover photo", async () => {
+    const draft = await createCoverlessDraft();
+    const resp = await app.handle(
+      authedRequest("http://localhost/campaigns", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draftId: draft.id }),
+      }),
+    );
+    expect(resp.status).toBe(400);
+    expect(((await resp.json()) as { error: string }).error).toBe("draft_incomplete");
+  });
+
+  test("copies a valid cover key to coverMediaUrl", async () => {
+    const draft = await createCoverlessDraft();
+    const presignResp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/cover/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "sampul.jpg" }),
+      }),
+    );
+    const { uploadUrl, objectKey } = (await presignResp.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+    await fetch(uploadUrl, {
+      method: "PUT",
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+    });
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ step: "sampul", answers: { coverObjectKey: objectKey } }),
+      }),
+    );
+
+    const resp = await app.handle(
+      authedRequest("http://localhost/campaigns", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draftId: draft.id }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const { id } = (await resp.json()) as { id: string };
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, id));
+    expect(row?.coverMediaUrl).toBe(objectKey);
+  });
+
+  test("400s when the cover key points outside this draft's cover prefix", async () => {
+    const draft = await createCoverlessDraft();
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          step: "sampul",
+          answers: { coverObjectKey: "drafts/someone-else/cover/x.jpg" },
+        }),
+      }),
+    );
+    const resp = await app.handle(
+      authedRequest("http://localhost/campaigns", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draftId: draft.id }),
+      }),
+    );
+    expect(resp.status).toBe(400);
+  });
+});
+
+describe("POST /campaigns/:id/cover/presign + /confirm", () => {
+  test("presigns a cover PUT scoped under covers/{campaignId}/", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const resp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/cover/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "sampul-baru.png" }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const { uploadUrl, objectKey } = (await resp.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+    expect(objectKey.startsWith(`covers/${campaign.id}/`)).toBe(true);
+    expect(objectKey.endsWith(".png")).toBe(true);
+    expect(uploadUrl.length).toBeGreaterThan(0);
+  });
+
+  test("confirms a real upload and updates coverMediaUrl", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const presignResp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/cover/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "sampul-baru.png" }),
+      }),
+    );
+    const { uploadUrl, objectKey } = (await presignResp.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+    await fetch(uploadUrl, {
+      method: "PUT",
+      body: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    });
+    const confirmResp = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/cover/confirm`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ objectKey }),
+      }),
+    );
+    expect(confirmResp.status).toBe(200);
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, campaign.id));
+    expect(row?.coverMediaUrl).toBe(objectKey);
+  });
+
+  test("404s (not 403) on someone else's campaign, 409s when under review", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const foreign = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/cover/presign`, OTHER_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "x.jpg" }),
+      }),
+    );
+    expect(foreign.status).toBe(404);
+
+    await db
+      .update(campaigns)
+      .set({ status: "pending_review" })
+      .where(eq(campaigns.id, campaign.id));
+    const frozen = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/cover/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "x.jpg" }),
+      }),
+    );
+    expect(frozen.status).toBe(409);
+
+    await db.update(campaigns).set({ status: "active" }).where(eq(campaigns.id, campaign.id));
+    const live = await app.handle(
+      authedRequest(`http://localhost/campaigns/${campaign.id}/cover/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "x.jpg" }),
+      }),
+    );
+    expect(live.status).toBe(200);
   });
 });

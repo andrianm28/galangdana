@@ -5,6 +5,7 @@ import {
   CampaignListResponseSchema,
   CampaignRevisionListResponseSchema,
   ConfirmCampaignDocumentBodySchema,
+  ConfirmCoverUploadBodySchema,
   ConfirmKycDocumentBodySchema,
   CreateCampaignFromDraftBodySchema,
   CreateCampaignFromDraftResponseSchema,
@@ -12,6 +13,8 @@ import {
   MyCampaignsResponseSchema,
   PresignCampaignDocumentBodySchema,
   PresignCampaignDocumentResponseSchema,
+  PresignCoverUploadBodySchema,
+  PresignCoverUploadResponseSchema,
   PresignKycDocumentBodySchema,
   PresignKycDocumentResponseSchema,
   PublicDisbursementLogResponseSchema,
@@ -39,7 +42,12 @@ import { Elysia, t } from "elysia";
 import { toCampaignDetail, toCampaignSummary } from "../lib/campaign-response";
 import { getOrCreateCampaignerForUser } from "../lib/campaigner";
 import { verifyUploadedDocumentContent } from "../lib/media-content";
-import { extractDocumentExtension, privateDocumentsS3 } from "../lib/media-s3";
+import {
+  coversS3,
+  extractCoverExtension,
+  extractDocumentExtension,
+  privateDocumentsS3,
+} from "../lib/media-s3";
 import { sessionDerive } from "../lib/session";
 import { generateUniqueSlug } from "../lib/slug";
 
@@ -71,6 +79,21 @@ async function findOwnedCampaign(campaignId: string, userId: string) {
     .from(campaigns)
     .where(and(eq(campaigns.id, campaignId), eq(campaigns.campaignerId, campaigner.id)));
   return campaign ?? null;
+}
+
+// Cover photos are cosmetic, not moderated content: the owner may change
+// them in every state except while the campaign sits in the moderation
+// queue (a moving target under review) and once rejected (terminal).
+const COVER_EDITABLE_STATUSES = [
+  "draft",
+  "needs_revision",
+  "active",
+  "paused",
+  "completed",
+] as const;
+
+function isCoverEditable(status: string): boolean {
+  return (COVER_EDITABLE_STATUSES as readonly string[]).includes(status);
 }
 
 /**
@@ -198,7 +221,16 @@ export const campaignsRoute = new Elysia()
         typeof draft.answers.goalAmountStr === "string" && /^\d+$/.test(draft.answers.goalAmountStr)
           ? draft.answers.goalAmountStr
           : null;
-      if (!title || !shortDescription || !goalAmountStr || !draft.categoryId) {
+      // Covers are mandatory (the wizard's sampul step): a campaign without
+      // one renders a placeholder, and placeholder-only campaigns are what
+      // this requirement exists to end. The key must be one this draft's
+      // own cover presign issued -- anything else is tampering, not input.
+      const coverObjectKey =
+        typeof draft.answers.coverObjectKey === "string" &&
+        draft.answers.coverObjectKey.startsWith(`drafts/${draft.id}/cover/`)
+          ? draft.answers.coverObjectKey
+          : null;
+      if (!title || !shortDescription || !goalAmountStr || !draft.categoryId || !coverObjectKey) {
         set.status = 400;
         return { error: "draft_incomplete" };
       }
@@ -228,6 +260,19 @@ export const campaignsRoute = new Elysia()
       const campaigner = await getOrCreateCampaignerForUser(user.id);
       const slug = await generateUniqueSlug(title);
 
+      // The bytes are re-verified here, not just trusted from the wizard:
+      // the PUT and this call are separate requests, and anything could
+      // have happened to the key in between (including nothing -- a client
+      // that skipped the upload entirely).
+      const coverExt = extractCoverExtension(coverObjectKey);
+      const coverContent = coverExt
+        ? await verifyUploadedDocumentContent(coversS3, coverObjectKey, coverExt)
+        : { ok: false as const, error: "document_content_mismatch" as const };
+      if (!coverContent.ok) {
+        set.status = 422;
+        return { error: coverContent.error };
+      }
+
       const [campaign] = await db
         .insert(campaigns)
         .values({
@@ -235,6 +280,7 @@ export const campaignsRoute = new Elysia()
           title,
           shortDescription,
           story,
+          coverMediaUrl: coverObjectKey,
           categoryId: draft.categoryId,
           campaignerId: campaigner.id,
           type: "donation",
@@ -258,6 +304,7 @@ export const campaignsRoute = new Elysia()
         400: CampaignErrorSchema,
         401: CampaignErrorSchema,
         404: CampaignErrorSchema,
+        422: CampaignErrorSchema,
         500: CampaignErrorSchema,
       },
     },
@@ -801,6 +848,101 @@ export const campaignsRoute = new Elysia()
     {
       params: t.Object({ id: t.String({ format: "uuid" }) }),
       body: ConfirmCampaignDocumentBodySchema,
+      response: {
+        200: t.Object({ success: t.Boolean() }),
+        400: CampaignErrorSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
+        422: CampaignErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/campaigns/:id/cover/presign",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (!isCoverEditable(campaign.status)) {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
+
+      const ext = extractCoverExtension(body.fileName);
+      if (!ext) {
+        set.status = 422;
+        return { error: "unsupported_file_type" };
+      }
+
+      const objectKey = `covers/${campaign.id}/${crypto.randomUUID()}.${ext}`;
+      const expiresInSeconds = 300;
+      const uploadUrl = coversS3.file(objectKey).presign({
+        method: "PUT",
+        expiresIn: expiresInSeconds,
+      });
+
+      return { uploadUrl, objectKey, expiresInSeconds };
+    },
+    {
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
+      body: PresignCoverUploadBodySchema,
+      response: {
+        200: PresignCoverUploadResponseSchema,
+        401: CampaignErrorSchema,
+        404: CampaignErrorSchema,
+        409: CampaignErrorSchema,
+        422: CampaignErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/campaigns/:id/cover/confirm",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const campaign = await findOwnedCampaign(params.id, user.id);
+      if (!campaign) {
+        set.status = 404;
+        return { error: "campaign_not_found" };
+      }
+      if (!isCoverEditable(campaign.status)) {
+        set.status = 409;
+        return { error: "campaign_not_editable" };
+      }
+
+      if (!body.objectKey.startsWith(`covers/${campaign.id}/`)) {
+        set.status = 400;
+        return { error: "object_key_mismatch" };
+      }
+
+      const ext = extractCoverExtension(body.objectKey);
+      const content = ext
+        ? await verifyUploadedDocumentContent(coversS3, body.objectKey, ext)
+        : { ok: false as const, error: "document_content_mismatch" as const };
+      if (!content.ok) {
+        set.status = 422;
+        return { error: content.error };
+      }
+
+      await db
+        .update(campaigns)
+        .set({ coverMediaUrl: body.objectKey, updatedAt: new Date() })
+        .where(eq(campaigns.id, campaign.id));
+
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
+      body: ConfirmCoverUploadBodySchema,
       response: {
         200: t.Object({ success: t.Boolean() }),
         400: CampaignErrorSchema,
