@@ -206,22 +206,98 @@ git commit -m "feat(ui): add Badge's ledger variant for proof-state claims"
 
 ---
 
-### Task 3: CampaignCard — Ledger Line ticks and the mono figure
+### Task 3: LedgerTicks component, and CampaignCard's mono figure
 
 **Files:**
+- Create: `packages/ui/src/components/LedgerTicks.svelte`
+- Create: `packages/ui/src/components/LedgerTicks.test.ts`
+- Modify: `packages/ui/src/index.ts`
 - Modify: `packages/ui/src/components/CampaignCard.svelte`
 - Modify: `packages/ui/src/components/CampaignCard.test.ts`
 
 **Interfaces:**
-- Consumes: `--color-ledger`, `--font-mono` (Task 1). Consumes `CampaignSummaryLike.goalAmount`/`collectedAmount` — already present, no data change.
-- Produces: nothing new consumed elsewhere; this is a leaf visual change.
+- Consumes: `--color-ledger`, `--font-mono` (Task 1).
+- Produces: `LedgerTicks` (no props — always the fixed 25/50/75 pattern), exported from `packages/ui`'s barrel. Task 4 (the campaign detail hero) imports and uses this same component instead of re-implementing the markup — the two progress-bar instances render the identical milestone-tick pattern, so this is shared once rather than duplicated across `packages/ui` and `apps/web`, matching how `Badge`/`Button`/`Card` are already shared.
 
-- [ ] **Step 1: Write the failing tests**
+**Note:** this task's shape (extract a shared component rather than inline the same markup twice) is a pre-flight correction to the original plan draft, made before Task 3 was dispatched — see the SDD ledger's pre-flight scan entry. `CampaignCard.svelte` already lives in `packages/ui` and is imported into `apps/web`'s pages, so this follows the codebase's existing pattern rather than introducing a new one.
+
+- [ ] **Step 1: Write the failing tests for `LedgerTicks`**
+
+Create `packages/ui/src/components/LedgerTicks.test.ts`:
+
+```ts
+import { cleanup, render } from "@testing-library/svelte";
+import { afterEach, describe, expect, test } from "vitest";
+import LedgerTicks from "./LedgerTicks.svelte";
+
+afterEach(() => cleanup());
+
+describe("LedgerTicks", () => {
+  test("renders exactly three milestone ticks", () => {
+    const { container } = render(LedgerTicks);
+    expect(container.querySelectorAll('[data-testid="ledger-tick"]').length).toBe(3);
+  });
+
+  test("is decorative, not announced to assistive tech", () => {
+    // The bar it sits under already carries role="progressbar" with its own
+    // aria-valuenow; these ticks add no new information a screen reader
+    // needs read aloud.
+    const { container } = render(LedgerTicks);
+    expect(container.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
+  });
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `bun run --cwd packages/ui test`
+Expected: FAIL — `LedgerTicks.svelte` does not exist yet.
+
+- [ ] **Step 3: Implement `LedgerTicks`**
+
+Create `packages/ui/src/components/LedgerTicks.svelte`:
+
+```svelte
+<!--
+  Ledger Line milestone ticks -- see docs/design/2026-09-06-visual-redesign-plan.md's
+  Signature section. Fixed at 25/50/75%: these mark where a disbursement
+  request would typically land, not a measurement of any specific campaign's
+  actual disbursement history (that detail lives on the campaign's own
+  pencairan-dana page). Used only under a goal-model progress bar -- a
+  program-model campaign has no goal for a milestone to be a fraction of, so
+  callers render this only inside their own goal-model branch.
+-->
+<div class="relative mt-1.5 h-2.5" aria-hidden="true">
+  <div class="absolute inset-x-0 top-1 h-px bg-neutral-200"></div>
+  {#each [25, 50, 75] as milestone (milestone)}
+    <div
+      data-testid="ledger-tick"
+      class="absolute top-0 h-2.5 w-0.5 rounded-full bg-ledger"
+      style="left: {milestone}%"
+    ></div>
+  {/each}
+</div>
+```
+
+- [ ] **Step 4: Export it**
+
+In `packages/ui/src/index.ts`, add (alphabetically, between `Label` and `Spinner`):
+
+```ts
+export { default as LedgerTicks } from "./components/LedgerTicks.svelte";
+```
+
+- [ ] **Step 5: Run `LedgerTicks` tests to verify they pass**
+
+Run: `bun run --cwd packages/ui test`
+Expected: PASS for `LedgerTicks.test.ts`.
+
+- [ ] **Step 6: Write the failing tests for `CampaignCard`**
 
 Append to `packages/ui/src/components/CampaignCard.test.ts`, inside `describe("CampaignCard", ...)`:
 
 ```ts
-  test("a goal-model campaign shows three Ledger Line milestone ticks under the progress bar", () => {
+  test("a goal-model campaign shows the Ledger Line milestone ticks under the progress bar", () => {
     const { container } = render(CampaignCard, { props: { campaign: GOAL_CAMPAIGN } });
     expect(container.querySelectorAll('[data-testid="ledger-tick"]').length).toBe(3);
   });
@@ -241,14 +317,20 @@ Append to `packages/ui/src/components/CampaignCard.test.ts`, inside `describe("C
   });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 7: Run tests to verify they fail**
 
 Run: `bun run --cwd packages/ui test`
-Expected: FAIL — no `[data-testid="ledger-tick"]` elements exist yet, and the program-model amount is not yet `font-mono`.
+Expected: FAIL — `CampaignCard` renders no ticks yet, and the program-model amount is not yet `font-mono`.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 8: Implement in `CampaignCard`**
 
-In `packages/ui/src/components/CampaignCard.svelte`, replace the `{#if campaign.model === "goal"} ... {:else} ... {/if}` block with:
+In `packages/ui/src/components/CampaignCard.svelte`, add the import:
+
+```ts
+import LedgerTicks from "./LedgerTicks.svelte";
+```
+
+Replace the `{#if campaign.model === "goal"} ... {:else} ... {/if}` block with:
 
 ```svelte
       {#if campaign.model === "goal"}
@@ -262,25 +344,7 @@ In `packages/ui/src/components/CampaignCard.svelte`, replace the `{#if campaign.
           >
             <div class="h-full rounded-full bg-primary" style="width: {progressPercent}%"></div>
           </div>
-          <!--
-            Ledger Line milestone ticks -- see docs/design/2026-09-06-visual-redesign-plan.md's
-            Signature section. Fixed at 25/50/75%: these mark where a
-            disbursement request would typically land, not a measurement of
-            this specific campaign's actual disbursement history (that detail
-            lives on the campaign's own pencairan-dana page). Goal-model only:
-            a program-model campaign has no goal for a milestone to be a
-            fraction of.
-          -->
-          <div class="relative mt-1.5 h-2.5" aria-hidden="true">
-            <div class="absolute inset-x-0 top-1 h-px bg-neutral-200"></div>
-            {#each [25, 50, 75] as milestone (milestone)}
-              <div
-                data-testid="ledger-tick"
-                class="absolute top-0 h-2.5 w-0.5 rounded-full bg-ledger"
-                style="left: {milestone}%"
-              ></div>
-            {/each}
-          </div>
+          <LedgerTicks />
           <p class="mt-2 font-sans text-sm font-semibold text-neutral-900">{formatMoney(collected)}</p>
           <p class="font-sans text-xs text-neutral-600">Terkumpul dari {formatMoney(goal ?? collected)}</p>
         </div>
@@ -292,16 +356,16 @@ In `packages/ui/src/components/CampaignCard.svelte`, replace the `{#if campaign.
       {/if}
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 9: Run tests to verify they pass**
 
 Run: `bun run --cwd packages/ui test`
 Expected: PASS, all existing `CampaignCard` tests (goal progress bar, program "Donasi tersedia", cover placeholder, formatting, link href) still pass unchanged.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add packages/ui/src/components/CampaignCard.svelte packages/ui/src/components/CampaignCard.test.ts
-git commit -m "feat(ui): add Ledger Line milestone ticks to CampaignCard's progress bar"
+git add packages/ui/src/components/LedgerTicks.svelte packages/ui/src/components/LedgerTicks.test.ts packages/ui/src/index.ts packages/ui/src/components/CampaignCard.svelte packages/ui/src/components/CampaignCard.test.ts
+git commit -m "feat(ui): add a shared LedgerTicks component, used by CampaignCard"
 ```
 
 ---
@@ -312,13 +376,25 @@ git commit -m "feat(ui): add Ledger Line milestone ticks to CampaignCard's progr
 - Modify: `apps/web/src/routes/(consumer)/campaign/[slug]/+page.svelte`
 
 **Interfaces:**
-- Consumes: `--color-ledger` (Task 1). No prop/data changes — `data.campaign` already carries everything used.
+- Consumes: `LedgerTicks` from `@fundforindonesia/ui` (Task 3). No prop/data changes — `data.campaign` already carries everything used.
 
 This fixes the UAT finding that a full-bleed `aspect-[4/3]` cover image, in a page with no max-height, pushes the title, progress, and donate button below the fold on desktop (the page renders inside `ConsumerShell`'s `max-w-[1200px]` container, so the image alone can exceed 800px tall). No existing test asserts DOM structure for this page (verified: `page.render.test.ts` only checks text/role), so the restructuring is unconstrained by anything except keeping every existing string/role assertion true.
 
-- [ ] **Step 1: Restructure the top of the page**
+- [ ] **Step 1: Import `LedgerTicks` and restructure the top of the page**
 
-In `apps/web/src/routes/(consumer)/campaign/[slug]/+page.svelte`, replace from the closing `</script>` through the `<Card>...</Card>` block (i.e. everything up to but not including `<div class="font-sans text-neutral-900">` — the story section) with:
+In `apps/web/src/routes/(consumer)/campaign/[slug]/+page.svelte`, change:
+
+```ts
+import { Badge, Button, Card } from "@fundforindonesia/ui";
+```
+
+to:
+
+```ts
+import { Badge, Button, Card, LedgerTicks } from "@fundforindonesia/ui";
+```
+
+Then replace from the closing `</script>` through the `<Card>...</Card>` block (i.e. everything up to but not including `<div class="font-sans text-neutral-900">` — the story section) with:
 
 ```svelte
 <div class="flex flex-col gap-4 md:gap-6">
@@ -367,14 +443,7 @@ In `apps/web/src/routes/(consumer)/campaign/[slug]/+page.svelte`, replace from t
             >
               <div class="h-full rounded-full bg-primary" style="width: {progressPercent}%"></div>
             </div>
-            <!-- Ledger Line milestone ticks -- see Task 3's CampaignCard for
-                 the same motif and the same fixed 25/50/75% rationale. -->
-            <div class="relative mt-1.5 h-2.5" aria-hidden="true">
-              <div class="absolute inset-x-0 top-1 h-px bg-neutral-200"></div>
-              {#each [25, 50, 75] as milestone (milestone)}
-                <div class="absolute top-0 h-2.5 w-0.5 rounded-full bg-ledger" style="left: {milestone}%"></div>
-              {/each}
-            </div>
+            <LedgerTicks />
             <p class="mt-3 font-sans text-lg font-bold text-neutral-900">{formatMoney(collected)}</p>
             <p class="font-sans text-sm text-neutral-600">Terkumpul dari {formatMoney(goal ?? collected)}</p>
             {#if daysLeft !== null}
@@ -920,7 +989,7 @@ Run:
 ```bash
 grep -rn "color-ledger\|bg-ledger\|text-ledger\|border-ledger\|font-serif" \
   packages/ui/src packages/ui/src/layouts apps/web/src \
-  --include=*.svelte | grep -vE "CampaignCard\.svelte|campaign/\[slug\]/\+page\.svelte|pencairan-dana/\+page\.svelte|kuitansi/\+page\.svelte"
+  --include=*.svelte | grep -vE "LedgerTicks\.svelte|campaign/\[slug\]/\+page\.svelte|pencairan-dana/\+page\.svelte|kuitansi/\+page\.svelte"
 ```
 
 Expected: no output. Any match is a Global Constraint violation — the Ledger Line escaped its four sanctioned surfaces — and must be reverted before this task closes.
