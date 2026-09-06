@@ -291,14 +291,19 @@ export const donationsRoute = new Elysia()
       const [claimed] = await db
         .insert(idempotencyKeys)
         .values({ key: idempotencyKey, endpoint: "POST /donations", responseBody: {} })
-        .onConflictDoNothing({ target: idempotencyKeys.key })
+        .onConflictDoNothing({ target: [idempotencyKeys.endpoint, idempotencyKeys.key] })
         .returning();
 
       if (!claimed) {
         const [existingKey] = await db
           .select()
           .from(idempotencyKeys)
-          .where(eq(idempotencyKeys.key, idempotencyKey));
+          .where(
+            and(
+              eq(idempotencyKeys.endpoint, "POST /donations"),
+              eq(idempotencyKeys.key, idempotencyKey),
+            ),
+          );
         if (!existingKey || Object.keys(existingKey.responseBody as object).length === 0) {
           // Another request already claimed this key and hasn't finished
           // yet -- this is a genuine in-flight duplicate, not an error the

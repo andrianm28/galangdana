@@ -1498,3 +1498,28 @@ describe("POST /donations rate limiting", () => {
   });
 });
 
+describe("POST /donations idempotency scoping", () => {
+  test("a key claimed by another endpoint does not block this donation", async () => {
+    const campaign = await seedTestCampaign();
+    const key = crypto.randomUUID();
+    // Some other endpoint claimed this exact key string first. Keys are
+    // scoped per endpoint, so this donation must proceed normally.
+    await db
+      .insert(idempotencyKeys)
+      .values({ key, endpoint: "POST /something-else", responseBody: { ok: true } })
+      .onConflictDoNothing();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    await db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, key));
+  });
+});

@@ -1,0 +1,2 @@
+ALTER TABLE "idempotency_keys" DROP CONSTRAINT "idempotency_keys_key_unique";--> statement-breakpoint
+ALTER TABLE "idempotency_keys" ADD CONSTRAINT "idempotency_keys_endpoint_key_unique" UNIQUE("endpoint","key");
