@@ -142,6 +142,38 @@ describe("(consumer) campaign/[slug] link preview metadata", () => {
     expect(head.querySelector('meta[property="og:locale"]')?.getAttribute("content")).toBe("id_ID");
   });
 
+  // The first version of this feature emitted site-wide og: defaults from the
+  // root layout AND page-specific ones here, assuming the specific tag would
+  // win. Svelte does not deduplicate head elements: both rendered, the generic
+  // pair came first, and that is the occurrence Facebook's scraper -- and
+  // therefore WhatsApp's -- takes. Every forwarded campaign link showed the
+  // generic site title. Exactly one of each tag, or the card is wrong.
+  test("emits exactly one of each preview tag, never a generic duplicate", () => {
+    render(Page, {
+      props: {
+        params: { slug: "test-goal" },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+      },
+    });
+    const head = document.head;
+    for (const selector of [
+      'meta[property="og:title"]',
+      'meta[property="og:description"]',
+      'meta[property="og:url"]',
+      'meta[property="og:image"]',
+      'meta[property="og:type"]',
+      'meta[property="og:locale"]',
+      'meta[name="twitter:card"]',
+      'link[rel="canonical"]',
+    ]) {
+      expect(head.querySelectorAll(selector).length).toBe(1);
+    }
+    // And the one that renders is the campaign's, not a site-wide fallback.
+    expect(head.querySelector('meta[property="og:title"]')?.getAttribute("content")).toContain(
+      GOAL_CAMPAIGN.title,
+    );
+  });
+
   test("the description carries the money position, not just the title again", () => {
     render(Page, {
       props: {
