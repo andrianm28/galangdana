@@ -38,6 +38,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { toCampaignDetail, toCampaignSummary } from "../lib/campaign-response";
 import { getOrCreateCampaignerForUser } from "../lib/campaigner";
+import { verifyUploadedDocumentContent } from "../lib/media-content";
 import { extractDocumentExtension, privateDocumentsS3 } from "../lib/media-s3";
 import { sessionDerive } from "../lib/session";
 import { generateUniqueSlug } from "../lib/slug";
@@ -442,6 +443,17 @@ export const campaignsRoute = new Elysia()
         return { error: "object_key_mismatch" };
       }
 
+      // Same confirm-time content check as draft documents: KTP/selfie must
+      // be real images, not HTML or junk wearing a .png name.
+      const kycExt = extractKycExtension(body.objectKey);
+      const kycContent = kycExt
+        ? await verifyUploadedDocumentContent(kycDocumentsS3, body.objectKey, kycExt)
+        : { ok: false as const, error: "document_content_mismatch" as const };
+      if (!kycContent.ok) {
+        set.status = 422;
+        return { error: kycContent.error };
+      }
+
       const column = body.documentType === "ktp" ? "ktpObjectKey" : "selfieObjectKey";
       await db
         .insert(individualVerifications)
@@ -471,6 +483,7 @@ export const campaignsRoute = new Elysia()
         401: CampaignErrorSchema,
         404: CampaignErrorSchema,
         409: CampaignErrorSchema,
+        422: CampaignErrorSchema,
       },
     },
   )
@@ -770,6 +783,15 @@ export const campaignsRoute = new Elysia()
         return { error: "object_key_mismatch" };
       }
 
+      const docExt = extractDocumentExtension(body.objectKey);
+      const docContent = docExt
+        ? await verifyUploadedDocumentContent(privateDocumentsS3, body.objectKey, docExt)
+        : { ok: false as const, error: "document_content_mismatch" as const };
+      if (!docContent.ok) {
+        set.status = 422;
+        return { error: docContent.error };
+      }
+
       await db
         .insert(campaignDocuments)
         .values({ campaignId: campaign.id, type: body.documentType, objectKey: body.objectKey });
@@ -785,6 +807,7 @@ export const campaignsRoute = new Elysia()
         401: CampaignErrorSchema,
         404: CampaignErrorSchema,
         409: CampaignErrorSchema,
+        422: CampaignErrorSchema,
       },
     },
   )

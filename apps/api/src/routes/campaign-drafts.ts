@@ -23,6 +23,7 @@ import {
 } from "@fundforindonesia/db";
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
+import { verifyUploadedDocumentContent } from "../lib/media-content";
 import { sessionDerive } from "../lib/session";
 
 const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -388,6 +389,19 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
         return { error: "object_key_mismatch" };
       }
 
+      // Content, not just the name: the presign step only allowlisted the
+      // extension, so verify the uploaded bytes actually match it before a
+      // DB row references the object. Rejects (and deletes) HTML, binaries,
+      // and oversized files wearing an innocent extension.
+      const ext = extractExtension(body.objectKey);
+      const content = ext
+        ? await verifyUploadedDocumentContent(documentsS3, body.objectKey, ext)
+        : { ok: false as const, error: "document_content_mismatch" as const };
+      if (!content.ok) {
+        set.status = 422;
+        return { error: content.error };
+      }
+
       const [document] = await db
         .insert(campaignDocuments)
         .values({ draftId: params.id, type: body.type, objectKey: body.objectKey })
@@ -412,6 +426,7 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
         400: CampaignDraftErrorSchema,
         401: CampaignDraftErrorSchema,
         404: CampaignDraftErrorSchema,
+        422: CampaignDraftErrorSchema,
         500: CampaignDraftErrorSchema,
       },
     },

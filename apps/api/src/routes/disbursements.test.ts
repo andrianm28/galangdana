@@ -605,7 +605,10 @@ describe("POST /disbursements/:id/proof/presign + /confirm", () => {
     };
     expect(objectKey).toStartWith(`disbursements/${id}/proof/`);
 
-    const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake proof bytes" });
+    const putResp = await fetch(uploadUrl, {
+      method: "PUT",
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+    });
     expect(putResp.ok).toBe(true);
 
     const confirmResp = await app.handle(
@@ -755,7 +758,10 @@ async function uploadProof(id: string) {
     uploadUrl: string;
     objectKey: string;
   };
-  const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake proof bytes" });
+  const putResp = await fetch(uploadUrl, {
+    method: "PUT",
+    body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+  });
   if (!putResp.ok) throw new Error(`proof PUT failed: ${putResp.status}`);
   const confirmResp = await app.handle(
     authedRequest(`http://localhost/disbursements/${id}/proof/confirm`, TEST_TOKEN, {

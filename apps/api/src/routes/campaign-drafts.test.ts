@@ -593,7 +593,10 @@ describe("POST /campaign-drafts/:id/documents (confirm)", () => {
     // A real PUT against the real presigned URL, against real local MinIO
     // -- not a mock -- matching this codebase's established no-mocking
     // testing philosophy for real infrastructure.
-    const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake pdf bytes" });
+    const putResp = await fetch(uploadUrl, {
+      method: "PUT",
+      body: "%PDF-1.4 test bytes with correct magic",
+    });
     expect(putResp.status).toBe(200);
 
     const confirmResp = await app.handle(
@@ -665,5 +668,62 @@ describe("POST /campaign-drafts/:id/documents (confirm)", () => {
     expect(resp.status).toBe(404);
     const body = (await resp.json()) as { error: string };
     expect(body.error).toBe("draft_not_found");
+  });
+});
+
+describe("POST /campaign-drafts/:id/documents content verification", () => {
+  test("rejects confirming bytes that do not match the file extension, without a DB row", async () => {
+    const createResp = await app.handle(
+      authedRequest("http://localhost/campaign-drafts", TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ track: "medical", categoryId }),
+      }),
+    );
+    const created = (await createResp.json()) as { id: string };
+
+    const presignResp = await app.handle(
+      authedRequest(
+        `http://localhost/campaign-drafts/${created.id}/documents/presign`,
+        TEST_TOKEN,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ type: "riwayat_medis", fileName: "scan.png" }),
+        },
+      ),
+    );
+    const { uploadUrl, objectKey } = (await presignResp.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+
+    // HTML bytes wearing a .png name: the old code recorded these happily.
+    const putResp = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "content-type": "image/png" },
+      body: "<html><body>not an image</body></html>",
+    });
+    expect(putResp.status).toBe(200);
+
+    const confirmResp = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/documents`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "riwayat_medis", objectKey }),
+      }),
+    );
+    expect(confirmResp.status).toBe(422);
+    expect(((await confirmResp.json()) as { error: string }).error).toBe(
+      "document_content_mismatch",
+    );
+
+    const detail = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${created.id}`, TEST_TOKEN),
+    );
+    const detailBody = (await detail.json()) as {
+      documents: Array<{ type: string; objectKey: string }>;
+    };
+    expect(detailBody.documents.length).toBe(0);
   });
 });
