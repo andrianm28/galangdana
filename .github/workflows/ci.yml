@@ -315,11 +315,11 @@ jobs:
       # Deliberately not actions/checkout@v4: that checks out into the
       # runner's own _work/ workspace, which the running systemd services
       # (fundforindonesia-api.service / fundforindonesia-web.service) know nothing
-      # about -- their WorkingDirectory is /home/ubuntu/galangdana, the
+      # about -- their WorkingDirectory is /home/ubuntu/ffi, the
       # same real checkout used throughout this project's manual deploys
       # so far. This job updates that checkout in place instead.
       - name: Update the live checkout
-        working-directory: /home/ubuntu/galangdana
+        working-directory: /home/ubuntu/ffi
         run: |
           git fetch origin master
           git reset --hard origin/master
@@ -329,11 +329,11 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        working-directory: /home/ubuntu/galangdana
+        working-directory: /home/ubuntu/ffi
         run: bun install
 
       - name: Run database migrations
-        working-directory: /home/ubuntu/galangdana
+        working-directory: /home/ubuntu/ffi
         # Explicit --env-file rather than relying on Bun's ambient .env
         # auto-load: .env.production is what the live services actually
         # run with (see fundforindonesia-api.service / fundforindonesia-web.service's
@@ -355,11 +355,11 @@ jobs:
       # words from campaign titles. Nothing alerted; search simply answered
       # "nothing found" forever.
       - name: Reindex search
-        working-directory: /home/ubuntu/galangdana/packages/search
+        working-directory: /home/ubuntu/ffi/packages/search
         run: bun --env-file=../../.env.production run src/reindex.ts
 
       - name: Build web
-        working-directory: /home/ubuntu/galangdana
+        working-directory: /home/ubuntu/ffi
         run: bun run build
 
       - name: Restart services

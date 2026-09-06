@@ -6,7 +6,7 @@ berurutan, dan masing-masing terverifikasi keterangannya.
 ## 1. Rollback deploy kode (kasus umum)
 
 Setiap deploy = `git reset --hard origin/master` + migrate + reindex + build +
-restart di `/home/ubuntu/galangdana`. Rollback = langkah yang sama, mundur:
+restart di `/home/ubuntu/ffi`. Rollback = langkah yang sama, mundur:
 
 1. Tentukan commit baik terakhir: merge commit hijau sebelum deploy rusak
    (`gh run list --branch master`, ambil SHA yang CI-nya success).
