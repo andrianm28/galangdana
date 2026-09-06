@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { redis } from "../lib/redis-client";
-import { checkLoginRateLimit, checkOtpRateLimit, checkRegisterRateLimit } from "./rate-limit";
+import {
+  checkDonationRateLimit,
+  checkLoginRateLimit,
+  checkOtpRateLimit,
+  checkRegisterRateLimit,
+  checkSupportTicketRateLimit,
+} from "./rate-limit";
 
 const TEST_PHONE = "+6281199999001";
 const TEST_LOGIN_EMAIL = "test-ratelimit-login@example.test";
@@ -114,5 +120,54 @@ describe("checkRegisterRateLimit", () => {
     const otherResult = await checkRegisterRateLimit(otherEmail);
     expect(otherResult.allowed).toBe(true);
     await redis.del(`register:ratelimit:${otherEmail}`);
+  });
+});
+
+const TEST_DONATION_CAMPAIGN = "11111111-2222-3333-4444-555555555555";
+const TEST_TICKET_EMAIL = "test-ratelimit-ticket@example.test";
+
+describe("checkDonationRateLimit", () => {
+  beforeEach(async () => {
+    await redis.del(`donation:ratelimit:${TEST_DONATION_CAMPAIGN}`);
+  });
+
+  test("allows donations up to the limit", async () => {
+    const result = await checkDonationRateLimit(TEST_DONATION_CAMPAIGN);
+    expect(result.allowed).toBe(true);
+  });
+
+  test("blocks the donation after the limit is exceeded", async () => {
+    for (let i = 0; i < 120; i++) {
+      await checkDonationRateLimit(TEST_DONATION_CAMPAIGN);
+    }
+    const over = await checkDonationRateLimit(TEST_DONATION_CAMPAIGN);
+    expect(over.allowed).toBe(false);
+    expect(over.retryAfterSeconds).toBeGreaterThan(0);
+  });
+
+  test("rate limits are scoped per campaign, not global", async () => {
+    const otherCampaign = "66666666-7777-8888-9999-000000000000";
+    await redis.del(`donation:ratelimit:${otherCampaign}`);
+    for (let i = 0; i < 121; i++) {
+      await checkDonationRateLimit(TEST_DONATION_CAMPAIGN);
+    }
+    expect((await checkDonationRateLimit(otherCampaign)).allowed).toBe(true);
+    await redis.del(`donation:ratelimit:${otherCampaign}`);
+    await redis.del(`donation:ratelimit:${TEST_DONATION_CAMPAIGN}`);
+  });
+});
+
+describe("checkSupportTicketRateLimit", () => {
+  beforeEach(async () => {
+    await redis.del(`support:ratelimit:${TEST_TICKET_EMAIL}`);
+  });
+
+  test("allows tickets up to the limit, then blocks", async () => {
+    for (let i = 0; i < 5; i++) {
+      expect((await checkSupportTicketRateLimit(TEST_TICKET_EMAIL)).allowed).toBe(true);
+    }
+    const sixth = await checkSupportTicketRateLimit(TEST_TICKET_EMAIL);
+    expect(sixth.allowed).toBe(false);
+    expect(sixth.retryAfterSeconds).toBeGreaterThan(0);
   });
 });

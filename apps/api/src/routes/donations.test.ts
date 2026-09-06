@@ -1474,3 +1474,27 @@ describe("Sumopod webhook secret fails closed when unset", () => {
     expect(donation?.status).toBe("pending");
   });
 });
+
+describe("POST /donations rate limiting", () => {
+  test("returns 429 when the campaign's donation budget is exhausted", async () => {
+    const campaign = await seedTestCampaign();
+    // Prime the fixed-window counter past the cap directly: walking the
+    // real 120-request boundary here would add seconds per run, while the
+    // boundary itself is covered in rate-limit.test.ts.
+    await redis.set(`donation:ratelimit:${campaign.id}`, "9999");
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(429);
+    await redis.del(`donation:ratelimit:${campaign.id}`);
+  });
+});
+

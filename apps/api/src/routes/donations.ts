@@ -26,6 +26,7 @@ import type { PaymentMethod, WebhookEvent } from "@fundforindonesia/payments";
 import type { Static } from "@sinclair/typebox";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
+import { checkDonationRateLimit } from "../auth/rate-limit";
 import { sessionDerive } from "../lib/session";
 
 const SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY ?? "";
@@ -268,6 +269,17 @@ export const donationsRoute = new Elysia()
         return { error: "missing_idempotency_key" };
       }
 
+      // Before the claim and before the provider: each accepted request can
+      // create a real provider charge, so an unbounded public endpoint is a
+      // cost multiplier. Checked on the campaign (the only stable public
+      // identity here) and deliberately before the idempotency claim, so a
+      // throttled request burns no claim a later retry would trip on.
+      const donationLimit = await checkDonationRateLimit(body.campaignId);
+      if (!donationLimit.allowed) {
+        set.status = 429;
+        return { error: "too_many_requests" };
+      }
+
       // Claim the key FIRST via the unique constraint itself -- this is the
       // real concurrency guard (matches this project's established atomic-
       // transition pattern, and this same plan's own POST /payments/webhook
@@ -432,6 +444,7 @@ export const donationsRoute = new Elysia()
         404: PaymentErrorSchema,
         409: PaymentErrorSchema,
         422: PaymentErrorSchema,
+        429: PaymentErrorSchema,
         503: PaymentErrorSchema,
       },
     },

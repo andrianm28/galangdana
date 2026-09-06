@@ -17,6 +17,8 @@ import {
 } from "@fundforindonesia/db";
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
+import { normalizeEmail } from "../auth/normalize";
+import { checkSupportTicketRateLimit } from "../auth/rate-limit";
 import { checkAdmin } from "../lib/admin";
 import { sessionDerive } from "../lib/session";
 
@@ -43,7 +45,12 @@ export const helpRoute = new Elysia()
   )
   .post(
     "/support-tickets",
-    async ({ user, body }) => {
+    async ({ user, body, set }) => {
+      const ticketLimit = await checkSupportTicketRateLimit(normalizeEmail(body.email));
+      if (!ticketLimit.allowed) {
+        set.status = 429;
+        return { error: "too_many_requests" };
+      }
       const [ticket] = await db
         .insert(supportTickets)
         .values({
@@ -58,7 +65,7 @@ export const helpRoute = new Elysia()
     },
     {
       body: SubmitSupportTicketBodySchema,
-      response: { 200: SubmitSupportTicketResponseSchema },
+      response: { 200: SubmitSupportTicketResponseSchema, 429: HelpErrorSchema },
     },
   )
   .post(
