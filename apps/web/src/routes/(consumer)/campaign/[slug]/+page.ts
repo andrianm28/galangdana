@@ -2,7 +2,7 @@ import { api } from "$lib/api-client";
 import { error } from "@sveltejs/kit";
 import type { PageLoad } from "./$types";
 
-export const load: PageLoad = async ({ params }) => {
+export const load: PageLoad = async ({ params, url }) => {
   // Eden Treaty merges every /campaigns/:X route definition sharing this path
   // depth into one combined callable signature. Phase 2c added
   // PUT /campaigns/:id/kyc/identity and /contact (param name "id"), which now
@@ -31,5 +31,9 @@ export const load: PageLoad = async ({ params }) => {
     error(404, "Campaign tidak ditemukan");
   }
 
-  return { campaign: data };
+  // The absolute URL is built here rather than in the component because
+  // og:url and og:image must be absolute: a relative URL in a link preview is
+  // resolved by the scraper, not the browser, and WhatsApp -- which is how
+  // Indonesian donation traffic actually moves -- silently drops the card.
+  return { campaign: data, canonicalUrl: `${url.origin}${url.pathname}` };
 };
