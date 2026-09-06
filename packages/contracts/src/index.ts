@@ -105,6 +105,9 @@ export type {
   SubmitSupportTicketResponse,
 } from "./help";
 export {
+  MAX_DONATION_RUPIAH,
+  MIN_DONATION_RUPIAH,
+  validateDonationAmount,
   CreateDonationBodySchema,
   CreateDonationResponseSchema,
   DonationStatusSchema,
