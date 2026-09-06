@@ -41,6 +41,13 @@ export const CreateDonationBodySchema = Type.Object({
   paymentMethod: PaymentMethodSchema,
   isAnonymous: Type.Optional(Type.Boolean()),
   comment: Type.Optional(Type.String({ maxLength: 500 })),
+  // Optional on purpose. Asking for contact details before taking money costs
+  // conversion, and a donor who declines still gets the on-screen receipt --
+  // they simply cannot be sent one later. Without this the donation_receipt
+  // outbox row had no destination at all for a guest.
+  contactChannel: Type.Optional(Type.Union([Type.Literal("email"), Type.Literal("whatsapp")])),
+  contactValue: Type.Optional(Type.String({ maxLength: 200 })),
+  displayName: Type.Optional(Type.String({ maxLength: 60 })),
 });
 
 export const CreateDonationResponseSchema = Type.Object({

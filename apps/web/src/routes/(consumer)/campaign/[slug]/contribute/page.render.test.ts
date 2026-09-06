@@ -40,7 +40,7 @@ describe("(consumer) campaign/[slug]/contribute rendering", () => {
         form: null,
       },
     });
-    await fireEvent.click(screen.getByRole("button", { name: "Konfirmasi Donasi" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Lanjut ke pembayaran" }));
 
     await waitFor(() => {
       expect(goto).toHaveBeenCalledWith("/donation/status/11111111-1111-1111-1111-111111111111");
@@ -73,7 +73,7 @@ describe("(consumer) campaign/[slug]/contribute rendering", () => {
         form: null,
       },
     });
-    await fireEvent.click(screen.getByRole("button", { name: "Konfirmasi Donasi" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Lanjut ke pembayaran" }));
 
     await waitFor(() => {
       expect(window.location.href).toBe("https://pay.sumopod.com/checkout/abc123");
@@ -95,9 +95,64 @@ describe("(consumer) campaign/[slug]/contribute rendering", () => {
         form: null,
       },
     });
-    await fireEvent.click(screen.getByRole("button", { name: "Konfirmasi Donasi" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Lanjut ke pembayaran" }));
     await waitFor(() => {
       expect(screen.getByText(/Gagal memproses donasi/)).not.toBeNull();
     });
+  });
+});
+
+describe("(consumer) campaign/[slug]/contribute — receipt contact", () => {
+  test("formats the amount instead of printing a raw number", () => {
+    render(Page, {
+      props: {
+        params: { slug: "test-campaign" },
+        data: { campaign: { id: "test-campaign-id", title: "Test Campaign" } },
+        form: null,
+      },
+    });
+    // This screen used to print "Rp{amount}" straight from the query string --
+    // "Rp50000" -- on the last screen before money moves.
+    expect(screen.getByText("Rp50.000")).not.toBeNull();
+  });
+
+  test("says the contact may be left empty, and what that costs", () => {
+    render(Page, {
+      props: {
+        params: { slug: "test-campaign" },
+        data: { campaign: { id: "test-campaign-id", title: "Test Campaign" } },
+        form: null,
+      },
+    });
+    expect(screen.getByText(/Boleh dikosongkan/)).not.toBeNull();
+    expect(screen.getByText(/tidak bisa\s+mengirimkan tanda terimanya/)).not.toBeNull();
+  });
+
+  test("defaults the display name to Sesama rather than requiring one", () => {
+    render(Page, {
+      props: {
+        params: { slug: "test-campaign" },
+        data: { campaign: { id: "test-campaign-id", title: "Test Campaign" } },
+        form: null,
+      },
+    });
+    expect(screen.getByText(/tampil sebagai/)).not.toBeNull();
+    expect((screen.getByLabelText(/Nama yang ditampilkan/) as HTMLInputElement).value).toBe("");
+  });
+
+  test("rejects a malformed email before sending anything", async () => {
+    render(Page, {
+      props: {
+        params: { slug: "test-campaign" },
+        data: { campaign: { id: "test-campaign-id", title: "Test Campaign" } },
+        form: null,
+      },
+    });
+    await fireEvent.click(screen.getByText("Email"));
+    await fireEvent.input(screen.getByLabelText("Alamat email"), {
+      target: { value: "bukan-email" },
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Lanjut ke pembayaran" }));
+    expect(screen.getByRole("alert").textContent).toContain("email");
   });
 });

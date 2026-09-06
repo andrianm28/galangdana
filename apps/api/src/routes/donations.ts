@@ -153,11 +153,24 @@ async function processPaymentWebhookEvent(event: WebhookEvent) {
       })
       .where(eq(campaigns.id, donation.campaignId));
 
-    await tx.insert(notificationsOutbox).values({
-      channel: "email",
-      template: "donation_receipt",
-      payload: { donationId: donation.id, campaignId: donation.campaignId },
-    });
+    // A receipt is only queued when there is somewhere to send it. Most donors
+    // are guests and contact is optional, so enqueueing unconditionally would
+    // fill the outbox with rows that can never succeed -- a permanent backlog
+    // of "failures" that are really just donations with no address. Those
+    // donors still see their receipt on the status page.
+    if (donation.contactChannel && donation.contactValue) {
+      await tx.insert(notificationsOutbox).values({
+        channel: donation.contactChannel,
+        template: "donation_receipt",
+        // The destination travels with the row so the worker does not have to
+        // re-read the donation to learn where to send it.
+        payload: {
+          donationId: donation.id,
+          campaignId: donation.campaignId,
+          contactValue: donation.contactValue,
+        },
+      });
+    }
 
     return { alreadyProcessed: false as const, paid: true as const };
   });
@@ -274,6 +287,12 @@ export const donationsRoute = new Elysia()
             platformFee,
             isAnonymous: body.isAnonymous ?? false,
             comment: body.comment,
+            // Only stored as a pair: a channel with no value, or a value with
+            // no channel, is not a deliverable address and would just be PII
+            // held for nothing.
+            contactChannel: body.contactValue ? (body.contactChannel ?? null) : null,
+            contactValue: body.contactChannel ? (body.contactValue ?? null) : null,
+            displayName: body.displayName || null,
           });
 
           await tx.insert(payments).values({
