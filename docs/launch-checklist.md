@@ -31,6 +31,19 @@
    masih default (imgproxy key/salt, kredensial DB — lihat laporan baseline §5).
 7. Reindex Meilisearch, verifikasi backup nightly berjalan, dan UAT terakhir hijau.
 
+## Observabilitas (GlitchTip self-host + access log) — live 2026-09-06
+- GlitchTip di compose (`glitchtip` + `glitchtip-worker`, DB+Redis reuse,
+  port 127.0.0.1:8080). Akses UI: SSH tunnel
+  (`ssh -L 8080:127.0.0.1:8080 <host>`), lalu `http://127.0.0.1:8080/`.
+  Org `fundforindonesia`, project `api`. Kredensial admin di host
+  (`/tmp` tidak — simpan di password manager; reset via `createsuperuser`).
+- API mengirim error tak-tertangani ke GlitchTip bila `SENTRY_DSN` diset
+  (sudah ada di `.env`/`.env.production`; tanpa DSN = no-op aman).
+  Tanpa itu pun setiap request tercatat 1 baris JSON di journald.
+- **Alert gagal deploy**: job deploy gagal (exit 1) bila health-check 60 dtk
+  tak hijau → notifikasi GitHub standar untuk run yang gagal. Tidak ada
+  channel alert lain (keputusan hemat); error aplikasi muncul di GlitchTip.
+
 ## Worker notifikasi (apps/worker) — status implementasi 2026-09-06
 - Template `donation_receipt` (email HTML + teks + WA ringkas), klaim atomik,
   retry backoff eksponensial (maks 5 → `failed`), stale-skip, defer-WA-tanpa-config,
