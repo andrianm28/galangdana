@@ -31,12 +31,36 @@ import { sessionDerive } from "../lib/session";
 const SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY ?? "";
 const SUMOPOD_API_KEY = process.env.SUMOPOD_API_KEY ?? "";
 const SUMOPOD_WEBHOOK_SECRET = process.env.SUMOPOD_WEBHOOK_SECRET ?? "";
+// Production points this at Sumopod's production API host; unset (dev, CI)
+// keeps SumopodProvider's sandbox default. Read at module load like the
+// keys above, so this is a deployment fact rather than a per-request one --
+// and, for the same reason, covered by a fresh-subprocess fixture test
+// rather than an in-process one (see sumopod-base-url.fixture.ts).
+const SUMOPOD_BASE_URL = process.env.SUMOPOD_BASE_URL ?? "";
+
+// Where the donor's browser lands after paying on Sumopod's hosted page.
+// Defaults to PUBLIC_WEB_URL, but Sumopod validates return URLs server-side
+// and rejects non-public hosts -- so any environment whose PUBLIC_WEB_URL is
+// a localhost origin (local dev) must set this to a public https origin for
+// QRIS charges to be accepted at all. Deliberately separate from
+// PUBLIC_WEB_URL itself, which also drives CORS and login redirects and must
+// stay localhost in dev. Same module-load binding as the keys above (see
+// sumopod-base-url.fixture.ts).
+const SUMOPOD_RETURN_BASE_URL = process.env.SUMOPOD_RETURN_BASE_URL ?? "";
 
 function getSumopodProvider() {
-  if (!SUMOPOD_WEBHOOK_SECRET) {
-    throw new Error("SUMOPOD_WEBHOOK_SECRET is not configured");
+  // The same three conditions as the menu gate, checked again here: the
+  // webhook route reaches this function without going through the gate, and
+  // a charge must never fall back to the sandbox host by omission.
+  const configError = sumopodConfigError();
+  if (configError) {
+    throw new Error(`Sumopod is not configured: ${configError}`);
   }
-  return new SumopodProvider({ apiKey: SUMOPOD_API_KEY, webhookSecret: SUMOPOD_WEBHOOK_SECRET });
+  return new SumopodProvider({
+    apiKey: SUMOPOD_API_KEY,
+    webhookSecret: SUMOPOD_WEBHOOK_SECRET,
+    baseUrl: SUMOPOD_BASE_URL,
+  });
 }
 
 // Previously fell back to the literal "mock-server-key-for-dev" when unset --
@@ -76,8 +100,41 @@ function getProvider(method: PaymentMethod) {
 export function availablePaymentMethods(): PaymentMethod[] {
   const methods: PaymentMethod[] = [];
   if (SERVER_KEY) methods.push("bank_transfer_va");
-  if (SUMOPOD_WEBHOOK_SECRET) methods.push("qris_redirect");
+  if (!sumopodConfigError()) methods.push("qris_redirect");
   return methods;
+}
+
+/**
+ * Why QRIS cannot be offered, or null when it can.
+ *
+ * The gate used to be `if (SUMOPOD_WEBHOOK_SECRET)` alone, from when that was
+ * the only thing Sumopod needed. It now needs three, and each missing one
+ * fails differently:
+ *
+ * - no webhook secret: a payment could be taken and never confirmed, because
+ *   the webhook proving it can't be verified.
+ * - no API key: the charge call sends `X-Api-Key: ""`, Sumopod answers 401,
+ *   and the donor gets "Gagal memproses donasi. Silakan coba lagi." forever.
+ *   That is the exact never-can-work wall this gate was built to remove; a
+ *   one-variable gate let it back in through a second door.
+ * - no base URL: SumopodProvider defaults to the SANDBOX host. This is the
+ *   dangerous one. With a sandbox key and no base URL, nothing errors --
+ *   the donor is sent to a sandbox payment page, pays nothing real, the
+ *   sandbox webhook verifies against the sandbox secret, the donation is
+ *   marked paid, and collectedAmount goes UP. The platform would record
+ *   money that never moved, on a public page, with no error anywhere.
+ *
+ * So the host is required rather than defaulted. Every environment has to
+ * say which Sumopod it is charging, in writing. The cost is one line in the
+ * dev .env; the alternative is a production that silently books imaginary
+ * donations if one variable is forgotten. NODE_ENV is deliberately not used
+ * to soften this: it is not set on the production host at all.
+ */
+export function sumopodConfigError(): string | null {
+  if (!SUMOPOD_WEBHOOK_SECRET) return "SUMOPOD_WEBHOOK_SECRET is not set";
+  if (!SUMOPOD_API_KEY) return "SUMOPOD_API_KEY is not set";
+  if (!SUMOPOD_BASE_URL) return "SUMOPOD_BASE_URL is not set";
+  return null;
 }
 
 async function processPaymentWebhookEvent(event: WebhookEvent) {
@@ -301,12 +358,13 @@ export const donationsRoute = new Elysia()
         const donationId = crypto.randomUUID();
         const provider = getProvider(body.paymentMethod);
         const publicWebUrl = process.env.PUBLIC_WEB_URL ?? "http://localhost:5173";
+        const returnBaseUrl = SUMOPOD_RETURN_BASE_URL || publicWebUrl;
         const charge = await provider.createCharge({
           orderId: donationId,
           grossAmount: amount,
           currency: campaign.currency,
-          successReturnUrl: `${publicWebUrl}/donation/status/${donationId}`,
-          cancelReturnUrl: `${publicWebUrl}/donation/status/${donationId}`,
+          successReturnUrl: `${returnBaseUrl}/donation/status/${donationId}`,
+          cancelReturnUrl: `${returnBaseUrl}/donation/status/${donationId}`,
         });
 
         const responseBody = await db.transaction(async (tx) => {
