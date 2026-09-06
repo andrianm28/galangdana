@@ -216,7 +216,8 @@ describe("campaigner revision-fix page", () => {
     });
 
     const fileInputs = container.querySelectorAll<HTMLInputElement>('input[type="file"]');
-    expect(fileInputs.length).toBe(2);
+    // Two revision-document inputs plus the cover section's own uploader.
+    expect(fileInputs.length).toBe(3);
 
     const kartuMahasiswaFile = new File(["a"], "kartu-mahasiswa.jpg", { type: "image/jpeg" });
     const kartuPelajarFile = new File(["b"], "kartu-pelajar.jpg", { type: "image/jpeg" });
@@ -237,5 +238,24 @@ describe("campaigner revision-fix page", () => {
     expect(uploadedBodies.kartu_mahasiswa).toBe(kartuMahasiswaFile);
     expect(uploadedBodies.kartu_pelajar).toBe(kartuPelajarFile);
     fetchSpy.mockRestore();
+  });
+});
+
+describe("revision-fix page cover section", () => {
+  test("offers a cover upload alongside the field fixes", () => {
+    render(Page, {
+      props: {
+        data: {
+          campaignId: "c1",
+          story: "Cerita.",
+          goalAmount: { amount: "5000000", currency: "IDR" },
+          revisions: [],
+        },
+        params: { id: "c1" },
+        form: null,
+      },
+    });
+    expect(screen.getByText("Foto Sampul")).not.toBeNull();
+    expect(screen.getByText("Unggah")).not.toBeNull();
   });
 });

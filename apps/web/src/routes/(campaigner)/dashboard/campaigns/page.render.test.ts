@@ -80,3 +80,34 @@ describe("campaigner dashboard rendering", () => {
     expect(screen.getByText(/belum punya campaign/i)).not.toBeNull();
   });
 });
+
+describe("campaign cover links", () => {
+  test("links an active campaign to its cover page", () => {
+    render(Page, {
+      props: {
+        data: {
+          campaigns: [
+            { id: "3", slug: "bantu-warga-desa", title: "Bantu Warga Desa", status: "active" },
+          ],
+        },
+        params: {},
+        form: null,
+      },
+    });
+    const link = screen.getByRole("link", { name: "Sampul" });
+    expect(link.getAttribute("href")).toBe("/dashboard/campaigns/3/sampul");
+  });
+
+  test("shows no cover link while under review", () => {
+    render(Page, {
+      props: {
+        data: {
+          campaigns: [{ id: "4", slug: "x", title: "Dalam Tinjauan", status: "pending_review" }],
+        },
+        params: {},
+        form: null,
+      },
+    });
+    expect(screen.queryByRole("link", { name: "Sampul" })).toBeNull();
+  });
+});
