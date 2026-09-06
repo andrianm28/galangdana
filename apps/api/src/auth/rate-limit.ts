@@ -90,3 +90,17 @@ export async function checkSupportTicketRateLimit(email: string): Promise<RateLi
     TICKET_WINDOW_SECONDS,
   );
 }
+
+const MAX_PRAYERS_PER_WINDOW = 60;
+const PRAYER_WINDOW_SECONDS = 60 * 60; // 1 hour
+
+// Keyed on the campaign, like donations (public form, no user, no trusted
+// IP). 60/hour sits between tickets (5) and donations (120): prayers cost
+// less than a provider charge but invite more spray than a contact form.
+export async function checkPrayerRateLimit(campaignId: string): Promise<RateLimitResult> {
+  return checkRateLimit(
+    `prayer:ratelimit:${campaignId}`,
+    MAX_PRAYERS_PER_WINDOW,
+    PRAYER_WINDOW_SECONDS,
+  );
+}
