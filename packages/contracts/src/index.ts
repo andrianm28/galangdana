@@ -113,6 +113,7 @@ export {
   DonationStatusSchema,
   GetDonationResponseSchema,
   PaymentErrorSchema,
+  PaymentMethodSchema,
 } from "./payments";
 export type { CreateDonationResponse, GetDonationResponse } from "./payments";
 export {

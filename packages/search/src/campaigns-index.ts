@@ -62,6 +62,46 @@ export async function syncCampaignsIndex(documents: CampaignSearchDocument[]): P
   }
 }
 
+/**
+ * Removes documents from the campaigns index whose id is not in `keepIds`.
+ *
+ * `syncCampaignsIndex` is additive by design, so nothing ever left the index.
+ * In production that meant 309 documents of which 301 named campaigns that had
+ * been deleted -- and, worse, the eight real ones carried ids from an earlier
+ * seed, so every search hit failed the hydrating join and the site answered
+ * "nothing found" for every query.
+ *
+ * This deletes only ids it can name, one by one. It deliberately does NOT call
+ * `deleteAllDocuments()`: that wipes a shared index out from under whatever
+ * else is using it, which is exactly the hazard `campaigns-index.test.ts`
+ * already had to be rewritten to avoid. Callers must pass the COMPLETE set of
+ * ids that should survive -- which is why the only caller is the from-scratch
+ * reindex script, never an incremental update path.
+ */
+export async function pruneCampaignsIndex(keepIds: string[]): Promise<number> {
+  const client = getMeilisearchClient();
+  const index = client.index(CAMPAIGNS_INDEX_NAME);
+  const keep = new Set(keepIds);
+
+  const stale: string[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await index.getDocuments({ limit: pageSize, offset, fields: ["id"] });
+    for (const doc of page.results as Array<{ id: string }>) {
+      if (!keep.has(doc.id)) stale.push(doc.id);
+    }
+    if (page.results.length < pageSize) break;
+  }
+  if (stale.length === 0) return 0;
+
+  const task = await index.deleteDocuments(stale);
+  const result = await client.tasks.waitForTask(task.taskUid);
+  if (result.status !== "succeeded") {
+    throw new Error(`campaigns index prune failed: ${JSON.stringify(result.error)}`);
+  }
+  return stale.length;
+}
+
 export interface SearchCampaignsOptions {
   categoryId?: number;
   limit?: number;

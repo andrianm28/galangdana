@@ -1,4 +1,5 @@
 <script lang="ts">
+import SeoHead from "$lib/SeoHead.svelte";
 import { CampaignCard } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
@@ -41,3 +42,5 @@ const { data }: PageProps = $props();
     <p class="font-sans text-neutral-600">Tidak ada campaign yang cocok dengan pencarian Anda.</p>
   {/if}
 </div>
+
+<SeoHead title={`Cari kampanye${data.query ? ` · ${data.query}` : ""}`} description={"Cari kampanye yang ingin Anda bantu di fundforindonesia.org."} />

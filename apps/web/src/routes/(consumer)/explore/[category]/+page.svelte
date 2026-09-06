@@ -1,8 +1,19 @@
 <script lang="ts">
+import SeoHead from "$lib/SeoHead.svelte";
 import { CampaignCard } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
+
+// data.category is the slug. The heading derives its label from it with CSS
+// capitalize, which a <title> cannot borrow -- so the same derivation is done
+// in JS here and shared by both.
+const categoryLabel = $derived(
+  data.category
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" "),
+);
 
 const CAMPAIGNER_TYPE_LABELS = {
   individual: "Publik",
@@ -25,9 +36,7 @@ function filterHref(overrides: { sort?: string; type?: string | null }): string 
 
 <div class="flex flex-col gap-4">
   <div class="flex items-center justify-between">
-    <h1 class="font-sans text-xl font-bold capitalize text-neutral-900">
-      {data.category.replaceAll("-", " ")}
-    </h1>
+    <h1 class="font-sans text-xl font-bold text-neutral-900">{categoryLabel}</h1>
     <div class="flex gap-2 font-sans text-sm">
       <a
         href={filterHref({ sort: "newest" })}
@@ -73,3 +82,8 @@ function filterHref(overrides: { sort?: string; type?: string | null }): string 
     <p class="font-sans text-neutral-600">Belum ada campaign di kategori ini.</p>
   {/if}
 </div>
+
+<SeoHead
+  title={categoryLabel}
+  description={`Kampanye ${categoryLabel} yang sedang berjalan di fundforindonesia.org.`}
+/>
