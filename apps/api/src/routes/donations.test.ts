@@ -171,6 +171,75 @@ describe("POST /donations", () => {
     expect(payment?.vaNumber).toBe(body.vaNumber);
   });
 
+  // The contract's ^\d+$ pattern accepted "1". A Rp 1 donation costs more in
+  // provider fees than it delivers, and a stream of them is the standard shape
+  // of card-testing traffic. Enforced server-side because the client is not the
+  // security boundary -- these requests bypass the UI entirely.
+  test("422s a donation below the minimum, and creates nothing", async () => {
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "1",
+          paymentMethod: "bank_transfer_va",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(422);
+    expect(((await resp.json()) as { error: string }).error).toBe("amount_below_minimum");
+  });
+
+  test("422s a donation above the ceiling", async () => {
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "500000001",
+          paymentMethod: "bank_transfer_va",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(422);
+    expect(((await resp.json()) as { error: string }).error).toBe("amount_above_maximum");
+  });
+
+  // A rejected amount is a transient input error, not a permanent one: the
+  // donor corrects the figure and retries. If the claim were not released the
+  // retry would collide with its own key.
+  test("releases the idempotency key when the amount is rejected, so a retry works", async () => {
+    const campaign = await seedTestCampaign();
+    const key = crypto.randomUUID();
+    const body = (amountStr: string) =>
+      JSON.stringify({ campaignId: campaign.id, amountStr, paymentMethod: "bank_transfer_va" });
+
+    const rejected = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key },
+        body: body("1"),
+      }),
+    );
+    expect(rejected.status).toBe(422);
+
+    const retried = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key },
+        body: body("50000"),
+      }),
+    );
+    expect(retried.status).toBe(200);
+    const created = (await retried.json()) as { donationId: string };
+    await db.delete(payments).where(eq(payments.donationId, created.donationId));
+    await db.delete(donations).where(eq(donations.id, created.donationId));
+  });
+
   test("400s without an Idempotency-Key header", async () => {
     const campaign = await seedTestCampaign();
     const resp = await app.handle(

@@ -3,6 +3,7 @@ import {
   CreateDonationResponseSchema,
   GetDonationResponseSchema,
   PaymentErrorSchema,
+  validateDonationAmount,
 } from "@fundforindonesia/contracts";
 import {
   allocationPolicies,
@@ -219,6 +220,20 @@ export const donationsRoute = new Elysia()
           await db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, idempotencyKey));
           set.status = 404;
           return { error: "campaign_not_found" };
+        }
+
+        // The contract's ^\d+$ pattern accepted "1", so a Rp 1 donation was
+        // creatable -- it costs more in provider fees than it delivers, and a
+        // stream of them is what card-testing traffic looks like. Checked on
+        // the server as well as the client because the client is not the
+        // security boundary; both call the same validator so the numbers
+        // cannot drift apart. Like the 404 above, this returns early and so
+        // must release the idempotency claim itself.
+        const amountCheck = validateDonationAmount(body.amountStr);
+        if (!amountCheck.ok) {
+          await db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, idempotencyKey));
+          set.status = 422;
+          return { error: amountCheck.error };
         }
 
         const [policy] = await db

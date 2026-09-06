@@ -8,6 +8,31 @@ export const PaymentMethodSchema = Type.Union([
   Type.Literal("qris_redirect"),
 ]);
 
+/**
+ * Donation bounds, shared by the client and the route so they cannot drift.
+ *
+ * There was no floor at all: `^\\d+$` accepted "1", so a Rp 1 donation was
+ * creatable, which costs more in payment-provider fees than it delivers and is
+ * the standard shape of card-testing traffic. Rp 10.000 matches the market
+ * convention Indonesian donors already expect.
+ *
+ * The ceiling is a typo guard, not a policy: at Rp 500.000.000 a mistyped extra
+ * zero is caught before it reaches a payment provider, and a genuine donation
+ * of that size is a conversation, not a form submission.
+ */
+export const MIN_DONATION_RUPIAH = 10_000n;
+export const MAX_DONATION_RUPIAH = 500_000_000n;
+
+export function validateDonationAmount(
+  amountStr: string,
+): { ok: true } | { ok: false; error: string } {
+  if (!/^\d+$/.test(amountStr)) return { ok: false, error: "amount_invalid" };
+  const amount = BigInt(amountStr);
+  if (amount < MIN_DONATION_RUPIAH) return { ok: false, error: "amount_below_minimum" };
+  if (amount > MAX_DONATION_RUPIAH) return { ok: false, error: "amount_above_maximum" };
+  return { ok: true };
+}
+
 export const CreateDonationBodySchema = Type.Object({
   campaignId: Type.String({ format: "uuid" }),
   // Minor-unit rupiah as a decimal string, never a JSON number -- same
