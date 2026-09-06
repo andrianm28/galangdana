@@ -25,10 +25,17 @@ const SUMOPOD_WEBHOOK_SECRET = process.env.SUMOPOD_WEBHOOK_SECRET;
 if (!SUMOPOD_WEBHOOK_SECRET) {
   throw new Error("SUMOPOD_WEBHOOK_SECRET must be set to run this test file (see .env)");
 }
-const MOCK_MIDTRANS_SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY;
-if (!MOCK_MIDTRANS_SERVER_KEY) {
-  throw new Error("MOCK_MIDTRANS_SERVER_KEY must be set to run this test file (see .env)");
-}
+// Declared via an IIFE, matching disbursements.test.ts: a bare `const` plus a
+// guard clause narrows only for code TypeScript sees after the guard, and a
+// hoisted `function` body is not that -- so a helper declared with `function`
+// sees `string | undefined` again.
+const MOCK_MIDTRANS_SERVER_KEY: string = (() => {
+  const value = process.env.MOCK_MIDTRANS_SERVER_KEY;
+  if (!value) {
+    throw new Error("MOCK_MIDTRANS_SERVER_KEY must be set to run this test file (see .env)");
+  }
+  return value;
+})();
 
 // Independently computes a valid svix-style signature -- mirrors
 // sumopod-signature.test.ts's and sumopod-provider.test.ts's own local
