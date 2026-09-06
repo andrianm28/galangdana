@@ -1,5 +1,6 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
+import SeoHead from "$lib/SeoHead.svelte";
 import { formatMoney, moneyFromJSON } from "@fundforindonesia/money";
 import { Badge, Button, Card } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
@@ -43,29 +44,15 @@ const daysLeft = $derived.by(() => {
 });
 </script>
 
-<svelte:head>
-  <title>{shareTitle}</title>
-  <meta name="description" content={shareDescription} />
-  <link rel="canonical" href={data.canonicalUrl} />
-
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="FundForIndonesia" />
-  <meta property="og:locale" content="id_ID" />
-  <meta property="og:url" content={data.canonicalUrl} />
-  <meta property="og:title" content={shareTitle} />
-  <meta property="og:description" content={shareDescription} />
-  {#if campaign.coverImageUrl}
-    <meta property="og:image" content={campaign.coverImageUrl} />
-    <meta property="og:image:alt" content={campaign.title} />
-    <meta name="twitter:card" content="summary_large_image" />
-  {:else}
-    <meta name="twitter:card" content="summary" />
-  {/if}
-  <meta name="twitter:title" content={shareTitle} />
-  <meta name="twitter:description" content={shareDescription} />
-</svelte:head>
 
 <div class="flex flex-col gap-4">
+  <SeoHead
+    title={shareTitle}
+    description={shareDescription}
+    url={data.canonicalUrl}
+    image={campaign.coverImageUrl}
+    imageAlt={campaign.title}
+  />
   {#if campaign.coverImageUrl}
     <img
       src={campaign.coverImageUrl}

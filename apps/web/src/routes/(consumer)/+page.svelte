@@ -1,11 +1,17 @@
 <script lang="ts">
+import SeoHead from "$lib/SeoHead.svelte";
 import { CampaignCard } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
 </script>
 
+
 <div class="flex flex-col gap-6">
+  <SeoHead
+    title="FundForIndonesia"
+    description="Galang dan salurkan donasi, dengan jejak dana yang bisa diperiksa."
+  />
   <div>
     <h1 class="font-sans text-2xl font-bold text-neutral-900">Galang kebaikan bersama</h1>
     <p class="mt-1 font-sans text-neutral-600">
