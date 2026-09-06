@@ -488,19 +488,23 @@ describe("POST /donations", () => {
   });
 });
 
-// Sumopod's `createCharge` always calls its hardcoded sandbox URL
-// (https://api-pay-sandbox.sumopod.com) -- there's no local baseUrl override
-// wired through donations.ts's getProvider(), and hitting the real sandbox
-// from this suite would make tests network-dependent and flaky. Stubbing
-// globalThis.fetch is the only way to exercise the real POST /donations ->
-// getProvider("qris_redirect") -> SumopodProvider.createCharge path without
-// a real network call, while still proving the route wiring (not just an
-// isolated `instanceof` check) actually works end-to-end.
+// Hitting a real Sumopod host from this suite would make the tests
+// network-dependent and flaky, so globalThis.fetch is stubbed -- the only way
+// to exercise the real POST /donations -> getProvider("qris_redirect") ->
+// SumopodProvider.createCharge path without a network call, while still
+// proving the route wiring (not just an isolated `instanceof` check) works
+// end-to-end.
+//
+// Matches on Sumopod's PATH, not its host. It used to match the literal
+// "api-pay-sandbox.sumopod.com", back when that host was hardcoded in the
+// provider. The host is now a required deployment variable, so a matcher
+// keyed to one hostname silently stopped stubbing the moment an environment
+// (CI) set a different one -- and fell through to a real DNS lookup.
 async function withStubbedSumopodFetch<T>(fn: () => Promise<T>): Promise<T> {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input, init) => {
     const url = typeof input === "string" ? input : input.toString();
-    if (url.includes("api-pay-sandbox.sumopod.com")) {
+    if (url.endsWith("/api/v1/payments")) {
       return Response.json({
         payment_id: `sumopod-test-payment-${crypto.randomUUID()}`,
         order_id: "unused-by-this-fixture",
