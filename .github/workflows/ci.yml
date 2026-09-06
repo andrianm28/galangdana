@@ -118,6 +118,18 @@ jobs:
       - name: Generate ephemeral Sumopod webhook test secret
         run: echo "SUMOPOD_WEBHOOK_SECRET=whsec_$(openssl rand -base64 32)" >> "$GITHUB_ENV"
 
+      # QRIS is offered only when all three of the secret, the key and the
+      # host are set (see availablePaymentMethods / sumopodConfigError). The
+      # host in particular is deliberately NOT defaulted, because a default
+      # meant a forgotten production variable would charge the real sandbox
+      # and silently book donations that never happened -- so CI has to state
+      # it too. Neither value is a credential: the tests intercept fetch and
+      # never reach a Sumopod server.
+      - name: Set Sumopod test API key and host
+        run: |
+          echo "SUMOPOD_API_KEY=ci-not-a-real-key" >> "$GITHUB_ENV"
+          echo "SUMOPOD_BASE_URL=https://sumopod.invalid" >> "$GITHUB_ENV"
+
       # Same reasoning as the Sumopod secret above: donations.ts's mock
       # provider (getMockProvider) now fails closed if this is unset,
       # closing a real forged-webhook vulnerability where it previously
