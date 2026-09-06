@@ -5,6 +5,8 @@ import {
   CampaignDraftSchema,
   ConfirmDocumentUploadBodySchema,
   CreateCampaignDraftBodySchema,
+  PresignCoverUploadBodySchema,
+  PresignCoverUploadResponseSchema,
   PresignDocumentUploadBodySchema,
   PresignDocumentUploadResponseSchema,
   SaveBeneficiaryBodySchema,
@@ -24,6 +26,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { verifyUploadedDocumentContent } from "../lib/media-content";
+import { coversS3, extractCoverExtension } from "../lib/media-s3";
 import { sessionDerive } from "../lib/session";
 
 const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -359,6 +362,53 @@ export const campaignDraftsRoute = new Elysia({ prefix: "/campaign-drafts" })
       body: PresignDocumentUploadBodySchema,
       response: {
         200: PresignDocumentUploadResponseSchema,
+        401: CampaignDraftErrorSchema,
+        404: CampaignDraftErrorSchema,
+        422: CampaignDraftErrorSchema,
+      },
+    },
+  )
+  .post(
+    "/:id/cover/presign",
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "not_authenticated" };
+      }
+      const [draft] = await db
+        .select({ id: campaignDrafts.id })
+        .from(campaignDrafts)
+        .where(and(eq(campaignDrafts.id, params.id), eq(campaignDrafts.userId, user.id)));
+      if (!draft) {
+        set.status = 404;
+        return { error: "draft_not_found" };
+      }
+
+      // Images only -- covers render publicly, so no PDF ever.
+      const ext = extractCoverExtension(body.fileName);
+      if (!ext) {
+        set.status = 422;
+        return { error: "unsupported_file_type" };
+      }
+
+      // The wizard saves this key into answers.coverObjectKey via the
+      // existing PATCH answers endpoint (no separate confirm step: the key
+      // itself was server-generated here). POST /campaigns validates the
+      // prefix and the bytes before copying it to coverMediaUrl.
+      const objectKey = `drafts/${params.id}/cover/${crypto.randomUUID()}.${ext}`;
+      const expiresInSeconds = 300;
+      const uploadUrl = coversS3.file(objectKey).presign({
+        method: "PUT",
+        expiresIn: expiresInSeconds,
+      });
+
+      return { uploadUrl, objectKey, expiresInSeconds };
+    },
+    {
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
+      body: PresignCoverUploadBodySchema,
+      response: {
+        200: PresignCoverUploadResponseSchema,
         401: CampaignDraftErrorSchema,
         404: CampaignDraftErrorSchema,
         422: CampaignDraftErrorSchema,

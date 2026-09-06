@@ -24,3 +24,22 @@ export function extractDocumentExtension(fileName: string): string | null {
   const ext = fileName.split(".").pop()?.toLowerCase();
   return ext && ALLOWED_DOCUMENT_EXTENSIONS.includes(ext) ? ext : null;
 }
+
+// Public cover-photo bucket (`campaign-media`, anonymous download by
+// design -- covers render via imgproxy for everyone). Covers are images
+// only: no PDF, unlike verification documents. Shared by the draft-wizard
+// and campaign cover flows so neither mints its own client.
+export const coversS3 = new Bun.S3Client({
+  endpoint: process.env.MEDIA_S3_ENDPOINT ?? "http://localhost:9000",
+  accessKeyId: process.env.MEDIA_S3_ACCESS_KEY_ID ?? "fundforindonesia",
+  secretAccessKey: process.env.MEDIA_S3_SECRET_ACCESS_KEY ?? "fundforindonesia-dev-secret",
+  bucket: process.env.MEDIA_S3_BUCKET ?? "campaign-media",
+  region: "us-east-1",
+});
+
+export const ALLOWED_COVER_EXTENSIONS = ["jpg", "jpeg", "png"];
+
+export function extractCoverExtension(fileName: string): string | null {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  return ext && ALLOWED_COVER_EXTENSIONS.includes(ext) ? ext : null;
+}
