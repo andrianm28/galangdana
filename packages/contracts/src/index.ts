@@ -43,6 +43,9 @@ export {
   PresignCoverUploadResponseSchema,
   PresignKycDocumentBodySchema,
   PresignKycDocumentResponseSchema,
+  PrayerListQuerySchema,
+  PrayerListResponseSchema,
+  PrayerSchema,
   SaveCampaignGoalAmountBodySchema,
   SaveCampaignStoryBodySchema,
   SaveKycContactBodySchema,
@@ -50,6 +53,8 @@ export {
   SearchQuerySchema,
   SearchResponseSchema,
   SubmitCampaignResponseSchema,
+  SubmitPrayerBodySchema,
+  SubmitPrayerResponseSchema,
 } from "./campaigns";
 export type {
   AdminCampaignDetailResponse,
@@ -61,11 +66,14 @@ export type {
   CampaignSummaryResponse,
   KycStatusResponse,
   MoneyJSONResponse,
+  PrayerListResponse,
+  PrayerResponse,
   PresignCampaignDocumentResponse,
   PresignCoverUploadResponse,
   PresignKycDocumentResponse,
   SearchResponse,
   SubmitCampaignResponse,
+  SubmitPrayerResponse,
 } from "./campaigns";
 export {
   CampaignDocumentSchema,

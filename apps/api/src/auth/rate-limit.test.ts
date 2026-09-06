@@ -4,6 +4,7 @@ import {
   checkDonationRateLimit,
   checkLoginRateLimit,
   checkOtpRateLimit,
+  checkPrayerRateLimit,
   checkRegisterRateLimit,
   checkSupportTicketRateLimit,
 } from "./rate-limit";
@@ -169,5 +170,22 @@ describe("checkSupportTicketRateLimit", () => {
     const sixth = await checkSupportTicketRateLimit(TEST_TICKET_EMAIL);
     expect(sixth.allowed).toBe(false);
     expect(sixth.retryAfterSeconds).toBeGreaterThan(0);
+  });
+});
+
+const TEST_PRAYER_CAMPAIGN = "77777777-8888-9999-0000-111111111111";
+
+describe("checkPrayerRateLimit", () => {
+  beforeEach(async () => {
+    await redis.del(`prayer:ratelimit:${TEST_PRAYER_CAMPAIGN}`);
+  });
+
+  test("allows prayers up to the limit, then blocks", async () => {
+    for (let i = 0; i < 60; i++) {
+      expect((await checkPrayerRateLimit(TEST_PRAYER_CAMPAIGN)).allowed).toBe(true);
+    }
+    const over = await checkPrayerRateLimit(TEST_PRAYER_CAMPAIGN);
+    expect(over.allowed).toBe(false);
+    expect(over.retryAfterSeconds).toBeGreaterThan(0);
   });
 });

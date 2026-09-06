@@ -35,5 +35,25 @@ export const load: PageLoad = async ({ params, url }) => {
   // og:url and og:image must be absolute: a relative URL in a link preview is
   // resolved by the scraper, not the browser, and WhatsApp -- which is how
   // Indonesian donation traffic actually moves -- silently drops the card.
-  return { campaign: data, canonicalUrl: `${url.origin}${url.pathname}` };
+  //
+  // Prayers ride along in the same load (second Eden call, same merged-param
+  // cast as above). A prayers failure must never 404 the campaign page, so
+  // it degrades to an empty list instead of the error() above.
+  // biome-ignore lint/suspicious/noExplicitAny: Eden route-merging conflict requires narrowing
+  const { data: prayerData } = await (api.campaigns as any)({ slug: params.slug }).prayers.get();
+  const prayers =
+    prayerData && "prayers" in prayerData
+      ? (prayerData as { prayers: unknown[]; totalCount: number })
+      : { prayers: [], totalCount: 0 };
+  return {
+    campaign: data,
+    canonicalUrl: `${url.origin}${url.pathname}`,
+    prayers: prayers.prayers as {
+      id: string;
+      displayName: string;
+      message: string;
+      createdAt: string;
+    }[],
+    prayerCount: prayers.totalCount,
+  };
 };

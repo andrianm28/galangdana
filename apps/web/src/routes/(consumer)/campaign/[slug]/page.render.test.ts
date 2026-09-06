@@ -4,6 +4,12 @@ import { fireEvent } from "@testing-library/svelte";
 import { describe, expect, test, vi } from "vitest";
 import Page from "./+page.svelte";
 
+vi.mock("$env/dynamic/public", () => ({
+  env: {
+    PUBLIC_API_URL: "http://localhost:3001",
+  },
+}));
+
 vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
 
 const GOAL_CAMPAIGN = {
@@ -47,7 +53,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     expect(screen.getByText("Test Goal Campaign")).not.toBeNull();
@@ -60,7 +66,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, {
       props: {
         params: { slug: "test-program" },
-        data: { campaign: PROGRAM_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: PROGRAM_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     expect(screen.getByText("Test Program Campaign")).not.toBeNull();
@@ -73,7 +79,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     expect(screen.getByText(/Terverifikasi/)).not.toBeNull();
@@ -83,7 +89,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     expect(screen.getByText("Ini adalah cerita lengkap campaign.")).not.toBeNull();
@@ -93,7 +99,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     const { container } = render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     const link = container.querySelector('a[href="/campaign/test-goal/pencairan-dana"]');
@@ -107,7 +113,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     await fireEvent.click(screen.getByText("Donasi Sekarang"));
@@ -123,7 +129,7 @@ describe("(consumer) campaign/[slug] link preview metadata", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     const head = document.head;
@@ -152,7 +158,7 @@ describe("(consumer) campaign/[slug] link preview metadata", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     const head = document.head;
@@ -178,7 +184,7 @@ describe("(consumer) campaign/[slug] link preview metadata", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     const description = document.head
@@ -193,12 +199,65 @@ describe("(consumer) campaign/[slug] link preview metadata", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: { ...GOAL_CAMPAIGN, coverImageUrl: null }, canonicalUrl: CANONICAL },
+        data: {
+          campaign: { ...GOAL_CAMPAIGN, coverImageUrl: null },
+          canonicalUrl: CANONICAL,
+          prayers: [],
+          prayerCount: 0,
+        },
       },
     });
     expect(document.head.querySelector('meta[property="og:image"]')).toBeNull();
     expect(document.head.querySelector('meta[name="twitter:card"]')?.getAttribute("content")).toBe(
       "summary",
     );
+  });
+});
+
+describe("campaign prayers section", () => {
+  const WITH_PRAYERS = {
+    campaign: GOAL_CAMPAIGN,
+    canonicalUrl: CANONICAL,
+    prayers: [
+      {
+        id: "p1",
+        displayName: "Hamba Allah",
+        message: "Semoga lekas sembuh.",
+        createdAt: "2026-09-06T10:00:00.000Z",
+      },
+    ],
+    prayerCount: 1,
+  };
+
+  test("lists prayers with names and shows the count", () => {
+    render(Page, { props: { data: WITH_PRAYERS, params: { slug: "test-goal" } } });
+    expect(screen.getByText("Doa (1)")).not.toBeNull();
+    expect(screen.getByText("Semoga lekas sembuh.")).not.toBeNull();
+    expect(screen.getByText(/Hamba Allah/)).not.toBeNull();
+  });
+
+  test("shows the empty state when there are no prayers yet", () => {
+    render(Page, {
+      props: {
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
+        params: { slug: "test-goal" },
+      },
+    });
+    expect(screen.getByText("Doa (0)")).not.toBeNull();
+    expect(screen.getByText("Belum ada doa. Jadilah yang pertama.")).not.toBeNull();
+  });
+
+  test("blocks an empty submit without touching the network", async () => {
+    const fetchSpy = vi
+      .spyOn(global, "fetch")
+      .mockRejectedValue(new Error("unexpected network call in this test"));
+    try {
+      render(Page, { props: { data: WITH_PRAYERS, params: { slug: "test-goal" } } });
+      await fireEvent.click(screen.getByRole("button", { name: "Kirim Doa" }));
+      expect(screen.getByText("Tulis doanya terlebih dahulu.")).not.toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });

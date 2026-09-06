@@ -95,6 +95,12 @@ const remaining = $derived.by(() => {
       >
         Lihat jejak dana kampanye ini
       </a>
+      <a
+        href="/campaign/{donation.campaignSlug}#doa"
+        class="mt-3 inline-block font-sans text-sm font-medium text-primary-dark underline-offset-2 hover:underline"
+      >
+        Kirim doa untuk campaign ini
+      </a>
     </div>
 
     <a
