@@ -33,7 +33,11 @@ export const CampaignSummarySchema = Type.Object({
   slug: Type.String(),
   title: Type.String(),
   shortDescription: Type.String(),
-  coverImageUrl: Type.String(),
+  // Null, not "", when a campaign has no cover. An empty src is not an
+  // absent image: several browsers resolve src="" against the current
+  // document and re-request the page itself, and it never fires onerror, so
+  // no fallback can hang off it. A null is an absence a client can branch on.
+  coverImageUrl: Type.Union([Type.String(), Type.Null()]),
   category: CampaignCategorySchema,
   campaigner: CampaignerSchema,
   model: Type.Union([Type.Literal("goal"), Type.Literal("program")]),

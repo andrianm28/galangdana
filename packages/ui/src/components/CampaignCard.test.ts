@@ -63,6 +63,24 @@ describe("CampaignCard", () => {
     expect(screen.getByText("Rp45.000.000")).not.toBeNull();
   });
 
+  // src="" is not an absent image. Several browsers resolve an empty src
+  // against the current document and re-request the page itself, and it never
+  // fires onerror, so no fallback can hang off it. A campaign with no cover
+  // must render no <img> at all.
+  test("renders a labelled band instead of an empty <img> when there is no cover", () => {
+    const { container } = render(CampaignCard, {
+      props: { campaign: { ...GOAL_CAMPAIGN, coverImageUrl: null } },
+    });
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector('[data-testid="cover-placeholder"]')).not.toBeNull();
+  });
+
+  test("still renders the cover image when one is present", () => {
+    const { container } = render(CampaignCard, { props: { campaign: GOAL_CAMPAIGN } });
+    const img = container.querySelector("img");
+    expect(img?.getAttribute("src")).toBe("https://example.test/cover.jpg");
+  });
+
   test("links to the campaign detail page via its slug", () => {
     const { container } = render(CampaignCard, { props: { campaign: GOAL_CAMPAIGN } });
     const link = container.querySelector("a");

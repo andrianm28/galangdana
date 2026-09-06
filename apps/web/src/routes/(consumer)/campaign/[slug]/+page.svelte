@@ -29,11 +29,19 @@ const daysLeft = $derived.by(() => {
 </script>
 
 <div class="flex flex-col gap-4">
-  <img
-    src={campaign.coverImageUrl}
-    alt={campaign.title}
-    class="aspect-[4/3] w-full rounded-md object-cover"
-  />
+  {#if campaign.coverImageUrl}
+    <img
+      src={campaign.coverImageUrl}
+      alt={campaign.title}
+      class="aspect-[4/3] w-full rounded-md object-cover"
+    />
+  {:else}
+    <div
+      class="flex aspect-[4/3] w-full items-center justify-center rounded-md bg-neutral-100 px-4 text-center"
+    >
+      <span class="font-sans text-sm text-neutral-500">{campaign.category.title}</span>
+    </div>
+  {/if}
 
   <Badge variant="neutral">{campaign.category.title}</Badge>
   <h1 class="font-sans text-xl font-bold text-neutral-900">{campaign.title}</h1>
@@ -65,7 +73,7 @@ const daysLeft = $derived.by(() => {
         <p class="font-sans text-lg font-bold text-neutral-900">{formatMoney(available)}</p>
         <p class="font-sans text-sm text-neutral-600">Donasi tersedia</p>
       {/if}
-      <p class="mt-2 font-sans text-sm text-neutral-600">{campaign.donationCount} donatur</p>
+      <p class="mt-2 font-sans text-sm text-neutral-600">{campaign.donationCount} donasi</p>
       <div class="mt-4 flex">
         <Button onclick={donate} size="lg">Donasi Sekarang</Button>
       </div>

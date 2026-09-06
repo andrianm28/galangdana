@@ -32,7 +32,7 @@ export async function toCampaignSummary(row: CampaignRow): Promise<CampaignSumma
         ...imgproxyConfig(),
         resize: { width: 800, height: 600 },
       })
-    : "";
+    : null;
 
   return {
     id: campaign.id,

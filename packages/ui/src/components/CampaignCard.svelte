@@ -7,7 +7,7 @@ interface CampaignSummaryLike {
   slug: string;
   title: string;
   shortDescription: string;
-  coverImageUrl: string;
+  coverImageUrl: string | null;
   category: { id: number; slug: string; title: string };
   campaigner: {
     id: string;
@@ -29,6 +29,10 @@ interface Props {
   campaign: CampaignSummaryLike;
 }
 
+// Cover images branch on null rather than passing an empty src. src="" is not
+// an absent image: several browsers resolve it against the current document and
+// re-request the page, and it never fires onerror, so no fallback can hang off
+// it. A campaign with no cover renders a labelled band and no <img> at all.
 const { campaign }: Props = $props();
 
 const collected = $derived(moneyFromJSON(campaign.collectedAmount));
@@ -44,12 +48,18 @@ const progressPercent = $derived.by(() => {
 
 <a href="/campaign/{campaign.slug}" class="block">
   <Card padded={false}>
-    <img
-      src={campaign.coverImageUrl}
-      alt={campaign.title}
-      class="aspect-[4/3] w-full rounded-t-md object-cover"
-      loading="lazy"
-    />
+    <div class="overflow-hidden rounded-t-md">
+      {#if campaign.coverImageUrl}
+        <img
+          src={campaign.coverImageUrl}
+          alt={campaign.title}
+          class="aspect-[4/3] w-full object-cover"
+          loading="lazy"
+        />
+      {:else}
+        <div data-testid="cover-placeholder" class="aspect-[4/3] w-full bg-neutral-100"></div>
+      {/if}
+    </div>
     <div class="p-4">
       <Badge variant="neutral">{campaign.category.title}</Badge>
       <h3 class="mt-2 font-sans text-base font-semibold text-neutral-900 line-clamp-2">
