@@ -7,7 +7,9 @@ import {
   campaigns,
   db,
   disbursementRequests,
+  donations,
   individualVerifications,
+  payments,
   sessions,
   users,
 } from "@fundforindonesia/db";
@@ -48,7 +50,23 @@ beforeAll(async () => {
     // run of the "GET /campaigns/:slug/disbursements" tests below leaves
     // disbursement_requests rows referencing these stale campaigns, which
     // must be cleared before the campaigns themselves can be deleted.
+    //
+    // Same for donations (and their payments): a donation can land on these
+    // campaigns from outside this file -- a manual curl against a listed
+    // campaign, another suite's leftovers -- and donations.campaign_id has
+    // no cascade either. Without this the campaign delete below throws
+    // 23503, the stale rows survive, and EVERY later run fails the same way.
     if (staleCampaignRows.length > 0) {
+      const staleIds = staleCampaignRows.map((c) => c.id);
+      const staleDonations = await db
+        .select({ id: donations.id })
+        .from(donations)
+        .where(inArray(donations.campaignId, staleIds));
+      if (staleDonations.length > 0) {
+        const staleDonationIds = staleDonations.map((d) => d.id);
+        await db.delete(payments).where(inArray(payments.donationId, staleDonationIds));
+        await db.delete(donations).where(inArray(donations.id, staleDonationIds));
+      }
       await db.delete(disbursementRequests).where(
         inArray(
           disbursementRequests.campaignId,
