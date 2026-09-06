@@ -4,6 +4,7 @@ import {
   captureApiError,
   initObservability,
   isObservabilityActive,
+  isReportableError,
   tunnelUrlForDsn,
   withRequestLogging,
 } from "./observability";
@@ -40,6 +41,19 @@ describe("observability without DSN", () => {
     expect(initObservability({})).toBe(false);
     expect(isObservabilityActive()).toBe(false);
     expect(() => captureApiError(new Error("boom"), { route: "test" })).not.toThrow();
+  });
+});
+
+describe("isReportableError", () => {
+  test("server faults are reportable, client errors are not", () => {
+    // 4xx (bad input, unknown slug, scanner probes) are routine traffic --
+    // reporting them would bury real 5xx in noise (observed live: a
+    // robots.txt probe became a GlitchTip issue).
+    expect(isReportableError(500)).toBe(true);
+    expect(isReportableError(503)).toBe(true);
+    expect(isReportableError(404)).toBe(false);
+    expect(isReportableError(422)).toBe(false);
+    expect(isReportableError(429)).toBe(false);
   });
 });
 
