@@ -40,6 +40,17 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Mailpit catches the worker's SMTP sends in tests (apps/worker mail
+      # test asserts delivery via the :8025 API): real SMTP protocol, zero
+      # external side effects. Same image as docker-compose.yml.
+      mailpit:
+        image: axllent/mailpit:latest
+        ports: ["1025:1025", "8025:8025"]
+        options: >-
+          --health-cmd "wget -qO- http://127.0.0.1:8025/api/v1/info"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       # No imgproxy service container here (there used to be one -- see git
       # history / prior task reports if resurrecting this reasoning is ever
       # needed): confirmed, while fixing a final-review finding, that
