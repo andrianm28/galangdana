@@ -53,7 +53,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     expect(screen.getByText("Test Goal Campaign")).not.toBeNull();
@@ -66,7 +66,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, {
       props: {
         params: { slug: "test-program" },
-        data: { campaign: PROGRAM_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: PROGRAM_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     expect(screen.getByText("Test Program Campaign")).not.toBeNull();
@@ -79,7 +79,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     expect(screen.getByText(/Terverifikasi/)).not.toBeNull();
@@ -89,7 +89,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     expect(screen.getByText("Ini adalah cerita lengkap campaign.")).not.toBeNull();
@@ -99,7 +99,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     const { container } = render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     const link = container.querySelector('a[href="/campaign/test-goal/pencairan-dana"]');
@@ -113,7 +113,7 @@ describe("(consumer) campaign/[slug] rendering", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     await fireEvent.click(screen.getByText("Donasi Sekarang"));
@@ -129,7 +129,7 @@ describe("(consumer) campaign/[slug] link preview metadata", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     const head = document.head;
@@ -158,7 +158,7 @@ describe("(consumer) campaign/[slug] link preview metadata", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     const head = document.head;
@@ -184,7 +184,7 @@ describe("(consumer) campaign/[slug] link preview metadata", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
       },
     });
     const description = document.head
@@ -199,7 +199,12 @@ describe("(consumer) campaign/[slug] link preview metadata", () => {
     render(Page, {
       props: {
         params: { slug: "test-goal" },
-        data: { campaign: { ...GOAL_CAMPAIGN, coverImageUrl: null }, canonicalUrl: CANONICAL },
+        data: {
+          campaign: { ...GOAL_CAMPAIGN, coverImageUrl: null },
+          canonicalUrl: CANONICAL,
+          prayers: [],
+          prayerCount: 0,
+        },
       },
     });
     expect(document.head.querySelector('meta[property="og:image"]')).toBeNull();
@@ -225,7 +230,7 @@ describe("campaign prayers section", () => {
   };
 
   test("lists prayers with names and shows the count", () => {
-    render(Page, { props: { data: WITH_PRAYERS } });
+    render(Page, { props: { data: WITH_PRAYERS, params: { slug: "test-goal" } } });
     expect(screen.getByText("Doa (1)")).not.toBeNull();
     expect(screen.getByText("Semoga lekas sembuh.")).not.toBeNull();
     expect(screen.getByText(/Hamba Allah/)).not.toBeNull();
@@ -235,6 +240,7 @@ describe("campaign prayers section", () => {
     render(Page, {
       props: {
         data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL, prayers: [], prayerCount: 0 },
+        params: { slug: "test-goal" },
       },
     });
     expect(screen.getByText("Doa (0)")).not.toBeNull();
@@ -246,7 +252,7 @@ describe("campaign prayers section", () => {
       .spyOn(global, "fetch")
       .mockRejectedValue(new Error("unexpected network call in this test"));
     try {
-      render(Page, { props: { data: WITH_PRAYERS } });
+      render(Page, { props: { data: WITH_PRAYERS, params: { slug: "test-goal" } } });
       await fireEvent.click(screen.getByRole("button", { name: "Kirim Doa" }));
       expect(screen.getByText("Tulis doanya terlebih dahulu.")).not.toBeNull();
       expect(fetchSpy).not.toHaveBeenCalled();
