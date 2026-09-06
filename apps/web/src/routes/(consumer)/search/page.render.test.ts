@@ -23,6 +23,7 @@ const SAMPLE_CAMPAIGN = {
   availableAmount: { amount: "500000", currency: "IDR" as const },
   donationCount: 10,
   expiresAt: new Date(Date.now() + 86400000).toISOString(),
+  status: "active" as const,
   publishedAt: new Date().toISOString(),
 };
 

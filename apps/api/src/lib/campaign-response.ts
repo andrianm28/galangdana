@@ -40,6 +40,10 @@ export async function toCampaignSummary(row: CampaignRow): Promise<CampaignSumma
     title: campaign.title,
     shortDescription: campaign.shortDescription,
     coverImageUrl,
+    // Narrowed rather than cast: the routes that build a summary only ever
+    // select publicly-visible campaigns, so anything else here is a bug in the
+    // caller's WHERE clause and should surface loudly rather than be coerced.
+    status: campaign.status as "active" | "paused" | "completed",
     category: { id: category.id, slug: category.slug, title: category.title },
     campaigner: {
       id: campaigner.id,
