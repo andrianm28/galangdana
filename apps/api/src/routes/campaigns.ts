@@ -842,8 +842,16 @@ export const campaignsRoute = new Elysia()
           // biome-ignore lint/style/noNonNullAssertion: status "paid" implies these are set
           amount: moneyToJSON({ amount: row.amount!, currency: row.currency! }),
           narrative: row.narrative ?? "",
+          approvedAt: row.approvedAt?.toISOString() ?? null,
           // biome-ignore lint/style/noNonNullAssertion: status "paid" implies paidAt is set
           paidAt: row.paidAt!.toISOString(),
+          // The payout gate refuses to release money without a document, so a
+          // paid row normally has one -- but rows predating the gate may not,
+          // and the log must say which rather than implying every row is
+          // backed. Nothing is viewable either way until uploads are redacted.
+          proofState: (row.proofObjectKey ? "ada_tertutup" : "belum_ada") as
+            | "ada_tertutup"
+            | "belum_ada",
         })),
       };
     },

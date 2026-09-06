@@ -87,8 +87,12 @@ const daysLeft = $derived.by(() => {
 
   <a
     href="/campaign/{campaign.slug}/pencairan-dana"
-    class="font-sans text-sm font-medium text-primary underline-offset-2 hover:underline"
+    class="block rounded-md border border-neutral-200 bg-white p-4 hover:border-neutral-300"
   >
-    Riwayat Pencairan Dana
+    <span class="font-sans text-sm font-semibold text-neutral-900">Lihat jejak dana</span>
+    <span class="mt-1 block font-sans text-sm text-neutral-600">
+      Setiap pencairan, tanggalnya, dan status dokumennya. Dana tidak kami cairkan sebelum
+      buktinya ada.
+    </span>
   </a>
 </div>

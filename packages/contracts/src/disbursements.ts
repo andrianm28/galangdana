@@ -122,11 +122,34 @@ export const AdminDisbursementDetailSchema = Type.Object({
 
 export const AdminRejectDisbursementBodySchema = Type.Object({ reason: Type.String() });
 
+/**
+ * `ada_tertutup` — a proof document exists on file but is not viewable.
+ * `belum_ada`    — no document is on file.
+ *
+ * There is deliberately no "published" state yet. The payout gate already
+ * refuses to release money without a document (see the 422 in the disbursements
+ * route), so for a paid row a document almost always exists -- but nothing can
+ * show it to the public until uploads are redacted, and these are hospital
+ * bills and identity documents. Claiming proof is viewable when it is not would
+ * be the same overclaim this surface exists to avoid, so the state says exactly
+ * what is true: the document is on file, and you cannot open it yet.
+ */
+export const DisbursementProofStateSchema = Type.Union([
+  Type.Literal("ada_tertutup"),
+  Type.Literal("belum_ada"),
+]);
+
 export const PublicDisbursementLogItemSchema = Type.Object({
   type: DisbursementTypeSchema,
   amount: MoneyJSONSchema,
   narrative: Type.String(),
+  // Both halves of the two-person control, so the log can show that the money
+  // was released by someone other than whoever approved it rather than merely
+  // asserting it. approvedAt is nullable only to survive rows created before
+  // the control existed.
+  approvedAt: Type.Union([Type.String(), Type.Null()]),
   paidAt: Type.String(),
+  proofState: DisbursementProofStateSchema,
 });
 
 export const PublicDisbursementLogResponseSchema = Type.Object({
