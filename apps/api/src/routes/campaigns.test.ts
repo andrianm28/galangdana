@@ -14,6 +14,7 @@ import {
   users,
 } from "@fundforindonesia/db";
 import { eq, inArray } from "drizzle-orm";
+import { hashSessionToken } from "../auth/session";
 import { app } from "../index";
 
 const TEST_USER_ID = "44444444-5555-6666-7777-888888888801";
@@ -89,8 +90,16 @@ beforeAll(async () => {
     { id: OTHER_USER_ID, phone: "+6281199990302" },
   ]);
   await db.insert(sessions).values([
-    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    {
+      id: await hashSessionToken(TEST_TOKEN),
+      userId: TEST_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(OTHER_TOKEN),
+      userId: OTHER_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   ]);
 });
 

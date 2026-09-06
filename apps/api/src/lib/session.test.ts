@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { db, sessions, users } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
 import { Elysia } from "elysia";
+import { hashSessionToken } from "../auth/session";
 import { sessionDerive } from "./session";
 
 const TEST_USER_ID = "22222222-3333-4444-5555-666666666601";
@@ -20,7 +21,7 @@ describe("sessionDerive", () => {
     await db.delete(users).where(eq(users.id, TEST_USER_ID));
     await db.insert(users).values({ id: TEST_USER_ID, phone: TEST_PHONE });
     await db.insert(sessions).values({
-      id: TEST_TOKEN,
+      id: await hashSessionToken(TEST_TOKEN),
       userId: TEST_USER_ID,
       expiresAt: new Date(Date.now() + 86400000),
     });

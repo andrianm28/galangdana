@@ -17,6 +17,7 @@ import { MockPaymentProvider } from "@fundforindonesia/payments";
 import { eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { requestOtp } from "../auth/otp";
+import { hashSessionToken } from "../auth/session";
 import type { SmsProvider } from "../auth/sms-provider";
 import { redis } from "../lib/redis-client";
 import { computeWithdrawableAmount, disbursementsRoute } from "./disbursements";
@@ -106,10 +107,26 @@ beforeAll(async () => {
     { id: ADMIN2_USER_ID, phone: "+6281199990604", role: "admin" },
   ]);
   await db.insert(sessions).values([
-    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: ADMIN_TOKEN, userId: ADMIN_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: ADMIN2_TOKEN, userId: ADMIN2_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    {
+      id: await hashSessionToken(TEST_TOKEN),
+      userId: TEST_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(OTHER_TOKEN),
+      userId: OTHER_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(ADMIN_TOKEN),
+      userId: ADMIN_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(ADMIN2_TOKEN),
+      userId: ADMIN2_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   ]);
 
   const [category] = await db.select().from(campaignCategories).limit(1);

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { db, sessions, users } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
-import { createSession, revokeSession, validateSession } from "./session";
+import { createSession, hashSessionToken, revokeSession, validateSession } from "./session";
 
 const TEST_PHONE = "+6281199999201";
 
@@ -32,6 +32,21 @@ describe("session lifecycle", () => {
     expect(a.token).not.toBe(b.token);
   });
 
+  test("the stored session id is a hash of the token, never the plaintext token", async () => {
+    // A DB read leak must not yield immediately usable credentials.
+    const [user] = await db.insert(users).values({ phone: TEST_PHONE }).returning();
+    // biome-ignore lint/style/noNonNullAssertion: insert().returning() on a single-row insert always returns that row
+    const userId = user!.id;
+    const { token } = await createSession(userId);
+
+    const [row] = await db.select().from(sessions).where(eq(sessions.userId, userId));
+    expect(row).toBeDefined();
+    expect(row?.id).not.toBe(token);
+    expect(row?.id).toBe(await hashSessionToken(token));
+    // ...while lookup by the real token still works.
+    expect((await validateSession(token))?.user.id).toBe(userId);
+  });
+
   test("validateSession returns the user for a valid token", async () => {
     const [user] = await db.insert(users).values({ phone: TEST_PHONE }).returning();
     // biome-ignore lint/style/noNonNullAssertion: insert().returning() on a single-row insert always returns that row
@@ -52,7 +67,7 @@ describe("session lifecycle", () => {
     // biome-ignore lint/style/noNonNullAssertion: insert().returning() on a single-row insert always returns that row
     const userId = user!.id;
     await db.insert(sessions).values({
-      id: "expired-test-token",
+      id: await hashSessionToken("expired-test-token"),
       userId,
       expiresAt: new Date(Date.now() - 1000),
     });

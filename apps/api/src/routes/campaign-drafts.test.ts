@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { campaignCategories, db, sessions, users } from "@fundforindonesia/db";
 import { eq } from "drizzle-orm";
+import { hashSessionToken } from "../auth/session";
 import { app } from "../index";
 
 const TEST_USER_ID = "33333333-4444-5555-6666-777777777701";
@@ -21,8 +22,16 @@ beforeAll(async () => {
     { id: OTHER_USER_ID, phone: "+6281199990202" },
   ]);
   await db.insert(sessions).values([
-    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    {
+      id: await hashSessionToken(TEST_TOKEN),
+      userId: TEST_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(OTHER_TOKEN),
+      userId: OTHER_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   ]);
 });
 

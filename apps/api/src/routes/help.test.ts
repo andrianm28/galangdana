@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { db, helpArticles, sessions, supportTickets, users } from "@fundforindonesia/db";
 import { eq, inArray } from "drizzle-orm";
+import { hashSessionToken } from "../auth/session";
+import { redis } from "../lib/redis-client";
 import { helpRoute } from "./help";
 
 const app = helpRoute;
@@ -21,8 +23,16 @@ beforeAll(async () => {
     { id: ADMIN_USER_ID, phone: "+6281199200002", role: "admin" },
   ]);
   await db.insert(sessions).values([
-    { id: TOKEN, userId: USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: ADMIN_TOKEN, userId: ADMIN_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    {
+      id: await hashSessionToken(TOKEN),
+      userId: USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(ADMIN_TOKEN),
+      userId: ADMIN_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   ]);
   await db.delete(helpArticles).where(eq(helpArticles.slug, "help-test-article"));
 });

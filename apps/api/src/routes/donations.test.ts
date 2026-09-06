@@ -14,6 +14,8 @@ import {
 } from "@fundforindonesia/db";
 import { MockPaymentProvider, computeMidtransSignature } from "@fundforindonesia/payments";
 import { eq, inArray } from "drizzle-orm";
+import { hashSessionToken } from "../auth/session";
+import { redis } from "../lib/redis-client";
 import { donationsRoute } from "./donations";
 
 const app = donationsRoute;
@@ -83,8 +85,16 @@ beforeAll(async () => {
     { id: OTHER_USER_ID, phone: "+6281199990402" },
   ]);
   await db.insert(sessions).values([
-    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    {
+      id: await hashSessionToken(TEST_TOKEN),
+      userId: TEST_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(OTHER_TOKEN),
+      userId: OTHER_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   ]);
 });
 
