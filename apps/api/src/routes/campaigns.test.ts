@@ -1472,15 +1472,11 @@ describe("POST /campaigns cover requirement", () => {
   test("copies a valid cover key to coverMediaUrl", async () => {
     const draft = await createCoverlessDraft();
     const presignResp = await app.handle(
-      authedRequest(
-        `http://localhost/campaign-drafts/${draft.id}/cover/presign`,
-        TEST_TOKEN,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ fileName: "sampul.jpg" }),
-        },
-      ),
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/cover/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "sampul.jpg" }),
+      }),
     );
     const { uploadUrl, objectKey } = (await presignResp.json()) as {
       uploadUrl: string;
@@ -1594,7 +1590,10 @@ describe("POST /campaigns/:id/cover/presign + /confirm", () => {
     );
     expect(foreign.status).toBe(404);
 
-    await db.update(campaigns).set({ status: "pending_review" }).where(eq(campaigns.id, campaign.id));
+    await db
+      .update(campaigns)
+      .set({ status: "pending_review" })
+      .where(eq(campaigns.id, campaign.id));
     const frozen = await app.handle(
       authedRequest(`http://localhost/campaigns/${campaign.id}/cover/presign`, TEST_TOKEN, {
         method: "POST",

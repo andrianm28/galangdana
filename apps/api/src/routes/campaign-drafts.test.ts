@@ -743,15 +743,11 @@ describe("POST /campaign-drafts/:id/cover/presign", () => {
   test("returns a presigned PUT URL scoped under drafts/{draftId}/cover/", async () => {
     const created = await createDraft();
     const resp = await app.handle(
-      authedRequest(
-        `http://localhost/campaign-drafts/${created.id}/cover/presign`,
-        TEST_TOKEN,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ fileName: "sampul.jpg" }),
-        },
-      ),
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/cover/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "sampul.jpg" }),
+      }),
     );
     expect(resp.status).toBe(200);
     const { uploadUrl, objectKey } = (await resp.json()) as {
@@ -766,28 +762,20 @@ describe("POST /campaign-drafts/:id/cover/presign", () => {
   test("404s (not 403) for someone else's draft, 422 for non-image names", async () => {
     const created = await createDraft();
     const foreign = await app.handle(
-      authedRequest(
-        `http://localhost/campaign-drafts/${created.id}/cover/presign`,
-        OTHER_TOKEN,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ fileName: "sampul.jpg" }),
-        },
-      ),
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/cover/presign`, OTHER_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "sampul.jpg" }),
+      }),
     );
     expect(foreign.status).toBe(404);
 
     const badExt = await app.handle(
-      authedRequest(
-        `http://localhost/campaign-drafts/${created.id}/cover/presign`,
-        TEST_TOKEN,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ fileName: "sampul.pdf" }),
-        },
-      ),
+      authedRequest(`http://localhost/campaign-drafts/${created.id}/cover/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "sampul.pdf" }),
+      }),
     );
     expect(badExt.status).toBe(422);
   });
