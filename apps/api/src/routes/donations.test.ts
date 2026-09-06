@@ -768,6 +768,61 @@ describe("POST /payments/webhook", () => {
     expect(donation?.status).toBe("paid"); // still paid, not re-processed into some other state
   });
 
+  test("GET /donations/:id names the campaign and the donor's chosen name", async () => {
+    // A receipt needs both. Without the title it says "campaign 8f3c-..."; a
+    // second round trip to fetch it is a second chance to fail on a phone.
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "75000",
+          paymentMethod: "bank_transfer_va",
+          displayName: "Budi",
+        }),
+      }),
+    );
+    const { donationId } = (await resp.json()) as { donationId: string };
+
+    const get = await app.handle(new Request(`http://localhost/donations/${donationId}`));
+    const body = (await get.json()) as {
+      campaignTitle: string;
+      campaignSlug: string;
+      displayName: string | null;
+    };
+    expect(body.campaignTitle).toBe(campaign.title);
+    expect(body.campaignSlug).toBe(campaign.slug);
+    expect(body.displayName).toBe("Budi");
+  });
+
+  test("GET /donations/:id never returns the contact the donor gave", async () => {
+    // Contact exists to send a receipt TO. Anyone holding the donation link
+    // can read this response; a phone number is not theirs to read.
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "75000",
+          paymentMethod: "bank_transfer_va",
+          contactChannel: "whatsapp",
+          contactValue: "081234567890",
+        }),
+      }),
+    );
+    const { donationId } = (await resp.json()) as { donationId: string };
+
+    const get = await app.handle(new Request(`http://localhost/donations/${donationId}`));
+    const raw = await get.text();
+    expect(raw).not.toContain("081234567890");
+    expect(raw).not.toContain("contactValue");
+    expect(raw).not.toContain("contactChannel");
+  });
+
   test("a bad signature is rejected with 401 and never touches the donation", async () => {
     const { donationId, providerOrderId } = await createTestDonation("40000");
     const provider = new MockPaymentProvider({ serverKey: "wrong-key-entirely" });

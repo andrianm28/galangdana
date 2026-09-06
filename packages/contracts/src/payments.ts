@@ -71,6 +71,10 @@ export const DonationStatusSchema = Type.Union([
 export const GetDonationResponseSchema = Type.Object({
   id: Type.String({ format: "uuid" }),
   campaignId: Type.String({ format: "uuid" }),
+  // The campaign is named here so a receipt is one request, not two. A
+  // kuitansi that says only "campaign 8f3c-..." is not a receipt.
+  campaignTitle: Type.String(),
+  campaignSlug: Type.String(),
   amount: MoneyJSONSchema,
   status: DonationStatusSchema,
   method: PaymentMethodSchema,
@@ -78,5 +82,9 @@ export const GetDonationResponseSchema = Type.Object({
   redirectUrl: Type.Union([Type.String(), Type.Null()]),
   expiresAt: Type.String({ format: "date-time" }),
   paidAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  // The donor's chosen public name. Never the contact details they gave --
+  // those exist to send a receipt to, not to print on one a link-holder
+  // can open.
+  displayName: Type.Union([Type.String(), Type.Null()]),
 });
 export type GetDonationResponse = Static<typeof GetDonationResponseSchema>;

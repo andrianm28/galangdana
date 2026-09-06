@@ -89,12 +89,19 @@ const remaining = $derived.by(() => {
         jejak dana kampanye, lengkap dengan tanggalnya.
       </p>
       <a
-        href="/campaign/{donation.campaignId}/pencairan-dana"
+        href="/campaign/{donation.campaignSlug}/pencairan-dana"
         class="mt-3 inline-block font-sans text-sm font-medium text-primary-dark underline-offset-2 hover:underline"
       >
         Lihat jejak dana kampanye ini
       </a>
     </div>
+
+    <a
+      href="/donation/{donation.id}/kuitansi"
+      class="rounded-md border border-neutral-300 px-4 py-2 text-center font-sans text-sm font-semibold text-neutral-900 hover:border-neutral-400"
+    >
+      Lihat kuitansi
+    </a>
 
     <p class="font-sans text-xs text-neutral-500">
       Nomor donasi <span class="font-mono">{donation.id}</span>. Simpan sebagai rujukan bila Anda
@@ -109,7 +116,7 @@ const remaining = $derived.by(() => {
         Tidak ada dana yang terpotong. Anda bisa mengulang donasi kapan saja.
       </p>
       <a
-        href="/campaign/{donation.campaignId}"
+        href="/campaign/{donation.campaignSlug}"
         class="mt-3 inline-block rounded-md bg-primary px-4 py-2 font-sans text-sm font-semibold text-white"
       >
         Coba lagi

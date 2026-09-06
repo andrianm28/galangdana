@@ -8,3 +8,4 @@ export {
   subtractMoney,
 } from "./money.ts";
 export { bigIntSafeJSONStringify } from "./serializer.ts";
+export { terbilang, terbilangRupiah } from "./terbilang.ts";
