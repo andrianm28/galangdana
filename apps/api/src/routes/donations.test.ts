@@ -14,6 +14,8 @@ import {
 } from "@fundforindonesia/db";
 import { MockPaymentProvider, computeMidtransSignature } from "@fundforindonesia/payments";
 import { eq, inArray } from "drizzle-orm";
+import { hashSessionToken } from "../auth/session";
+import { redis } from "../lib/redis-client";
 import { donationsRoute } from "./donations";
 
 const app = donationsRoute;
@@ -83,8 +85,16 @@ beforeAll(async () => {
     { id: OTHER_USER_ID, phone: "+6281199990402" },
   ]);
   await db.insert(sessions).values([
-    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    {
+      id: await hashSessionToken(TEST_TOKEN),
+      userId: TEST_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(OTHER_TOKEN),
+      userId: OTHER_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   ]);
 });
 
@@ -1462,5 +1472,54 @@ describe("Sumopod webhook secret fails closed when unset", () => {
     // have settled the real donation it targeted.
     const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
     expect(donation?.status).toBe("pending");
+  });
+});
+
+describe("POST /donations rate limiting", () => {
+  test("returns 429 when the campaign's donation budget is exhausted", async () => {
+    const campaign = await seedTestCampaign();
+    // Prime the fixed-window counter past the cap directly: walking the
+    // real 120-request boundary here would add seconds per run, while the
+    // boundary itself is covered in rate-limit.test.ts.
+    await redis.set(`donation:ratelimit:${campaign.id}`, "9999");
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(429);
+    await redis.del(`donation:ratelimit:${campaign.id}`);
+  });
+});
+
+describe("POST /donations idempotency scoping", () => {
+  test("a key claimed by another endpoint does not block this donation", async () => {
+    const campaign = await seedTestCampaign();
+    const key = crypto.randomUUID();
+    // Some other endpoint claimed this exact key string first. Keys are
+    // scoped per endpoint, so this donation must proceed normally.
+    await db
+      .insert(idempotencyKeys)
+      .values({ key, endpoint: "POST /something-else", responseBody: { ok: true } })
+      .onConflictDoNothing();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    await db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, key));
   });
 });

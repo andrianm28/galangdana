@@ -12,6 +12,7 @@ import {
   users,
 } from "@fundforindonesia/db";
 import { eq, inArray } from "drizzle-orm";
+import { hashSessionToken } from "../auth/session";
 import { adminRoute } from "./admin";
 
 const app = adminRoute;
@@ -36,9 +37,13 @@ beforeAll(async () => {
     { id: CAMPAIGNER_USER_ID, phone: "+6281199000002", role: "campaigner" },
   ]);
   await db.insert(sessions).values([
-    { id: ADMIN_TOKEN, userId: ADMIN_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
     {
-      id: CAMPAIGNER_TOKEN,
+      id: await hashSessionToken(ADMIN_TOKEN),
+      userId: ADMIN_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(CAMPAIGNER_TOKEN),
       userId: CAMPAIGNER_USER_ID,
       expiresAt: new Date(Date.now() + 86400000),
     },

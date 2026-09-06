@@ -60,3 +60,33 @@ export async function checkRegisterRateLimit(email: string): Promise<RateLimitRe
     AUTH_WINDOW_SECONDS,
   );
 }
+
+const MAX_DONATION_REQUESTS_PER_WINDOW = 120;
+const DONATION_WINDOW_SECONDS = 60 * 60; // 1 hour
+
+// Keyed on the campaign, the only stable public identity on this request
+// (guest donations carry no user, and this repo has no trusted client IP
+// yet). 120/hour is ~2 per minute sustained -- generous for real donors,
+// tight enough to bound provider-charge creation against floods. A viral
+// moment past that gets an honest 429 to retry later, not a silent queue.
+export async function checkDonationRateLimit(campaignId: string): Promise<RateLimitResult> {
+  return checkRateLimit(
+    `donation:ratelimit:${campaignId}`,
+    MAX_DONATION_REQUESTS_PER_WINDOW,
+    DONATION_WINDOW_SECONDS,
+  );
+}
+
+const MAX_TICKETS_PER_WINDOW = 5;
+const TICKET_WINDOW_SECONDS = 60 * 60; // 1 hour
+
+// Keyed on the normalized email the ticket is filed under (callers
+// normalize first). Public contact forms are classic spam sinks; 5/hour
+// matches the register cap's philosophy.
+export async function checkSupportTicketRateLimit(email: string): Promise<RateLimitResult> {
+  return checkRateLimit(
+    `support:ratelimit:${email}`,
+    MAX_TICKETS_PER_WINDOW,
+    TICKET_WINDOW_SECONDS,
+  );
+}

@@ -10,6 +10,19 @@ function generateSessionToken(): string {
   return Buffer.from(bytes).toString("base64url");
 }
 
+// The sessions table stores only the SHA-256 of the token (as its id), so
+// a database read leak yields hashes, not immediately usable credentials.
+// Lookup hashes the presented token first -- same 30-day opaque-token flow
+// as before, just no plaintext at rest. Side effect of the change: every
+// pre-existing session row stops validating on deploy (all users logged
+// out once). Acceptable for a pre-launch product; note it in the deploy.
+export async function hashSessionToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 export interface SessionMeta {
   userAgent?: string;
   ipAddress?: string;
@@ -22,7 +35,7 @@ export async function createSession(
   const token = generateSessionToken();
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
   await db.insert(sessions).values({
-    id: token,
+    id: await hashSessionToken(token),
     userId,
     expiresAt,
     userAgent: meta.userAgent,
@@ -38,12 +51,12 @@ export async function validateSession(
     .select({ session: sessions, user: users })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
-    .where(and(eq(sessions.id, token), gt(sessions.expiresAt, new Date())));
+    .where(and(eq(sessions.id, await hashSessionToken(token)), gt(sessions.expiresAt, new Date())));
 
   if (!row) return null;
   return { user: row.user, session: row.session };
 }
 
 export async function revokeSession(token: string): Promise<void> {
-  await db.delete(sessions).where(eq(sessions.id, token));
+  await db.delete(sessions).where(eq(sessions.id, await hashSessionToken(token)));
 }

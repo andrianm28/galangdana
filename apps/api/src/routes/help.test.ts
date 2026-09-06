@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { db, helpArticles, sessions, supportTickets, users } from "@fundforindonesia/db";
 import { eq, inArray } from "drizzle-orm";
+import { hashSessionToken } from "../auth/session";
+import { redis } from "../lib/redis-client";
 import { helpRoute } from "./help";
 
 const app = helpRoute;
@@ -21,8 +23,16 @@ beforeAll(async () => {
     { id: ADMIN_USER_ID, phone: "+6281199200002", role: "admin" },
   ]);
   await db.insert(sessions).values([
-    { id: TOKEN, userId: USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: ADMIN_TOKEN, userId: ADMIN_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    {
+      id: await hashSessionToken(TOKEN),
+      userId: USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(ADMIN_TOKEN),
+      userId: ADMIN_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   ]);
   await db.delete(helpArticles).where(eq(helpArticles.slug, "help-test-article"));
 });
@@ -361,5 +371,21 @@ describe("POST /admin/support-tickets/:id/resolve", () => {
       }),
     );
     expect(resp.status).toBe(409);
+  });
+});
+
+describe("POST /support-tickets rate limiting", () => {
+  test("returns 429 when the email's ticket budget is exhausted", async () => {
+    const email = "ratelimit-probe@example.test";
+    await redis.set(`support:ratelimit:${email}`, "9999");
+    const resp = await app.handle(
+      new Request("http://localhost/support-tickets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Probe", email, message: "is this thing on?" }),
+      }),
+    );
+    expect(resp.status).toBe(429);
+    await redis.del(`support:ratelimit:${email}`);
   });
 });

@@ -14,6 +14,7 @@ import {
   users,
 } from "@fundforindonesia/db";
 import { eq, inArray } from "drizzle-orm";
+import { hashSessionToken } from "../auth/session";
 import { app } from "../index";
 
 const TEST_USER_ID = "44444444-5555-6666-7777-888888888801";
@@ -89,8 +90,16 @@ beforeAll(async () => {
     { id: OTHER_USER_ID, phone: "+6281199990302" },
   ]);
   await db.insert(sessions).values([
-    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    {
+      id: await hashSessionToken(TEST_TOKEN),
+      userId: TEST_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(OTHER_TOKEN),
+      userId: OTHER_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   ]);
 });
 
@@ -139,7 +148,10 @@ async function uploadKycDocuments(campaignId: string, token: string) {
       uploadUrl: string;
       objectKey: string;
     };
-    await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
+    await fetch(uploadUrl, {
+      method: "PUT",
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+    });
     await app.handle(
       authedRequest(`http://localhost/campaigns/${campaignId}/kyc/documents/confirm`, token, {
         method: "POST",
@@ -645,7 +657,10 @@ describe("POST /campaigns/:id/kyc/documents/presign + /confirm", () => {
         objectKey: string;
       };
 
-      const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
+      const putResp = await fetch(uploadUrl, {
+        method: "PUT",
+        body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+      });
       expect(putResp.status).toBe(200);
 
       const confirmResp = await app.handle(
@@ -1052,7 +1067,10 @@ describe("POST /campaigns/:id/documents/presign + /confirm", () => {
     };
     expect(objectKey).toStartWith(`campaigns/${campaign.id}/documents/sumber_gambar/`);
 
-    const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake image bytes" });
+    const putResp = await fetch(uploadUrl, {
+      method: "PUT",
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+    });
     expect(putResp.ok).toBe(true);
 
     const confirmResp = await app.handle(

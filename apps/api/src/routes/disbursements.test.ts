@@ -17,6 +17,7 @@ import { MockPaymentProvider } from "@fundforindonesia/payments";
 import { eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { requestOtp } from "../auth/otp";
+import { hashSessionToken } from "../auth/session";
 import type { SmsProvider } from "../auth/sms-provider";
 import { redis } from "../lib/redis-client";
 import { computeWithdrawableAmount, disbursementsRoute } from "./disbursements";
@@ -106,10 +107,26 @@ beforeAll(async () => {
     { id: ADMIN2_USER_ID, phone: "+6281199990604", role: "admin" },
   ]);
   await db.insert(sessions).values([
-    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: OTHER_TOKEN, userId: OTHER_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: ADMIN_TOKEN, userId: ADMIN_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: ADMIN2_TOKEN, userId: ADMIN2_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    {
+      id: await hashSessionToken(TEST_TOKEN),
+      userId: TEST_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(OTHER_TOKEN),
+      userId: OTHER_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(ADMIN_TOKEN),
+      userId: ADMIN_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(ADMIN2_TOKEN),
+      userId: ADMIN2_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   ]);
 
   const [category] = await db.select().from(campaignCategories).limit(1);
@@ -588,7 +605,10 @@ describe("POST /disbursements/:id/proof/presign + /confirm", () => {
     };
     expect(objectKey).toStartWith(`disbursements/${id}/proof/`);
 
-    const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake proof bytes" });
+    const putResp = await fetch(uploadUrl, {
+      method: "PUT",
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+    });
     expect(putResp.ok).toBe(true);
 
     const confirmResp = await app.handle(
@@ -738,7 +758,10 @@ async function uploadProof(id: string) {
     uploadUrl: string;
     objectKey: string;
   };
-  const putResp = await fetch(uploadUrl, { method: "PUT", body: "fake proof bytes" });
+  const putResp = await fetch(uploadUrl, {
+    method: "PUT",
+    body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+  });
   if (!putResp.ok) throw new Error(`proof PUT failed: ${putResp.status}`);
   const confirmResp = await app.handle(
     authedRequest(`http://localhost/disbursements/${id}/proof/confirm`, TEST_TOKEN, {

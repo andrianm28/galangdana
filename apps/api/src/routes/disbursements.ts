@@ -30,6 +30,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { requestOtp, verifyOtp } from "../auth/otp";
 import { checkAdmin } from "../lib/admin";
+import { verifyUploadedDocumentContent } from "../lib/media-content";
 import { extractDocumentExtension, privateDocumentsS3 } from "../lib/media-s3";
 import { sessionDerive } from "../lib/session";
 
@@ -356,6 +357,23 @@ export const disbursementsRoute = new Elysia()
         set.status = 400;
         return { error: "object_key_mismatch" };
       }
+      // State before external verification: cheap, no I/O, and the guarded
+      // UPDATE below stays the race closer -- this pre-check only avoids
+      // burning two S3 round-trips on a request that will 409 anyway.
+      if (row.disbursement.status !== "draft") {
+        set.status = 409;
+        return { error: "disbursement_not_editable" };
+      }
+      // Proof-of-payment images must be real images: same confirm-time
+      // content check as the other document flows.
+      const proofExt = extractDocumentExtension(body.objectKey);
+      const proofContent = proofExt
+        ? await verifyUploadedDocumentContent(privateDocumentsS3, body.objectKey, proofExt)
+        : { ok: false as const, error: "document_content_mismatch" as const };
+      if (!proofContent.ok) {
+        set.status = 422;
+        return { error: proofContent.error };
+      }
       // See the bank-account handler above for why this is a guarded
       // UPDATE (status = 'draft' in the WHERE, checked via .returning())
       // rather than a prior SELECT-then-check.
@@ -384,6 +402,7 @@ export const disbursementsRoute = new Elysia()
         401: DisbursementErrorSchema,
         404: DisbursementErrorSchema,
         409: DisbursementErrorSchema,
+        422: DisbursementErrorSchema,
       },
     },
   )

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { bankAccounts, campaigners, db, sessions, users } from "@fundforindonesia/db";
 import { eq, inArray } from "drizzle-orm";
+import { hashSessionToken } from "../auth/session";
 import { bankAccountsRoute } from "./bank-accounts";
 
 const app = bankAccountsRoute;
@@ -23,8 +24,16 @@ beforeAll(async () => {
     { id: BARE_USER_ID, phone: "+6281199990502" },
   ]);
   await db.insert(sessions).values([
-    { id: TEST_TOKEN, userId: TEST_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
-    { id: BARE_TOKEN, userId: BARE_USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    {
+      id: await hashSessionToken(TEST_TOKEN),
+      userId: TEST_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+    {
+      id: await hashSessionToken(BARE_TOKEN),
+      userId: BARE_USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   ]);
   const [campaigner] = await db
     .insert(campaigners)
@@ -116,7 +125,7 @@ describe("bank accounts", () => {
       .padStart(8, "0")}`;
     await db.insert(users).values({ id: otherUserId, phone: otherPhone });
     await db.insert(sessions).values({
-      id: otherToken,
+      id: await hashSessionToken(otherToken),
       userId: otherUserId,
       expiresAt: new Date(Date.now() + 86400000),
     });

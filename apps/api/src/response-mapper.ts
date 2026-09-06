@@ -1,5 +1,6 @@
 import { bigIntSafeJSONStringify } from "@fundforindonesia/money";
 import type { AnyElysia } from "elysia";
+import { captureApiError } from "./lib/observability";
 
 /**
  * Wires the shared response-mapping behavior onto an Elysia instance.
@@ -30,6 +31,10 @@ export function withApiResponseMapping<T extends AnyElysia>(instance: T) {
     .onError(({ code, error, set }) => {
       if (code === "VALIDATION") return;
       console.error("Unhandled error:", error);
+      // Remote report when Sentry is configured (no-op otherwise) -- the
+      // console line above stays regardless, so log-based debugging works
+      // with or without a DSN.
+      captureApiError(error, { elysiaCode: code });
       // The status comes off the error object, NOT off `set.status`, and
       // this is load-bearing -- all four behaviors below were established
       // empirically against this repo's Elysia 1.1.26 before this was
