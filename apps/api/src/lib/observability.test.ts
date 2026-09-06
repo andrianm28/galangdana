@@ -45,8 +45,9 @@ describe("observability without DSN", () => {
 
 describe("tunnelUrlForDsn", () => {
   test("moves the key into a sentry_key query param on the envelope endpoint", () => {
+    // ggignore: synthetic DSN fixture for URL-shaping assertions, not a credential.
     expect(tunnelUrlForDsn("http://abc123@127.0.0.1:8080/1")).toBe(
-      "http://127.0.0.1:8080/api/1/envelope/?sentry_key=abc123",
+      "http://127.0.0.1:8080/api/1/envelope/?sentry_key=abc123", // ggignore
     );
   });
 
