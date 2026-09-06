@@ -1027,6 +1027,161 @@ describe("Mock payment provider webhook secret fails closed when unset", () => {
   });
 });
 
+describe("availablePaymentMethods gates QRIS on every condition it needs", () => {
+  // The gate used to check the webhook secret alone. Each of the other two
+  // fails differently, and one of them fails SILENTLY.
+  async function methodsWithEnv(
+    removeKeys: string[] = [],
+    extraEnv: Record<string, string> = {},
+  ): Promise<string[]> {
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !removeKeys.includes(key)),
+    );
+    const proc = Bun.spawn({
+      cmd: [
+        "bun",
+        "run",
+        "--env-file=/dev/null",
+        `${import.meta.dir}/__fixtures__/payment-methods.fixture.ts`,
+      ],
+      env: { ...env, ...extraEnv },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    if (exitCode !== 0) throw new Error(`probe failed: ${stderr}`);
+    return JSON.parse(stdout.trim().split("\n").at(-1) as string) as string[];
+  }
+
+  test("offers QRIS when the secret, the key and the host are all set", async () => {
+    expect(
+      await methodsWithEnv([], {
+        SUMOPOD_WEBHOOK_SECRET: "whsec_dGVzdA==",
+        SUMOPOD_API_KEY: "k",
+        SUMOPOD_BASE_URL: "https://sumopod.example.test",
+      }),
+    ).toContain("qris_redirect");
+  });
+
+  test("withholds QRIS when the API key is missing", async () => {
+    // Otherwise the charge sends `X-Api-Key: ""`, Sumopod answers 401, and
+    // the donor is told to try again -- forever.
+    expect(
+      await methodsWithEnv(["SUMOPOD_API_KEY"], {
+        SUMOPOD_WEBHOOK_SECRET: "whsec_dGVzdA==",
+        SUMOPOD_BASE_URL: "https://sumopod.example.test",
+      }),
+    ).not.toContain("qris_redirect");
+  });
+
+  test("withholds QRIS when the host is not stated, rather than charging the sandbox", async () => {
+    // This is the silent one. A default host meant a forgotten variable sent
+    // donors to a SANDBOX payment page: nothing errors, the sandbox webhook
+    // verifies, the donation is marked paid, and collectedAmount goes up for
+    // money that never moved.
+    expect(
+      await methodsWithEnv(["SUMOPOD_BASE_URL"], {
+        SUMOPOD_WEBHOOK_SECRET: "whsec_dGVzdA==",
+        SUMOPOD_API_KEY: "k",
+      }),
+    ).not.toContain("qris_redirect");
+  });
+
+  test("withholds QRIS when the webhook secret is missing", async () => {
+    expect(
+      await methodsWithEnv(["SUMOPOD_WEBHOOK_SECRET"], {
+        SUMOPOD_API_KEY: "k",
+        SUMOPOD_BASE_URL: "https://sumopod.example.test",
+      }),
+    ).not.toContain("qris_redirect");
+  });
+});
+
+describe("Sumopod base URL configuration", () => {
+  async function chargeUrlWithEnv(
+    campaignId: string,
+    removeKeys: string[] = [],
+    extraEnv: Record<string, string> = {},
+  ): Promise<{ url: string; body: { success_return_url: string; cancel_return_url: string } }> {
+    // Same fresh-process necessity as the fail-closed fixtures above:
+    // SUMOPOD_BASE_URL is bound at import time, so the override must be
+    // present (or genuinely absent) in a new process's environment.
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !removeKeys.includes(key)),
+    );
+    const proc = Bun.spawn({
+      cmd: [
+        "bun",
+        "run",
+        "--env-file=/dev/null",
+        `${import.meta.dir}/__fixtures__/sumopod-base-url.fixture.ts`,
+        campaignId,
+      ],
+      env: { ...env, ...extraEnv },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    if (exitCode !== 0) {
+      throw new Error(`fixture process failed: ${stderr} ${stdout}`);
+    }
+    const [url, rawBody] = stdout.trim().split("\n");
+    if (!url || !rawBody) throw new Error(`fixture printed no charge call: ${stdout}`);
+    const body = JSON.parse(rawBody) as { success_return_url: string; cancel_return_url: string };
+    return { url, body };
+  }
+
+  test("creates no charge at all when SUMOPOD_BASE_URL is unset", async () => {
+    // This test used to assert the opposite -- that an unset host quietly
+    // fell back to the sandbox. That default is what made a forgotten
+    // production variable book imaginary donations, so the charge is now
+    // refused (503) instead of silently aimed at the sandbox.
+    const campaign = await seedTestCampaign();
+    await expect(chargeUrlWithEnv(campaign.id, ["SUMOPOD_BASE_URL"])).rejects.toThrow(
+      /payment_method_unavailable/,
+    );
+  });
+
+  test("posts the charge to SUMOPOD_BASE_URL when it is set", async () => {
+    const campaign = await seedTestCampaign();
+    const { url } = await chargeUrlWithEnv(campaign.id, [], {
+      SUMOPOD_BASE_URL: "https://sumopod-prod.example.test",
+    });
+    expect(url).toBe("https://sumopod-prod.example.test/api/v1/payments");
+  });
+
+  test("return URLs default to PUBLIC_WEB_URL", async () => {
+    const campaign = await seedTestCampaign();
+    const { body } = await chargeUrlWithEnv(
+      campaign.id,
+      ["SUMOPOD_RETURN_BASE_URL", "PUBLIC_WEB_URL"],
+      { SUMOPOD_BASE_URL: "https://sumopod.example.test" },
+    );
+    // Neither var set and no PUBLIC_WEB_URL: the code fallback
+    // (localhost:5173) applies -- proving the default chain, not endorsing
+    // localhost return URLs (Sumopod rejects those; see .env.example).
+    expect(body.success_return_url).toMatch(/^http:\/\/localhost:5173\/donation\/status\//);
+    expect(body.cancel_return_url).toMatch(/^http:\/\/localhost:5173\/donation\/status\//);
+  });
+
+  test("return URLs use SUMOPOD_RETURN_BASE_URL when it is set", async () => {
+    const campaign = await seedTestCampaign();
+    const { body } = await chargeUrlWithEnv(campaign.id, [], {
+      SUMOPOD_RETURN_BASE_URL: "https://return.example.test",
+    });
+    expect(body.success_return_url).toMatch(/^https:\/\/return\.example\.test\/donation\/status\//);
+    expect(body.cancel_return_url).toMatch(/^https:\/\/return\.example\.test\/donation\/status\//);
+  });
+});
+
 describe("POST /payments/webhook/sumopod", () => {
   test("an invalid signature is rejected with 401 and never writes a payment_events row", async () => {
     const rawBody = JSON.stringify({
