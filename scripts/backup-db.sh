@@ -14,7 +14,7 @@
 # is unaffected by the port now being bound to 127.0.0.1 only.
 #
 # Install on the host with (crontab -e):
-#   0 3 * * * /home/ubuntu/galangdana/scripts/backup-db.sh >> /home/ubuntu/fundforindonesia-backups/backup.log 2>&1
+#   0 3 * * * /home/ubuntu/ffi/scripts/backup-db.sh >> /home/ubuntu/fundforindonesia-backups/backup.log 2>&1
 set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-/home/ubuntu/fundforindonesia-backups}"

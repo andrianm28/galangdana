@@ -67,8 +67,8 @@
   After=network.target
   [Service]
   Type=simple
-  WorkingDirectory=/home/ubuntu/galangdana/apps/worker
-  EnvironmentFile=/home/ubuntu/galangdana/.env.production
+  WorkingDirectory=/home/ubuntu/ffi/apps/worker
+  EnvironmentFile=/home/ubuntu/ffi/.env.production
   ExecStart=/home/ubuntu/.bun/bin/bun run src/index.ts
   Restart=on-failure
   RestartSec=3
