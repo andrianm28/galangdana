@@ -25,10 +25,17 @@ const SUMOPOD_WEBHOOK_SECRET = process.env.SUMOPOD_WEBHOOK_SECRET;
 if (!SUMOPOD_WEBHOOK_SECRET) {
   throw new Error("SUMOPOD_WEBHOOK_SECRET must be set to run this test file (see .env)");
 }
-const MOCK_MIDTRANS_SERVER_KEY = process.env.MOCK_MIDTRANS_SERVER_KEY;
-if (!MOCK_MIDTRANS_SERVER_KEY) {
-  throw new Error("MOCK_MIDTRANS_SERVER_KEY must be set to run this test file (see .env)");
-}
+// Declared via an IIFE, matching disbursements.test.ts: a bare `const` plus a
+// guard clause narrows only for code TypeScript sees after the guard, and a
+// hoisted `function` body is not that -- so a helper declared with `function`
+// sees `string | undefined` again.
+const MOCK_MIDTRANS_SERVER_KEY: string = (() => {
+  const value = process.env.MOCK_MIDTRANS_SERVER_KEY;
+  if (!value) {
+    throw new Error("MOCK_MIDTRANS_SERVER_KEY must be set to run this test file (see .env)");
+  }
+  return value;
+})();
 
 // Independently computes a valid svix-style signature -- mirrors
 // sumopod-signature.test.ts's and sumopod-provider.test.ts's own local
@@ -238,6 +245,84 @@ describe("POST /donations", () => {
     const created = (await retried.json()) as { donationId: string };
     await db.delete(payments).where(eq(payments.donationId, created.donationId));
     await db.delete(donations).where(eq(donations.id, created.donationId));
+  });
+
+  // A guest donation has no users row, so before these columns the
+  // donation_receipt outbox row written on settle had a donationId and no
+  // destination -- undeliverable for the majority path.
+  test("stores the donor's contact and display name so a receipt can be sent", async () => {
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+          contactChannel: "whatsapp",
+          contactValue: "081234567890",
+          displayName: "Rina",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const { donationId } = (await resp.json()) as { donationId: string };
+    const [row] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(row?.contactChannel).toBe("whatsapp");
+    expect(row?.contactValue).toBe("081234567890");
+    expect(row?.displayName).toBe("Rina");
+    await db.delete(payments).where(eq(payments.donationId, donationId));
+    await db.delete(donations).where(eq(donations.id, donationId));
+  });
+
+  // Contact is optional: asking before taking money costs conversion, and the
+  // donation must still complete without it.
+  test("accepts a donation with no contact at all, storing nulls rather than empties", async () => {
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const { donationId } = (await resp.json()) as { donationId: string };
+    const [row] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(row?.contactChannel).toBeNull();
+    expect(row?.contactValue).toBeNull();
+    expect(row?.displayName).toBeNull();
+    await db.delete(payments).where(eq(payments.donationId, donationId));
+    await db.delete(donations).where(eq(donations.id, donationId));
+  });
+
+  // A channel with no value is not a deliverable address; storing it would be
+  // PII held for nothing.
+  test("ignores a contact channel that arrives without a value", async () => {
+    const campaign = await seedTestCampaign();
+    const resp = await app.handle(
+      new Request("http://localhost/donations", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          amountStr: "50000",
+          paymentMethod: "bank_transfer_va",
+          contactChannel: "email",
+        }),
+      }),
+    );
+    expect(resp.status).toBe(200);
+    const { donationId } = (await resp.json()) as { donationId: string };
+    const [row] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(row?.contactChannel).toBeNull();
+    await db.delete(payments).where(eq(payments.donationId, donationId));
+    await db.delete(donations).where(eq(donations.id, donationId));
   });
 
   test("400s without an Idempotency-Key header", async () => {
@@ -580,7 +665,10 @@ describe("GET /donations/:id", () => {
 });
 
 describe("POST /payments/webhook", () => {
-  async function createTestDonation(amountStr: string) {
+  async function createTestDonation(
+    amountStr: string,
+    contact?: { contactChannel: "whatsapp" | "email"; contactValue: string },
+  ) {
     const campaign = await seedTestCampaign();
     const resp = await app.handle(
       new Request("http://localhost/donations", {
@@ -590,6 +678,7 @@ describe("POST /payments/webhook", () => {
           campaignId: campaign.id,
           amountStr,
           paymentMethod: "bank_transfer_va",
+          ...contact,
         }),
       }),
     );
@@ -697,12 +786,9 @@ describe("POST /payments/webhook", () => {
     expect(donation?.status).toBe("pending");
   });
 
-  test("enqueues one notifications_outbox row on a successful paid transition", async () => {
-    const { donationId, providerOrderId } = await createTestDonation("60000");
-    const provider = new MockPaymentProvider({
-      serverKey: MOCK_MIDTRANS_SERVER_KEY,
-    });
-    const payload = await provider.simulateWebhookPayload(providerOrderId, 60000n);
+  async function settle(providerOrderId: string, amount: bigint) {
+    const provider = new MockPaymentProvider({ serverKey: MOCK_MIDTRANS_SERVER_KEY });
+    const payload = await provider.simulateWebhookPayload(providerOrderId, amount);
     await app.handle(
       new Request("http://localhost/payments/webhook", {
         method: "POST",
@@ -710,13 +796,38 @@ describe("POST /payments/webhook", () => {
         body: JSON.stringify(payload),
       }),
     );
-    const outboxRows = await db
+  }
+
+  async function receiptRowsFor(donationId: string) {
+    const rows = await db
       .select()
       .from(notificationsOutbox)
       .where(eq(notificationsOutbox.template, "donation_receipt"));
-    expect(
-      outboxRows.some((r) => (r.payload as { donationId?: string }).donationId === donationId),
-    ).toBe(true);
+    return rows.filter((r) => (r.payload as { donationId?: string }).donationId === donationId);
+  }
+
+  test("enqueues a receipt addressed to the channel the donor chose", async () => {
+    const { donationId, providerOrderId } = await createTestDonation("60000", {
+      contactChannel: "whatsapp",
+      contactValue: "081234567890",
+    });
+    await settle(providerOrderId, 60000n);
+
+    const rows = await receiptRowsFor(donationId);
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.channel).toBe("whatsapp");
+    expect((rows[0]?.payload as { contactValue?: string }).contactValue).toBe("081234567890");
+  });
+
+  test("enqueues nothing when the donor gave no contact, rather than an undeliverable row", async () => {
+    // Contact is optional and most donors are guests. An unconditional enqueue
+    // would build a permanent backlog of rows the worker can never deliver.
+    const { donationId, providerOrderId } = await createTestDonation("60000");
+    await settle(providerOrderId, 60000n);
+
+    expect(await receiptRowsFor(donationId)).toEqual([]);
+    const [donation] = await db.select().from(donations).where(eq(donations.id, donationId));
+    expect(donation?.status).toBe("paid");
   });
 
   test("an 'expire' webhook transitions a pending donation's status to expired", async () => {
