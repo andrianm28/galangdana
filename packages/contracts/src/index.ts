@@ -129,6 +129,7 @@ export {
   DisbursementTypeSchema,
   PresignDisbursementProofBodySchema,
   PresignDisbursementProofResponseSchema,
+  DisbursementProofStateSchema,
   PublicDisbursementLogItemSchema,
   PublicDisbursementLogResponseSchema,
   RequestDisbursementOtpResponseSchema,

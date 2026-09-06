@@ -69,10 +69,14 @@ describe("(consumer) campaign/[slug] rendering", () => {
     expect(screen.getByText("Ini adalah cerita lengkap campaign.")).not.toBeNull();
   });
 
-  test("links to the campaign's public disbursement log page", () => {
-    render(Page, { props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } } });
-    const link = screen.getByText("Riwayat Pencairan Dana");
-    expect(link.getAttribute("href")).toBe("/campaign/test-goal/pencairan-dana");
+  test("gives the disbursement log a real entry point that states the mechanism", () => {
+    const { container } = render(Page, {
+      props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } },
+    });
+    const link = container.querySelector('a[href="/campaign/test-goal/pencairan-dana"]');
+    expect(link).not.toBeNull();
+    expect(screen.getByText("Lihat jejak dana")).not.toBeNull();
+    expect(screen.getByText(/Dana tidak kami cairkan sebelum\s+buktinya ada/)).not.toBeNull();
   });
 
   test("the donate button navigates to this campaign's donation-amount step", async () => {

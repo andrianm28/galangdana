@@ -1146,6 +1146,67 @@ describe("GET /campaigns/:slug/disbursements", () => {
     expect(body.error).toBe("campaign_not_found");
   });
 
+  // The log's whole job is to show that money did not move without a document
+  // and without two people. Both facts are already in the database -- the payout
+  // gate refuses a request with no proofObjectKey, and approve/pay reject the
+  // same actor twice -- and neither reached the response until now.
+  test("reports proof state and the approval date for each paid disbursement", async () => {
+    const campaign = await createTestCampaign(TEST_TOKEN);
+    const now = new Date();
+
+    const inserted = await db
+      .insert(disbursementRequests)
+      .values([
+        {
+          id: crypto.randomUUID(),
+          campaignId: campaign.id,
+          type: "partial",
+          amount: 1_000_000n,
+          currency: "IDR",
+          narrative: "Dengan bukti",
+          status: "paid",
+          proofObjectKey: "disbursements/proof/example.jpg",
+          approvedAt: new Date(now.getTime() - 86_400_000),
+          paidAt: now,
+        },
+        {
+          id: crypto.randomUUID(),
+          campaignId: campaign.id,
+          type: "final",
+          amount: 500_000n,
+          currency: "IDR",
+          narrative: "Tanpa bukti",
+          status: "paid",
+          proofObjectKey: null,
+          approvedAt: null,
+          paidAt: new Date(now.getTime() - 1000),
+        },
+      ])
+      .returning();
+    disbursementIds.push(...inserted.map((row) => row.id));
+
+    const resp = await app.handle(
+      new Request(`http://localhost/campaigns/${campaign.slug}/disbursements`),
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      disbursements: { narrative: string; proofState: string; approvedAt: string | null }[];
+    };
+
+    const withProof = body.disbursements.find((d) => d.narrative === "Dengan bukti");
+    expect(withProof?.proofState).toBe("ada_tertutup");
+    expect(withProof?.approvedAt).not.toBeNull();
+
+    // A row with no document on file says so rather than being omitted or
+    // silently implying one exists.
+    const withoutProof = body.disbursements.find((d) => d.narrative === "Tanpa bukti");
+    expect(withoutProof?.proofState).toBe("belum_ada");
+    expect(withoutProof?.approvedAt).toBeNull();
+
+    // The object key itself must never reach the public response.
+    expect(JSON.stringify(body)).not.toContain("disbursements/proof");
+  });
+
   test("returns only paid disbursements with correct fields and no bank account details", async () => {
     const campaign = await createTestCampaign(TEST_TOKEN);
 
