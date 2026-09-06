@@ -30,6 +30,8 @@
 6. `GET /payment-methods` prod = `["qris_redirect"]`; rotasi kredensial dev yang
    masih default (imgproxy key/salt, kredensial DB — lihat laporan baseline §5).
 7. Reindex Meilisearch, verifikasi backup nightly berjalan, dan UAT terakhir hijau.
+   Rollback runbook: `docs/rollback-runbook.md` (termasuk hasil drill restore
+   2026-09-06: LULUS 8/8 tabel).
 
 ## Observabilitas (GlitchTip self-host + access log) — live 2026-09-06
 - GlitchTip di compose (`glitchtip` + `glitchtip-worker`, DB+Redis reuse,
