@@ -1,6 +1,6 @@
 type Track = "medical" | "non_medical";
 
-const SHARED_PREFIX = ["tujuan", "judul", "target-donasi", "cerita", "ajakan"] as const;
+const SHARED_PREFIX = ["tujuan", "judul", "target-donasi", "cerita", "ajakan", "sampul"] as const;
 const SHARED_SUFFIX = ["dokumen", "otp", "rangkuman"] as const;
 
 export function getStepOrder(track: Track): string[] {
