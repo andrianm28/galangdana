@@ -21,12 +21,49 @@ const progressPercent = $derived.by(() => {
   return Math.min(100, Math.max(0, pct));
 });
 
+// Link-preview metadata. Indonesian donation traffic moves on WhatsApp
+// forwards, so this is the most-viewed surface in the funnel -- and until now
+// a forwarded fundforindonesia.org link rendered as a bare grey URL chip,
+// because app.html carried no og: tags at all.
+//
+// The description states the money position rather than repeating the title:
+// what a forwarded card has to answer is "how far along is this", and a
+// campaign summary is exactly that.
+const shareTitle = $derived(`${campaign.title} — FundForIndonesia`);
+const shareDescription = $derived(
+  campaign.model === "goal" && goal
+    ? `${formatMoney(collected)} terkumpul dari ${formatMoney(goal)}. ${campaign.shortDescription}`
+    : `${formatMoney(available)} donasi tersedia. ${campaign.shortDescription}`,
+);
+
 const daysLeft = $derived.by(() => {
   if (!campaign.expiresAt) return null;
   const ms = new Date(campaign.expiresAt).getTime() - Date.now();
   return Math.max(0, Math.ceil(ms / 86400000));
 });
 </script>
+
+<svelte:head>
+  <title>{shareTitle}</title>
+  <meta name="description" content={shareDescription} />
+  <link rel="canonical" href={data.canonicalUrl} />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="FundForIndonesia" />
+  <meta property="og:locale" content="id_ID" />
+  <meta property="og:url" content={data.canonicalUrl} />
+  <meta property="og:title" content={shareTitle} />
+  <meta property="og:description" content={shareDescription} />
+  {#if campaign.coverImageUrl}
+    <meta property="og:image" content={campaign.coverImageUrl} />
+    <meta property="og:image:alt" content={campaign.title} />
+    <meta name="twitter:card" content="summary_large_image" />
+  {:else}
+    <meta name="twitter:card" content="summary" />
+  {/if}
+  <meta name="twitter:title" content={shareTitle} />
+  <meta name="twitter:description" content={shareDescription} />
+</svelte:head>
 
 <div class="flex flex-col gap-4">
   {#if campaign.coverImageUrl}

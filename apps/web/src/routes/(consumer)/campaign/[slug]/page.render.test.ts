@@ -40,9 +40,16 @@ const PROGRAM_CAMPAIGN = {
   availableAmount: { amount: "9000000", currency: "IDR" as const },
 };
 
+const CANONICAL = "https://fundforindonesia.org/campaign/test-goal";
+
 describe("(consumer) campaign/[slug] rendering", () => {
   test("a goal-model campaign shows the progress bar, days-left, and 'Terkumpul dari'", () => {
-    render(Page, { props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } } });
+    render(Page, {
+      props: {
+        params: { slug: "test-goal" },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+      },
+    });
     expect(screen.getByText("Test Goal Campaign")).not.toBeNull();
     expect(screen.getByRole("progressbar")).not.toBeNull();
     expect(screen.getByText(/Terkumpul dari/)).not.toBeNull();
@@ -51,7 +58,10 @@ describe("(consumer) campaign/[slug] rendering", () => {
 
   test("a program-model campaign shows 'Donasi tersedia' with no progress bar and no days-left", () => {
     render(Page, {
-      props: { params: { slug: "test-program" }, data: { campaign: PROGRAM_CAMPAIGN } },
+      props: {
+        params: { slug: "test-program" },
+        data: { campaign: PROGRAM_CAMPAIGN, canonicalUrl: CANONICAL },
+      },
     });
     expect(screen.getByText("Test Program Campaign")).not.toBeNull();
     expect(screen.queryByRole("progressbar")).toBeNull();
@@ -60,18 +70,31 @@ describe("(consumer) campaign/[slug] rendering", () => {
   });
 
   test("shows a verified badge for a verified campaigner", () => {
-    render(Page, { props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } } });
+    render(Page, {
+      props: {
+        params: { slug: "test-goal" },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+      },
+    });
     expect(screen.getByText(/Terverifikasi/)).not.toBeNull();
   });
 
   test("renders the full story text", () => {
-    render(Page, { props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } } });
+    render(Page, {
+      props: {
+        params: { slug: "test-goal" },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+      },
+    });
     expect(screen.getByText("Ini adalah cerita lengkap campaign.")).not.toBeNull();
   });
 
   test("gives the disbursement log a real entry point that states the mechanism", () => {
     const { container } = render(Page, {
-      props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } },
+      props: {
+        params: { slug: "test-goal" },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+      },
     });
     const link = container.querySelector('a[href="/campaign/test-goal/pencairan-dana"]');
     expect(link).not.toBeNull();
@@ -81,8 +104,69 @@ describe("(consumer) campaign/[slug] rendering", () => {
 
   test("the donate button navigates to this campaign's donation-amount step", async () => {
     const { goto } = await import("$app/navigation");
-    render(Page, { props: { params: { slug: "test-goal" }, data: { campaign: GOAL_CAMPAIGN } } });
+    render(Page, {
+      props: {
+        params: { slug: "test-goal" },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+      },
+    });
     await fireEvent.click(screen.getByText("Donasi Sekarang"));
     expect(goto).toHaveBeenCalledWith("/campaign/test-goal/donation-amount");
+  });
+});
+
+describe("(consumer) campaign/[slug] link preview metadata", () => {
+  // A forwarded link is the most-viewed surface in this funnel and it did not
+  // exist: app.html had no og: tags, so WhatsApp rendered a grey URL chip.
+  // These assertions read document.head because <svelte:head> renders there.
+  test("emits absolute og:url and og:image, and a large-image twitter card", () => {
+    render(Page, {
+      props: {
+        params: { slug: "test-goal" },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+      },
+    });
+    const head = document.head;
+    expect(head.querySelector('meta[property="og:url"]')?.getAttribute("content")).toBe(CANONICAL);
+    expect(head.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe(CANONICAL);
+
+    const image = head.querySelector('meta[property="og:image"]')?.getAttribute("content");
+    expect(image).toBe(GOAL_CAMPAIGN.coverImageUrl);
+    // Relative URLs are resolved by the scraper, not the browser, so a
+    // non-absolute og:image silently drops the card.
+    expect(image?.startsWith("http")).toBe(true);
+
+    expect(head.querySelector('meta[name="twitter:card"]')?.getAttribute("content")).toBe(
+      "summary_large_image",
+    );
+    expect(head.querySelector('meta[property="og:locale"]')?.getAttribute("content")).toBe("id_ID");
+  });
+
+  test("the description carries the money position, not just the title again", () => {
+    render(Page, {
+      props: {
+        params: { slug: "test-goal" },
+        data: { campaign: GOAL_CAMPAIGN, canonicalUrl: CANONICAL },
+      },
+    });
+    const description = document.head
+      .querySelector('meta[property="og:description"]')
+      ?.getAttribute("content");
+    // What a forwarded card has to answer is "how far along is this".
+    expect(description).toContain("terkumpul dari");
+    expect(description).toContain("Rp");
+  });
+
+  test("falls back to a summary card when the campaign has no cover", () => {
+    render(Page, {
+      props: {
+        params: { slug: "test-goal" },
+        data: { campaign: { ...GOAL_CAMPAIGN, coverImageUrl: null }, canonicalUrl: CANONICAL },
+      },
+    });
+    expect(document.head.querySelector('meta[property="og:image"]')).toBeNull();
+    expect(document.head.querySelector('meta[name="twitter:card"]')?.getAttribute("content")).toBe(
+      "summary",
+    );
   });
 });
