@@ -950,6 +950,29 @@ describe("POST /campaigns idempotency", () => {
         body: JSON.stringify({ mode: "manual", text: "Cerita lengkap Aldi." }),
       }),
     );
+    // Covers are mandatory: same presign → PUT → answers flow as the wizard.
+    const coverPresign = await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/cover/presign`, TEST_TOKEN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileName: "sampul.jpg" }),
+      }),
+    );
+    const { uploadUrl, objectKey } = (await coverPresign.json()) as {
+      uploadUrl: string;
+      objectKey: string;
+    };
+    await fetch(uploadUrl, {
+      method: "PUT",
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 74, 70, 73, 70]),
+    });
+    await app.handle(
+      authedRequest(`http://localhost/campaign-drafts/${draft.id}/answers`, TEST_TOKEN, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ step: "sampul", answers: { coverObjectKey: objectKey } }),
+      }),
+    );
 
     const makeRequest = () =>
       app.handle(
