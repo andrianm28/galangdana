@@ -396,9 +396,15 @@ export const donationsRoute = new Elysia()
     "/donations/:id",
     async ({ user, params, set }) => {
       const [row] = await db
-        .select({ donation: donations, payment: payments })
+        .select({
+          donation: donations,
+          payment: payments,
+          campaignTitle: campaigns.title,
+          campaignSlug: campaigns.slug,
+        })
         .from(donations)
         .innerJoin(payments, eq(payments.donationId, donations.id))
+        .innerJoin(campaigns, eq(campaigns.id, donations.campaignId))
         .where(eq(donations.id, params.id));
       if (!row) {
         set.status = 404;
@@ -411,6 +417,8 @@ export const donationsRoute = new Elysia()
       return {
         id: row.donation.id,
         campaignId: row.donation.campaignId,
+        campaignTitle: row.campaignTitle,
+        campaignSlug: row.campaignSlug,
         amount: moneyToJSON({ amount: row.donation.amount, currency: row.donation.currency }),
         status: row.donation.status,
         method: row.payment.method as "bank_transfer_va" | "qris_redirect",
@@ -418,6 +426,7 @@ export const donationsRoute = new Elysia()
         redirectUrl: row.payment.redirectUrl,
         expiresAt: row.payment.expiresAt.toISOString(),
         paidAt: row.donation.paidAt?.toISOString() ?? null,
+        displayName: row.donation.displayName,
       };
     },
     {

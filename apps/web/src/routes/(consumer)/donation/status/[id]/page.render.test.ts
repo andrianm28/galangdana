@@ -13,6 +13,9 @@ function donation(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "11111111-2222-3333-4444-555555555555",
     campaignId: "c1",
+    campaignTitle: "Kampanye Uji",
+    campaignSlug: "kampanye-uji",
+    displayName: null,
     amount: { amount: "50000", currency: "IDR" as const },
     status: "pending" as Status,
     method: "bank_transfer_va" as Method,
@@ -109,7 +112,7 @@ describe("(consumer) donation/status/[id] — settled", () => {
       screen.getByText(/tidak kami cairkan sebelum penggalang melampirkan bukti/),
     ).not.toBeNull();
     expect(screen.getByText("Lihat jejak dana kampanye ini").getAttribute("href")).toBe(
-      "/campaign/c1/pencairan-dana",
+      "/campaign/kampanye-uji/pencairan-dana",
     );
   });
 
@@ -124,12 +127,38 @@ describe("(consumer) donation/status/[id] — settled", () => {
     renderPage({ status: "expired" });
     expect(screen.getByText("Batas waktu pembayaran habis")).not.toBeNull();
     expect(screen.getByText(/Tidak ada dana yang terpotong/)).not.toBeNull();
-    expect(screen.getByText("Coba lagi").getAttribute("href")).toBe("/campaign/c1");
+    expect(screen.getByText("Coba lagi").getAttribute("href")).toBe("/campaign/kampanye-uji");
   });
 
   test("a failed donation says so too", () => {
     renderPage({ status: "failed" });
     expect(screen.getByText("Pembayaran tidak selesai")).not.toBeNull();
     expect(screen.getByText(/Tidak ada dana yang terpotong/)).not.toBeNull();
+  });
+});
+
+describe("(consumer) donation/status/[id] — links out", () => {
+  test("links to the campaign by slug, because /campaign/<uuid> 404s", () => {
+    // Both links on this page used to interpolate campaignId. The route keys
+    // on slug, so a donor who had just paid met two dead links at the exact
+    // moment of most goodwill.
+    renderPage({ status: "paid", paidAt: new Date().toISOString() });
+    for (const link of Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+      expect(link.href).not.toMatch(/\/campaign\/c1(\/|$)/);
+    }
+  });
+
+  test("offers the receipt once the donation has settled", () => {
+    renderPage({ status: "paid", paidAt: new Date().toISOString() });
+    const link = screen.getByRole("link", { name: "Lihat kuitansi" });
+    expect(link.getAttribute("href")).toBe(
+      "/donation/11111111-2222-3333-4444-555555555555/kuitansi",
+    );
+  });
+
+  test("does not offer a receipt for a donation that has not settled", () => {
+    // A kuitansi for unpaid money is a forgery the platform issued itself.
+    renderPage({ status: "pending" });
+    expect(screen.queryByText("Lihat kuitansi")).toBeNull();
   });
 });
