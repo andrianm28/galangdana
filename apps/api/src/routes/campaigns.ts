@@ -34,7 +34,7 @@ import {
   individualVerifications,
 } from "@fundforindonesia/db";
 import { moneyToJSON } from "@fundforindonesia/money";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { toCampaignDetail, toCampaignSummary } from "../lib/campaign-response";
 import { getOrCreateCampaignerForUser } from "../lib/campaigner";
@@ -71,6 +71,26 @@ async function findOwnedCampaign(campaignId: string, userId: string) {
     .where(and(eq(campaigns.id, campaignId), eq(campaigns.campaignerId, campaigner.id)));
   return campaign ?? null;
 }
+
+/**
+ * The campaign states that have a public page.
+ *
+ * `active` alone was too narrow: it 404'd a campaign the moment it was paused
+ * or completed, taking its story, money block and the link to its disbursement
+ * log with it -- while `GET /campaigns/:slug/disbursements` kept serving, so
+ * the money trail survived on a page whose header did not. A campaign
+ * disappearing exactly when it is stopped is the opposite of what a proof
+ * surface is for, and a completed campaign is evidence rather than clutter.
+ *
+ * Deliberately excludes draft, pending_review, needs_revision and rejected:
+ * those were never public and must stay 404, not 403, so the route does not
+ * confirm that an unpublished slug exists.
+ */
+const PUBLISHED_STATUSES: Array<"active" | "paused" | "completed"> = [
+  "active",
+  "paused",
+  "completed",
+];
 
 export const campaignsRoute = new Elysia()
   .use(sessionDerive)
@@ -249,7 +269,7 @@ export const campaignsRoute = new Elysia()
         .from(campaigns)
         .innerJoin(campaignCategories, eq(campaigns.categoryId, campaignCategories.id))
         .innerJoin(campaigners, eq(campaigns.campaignerId, campaigners.id))
-        .where(and(eq(campaigns.slug, params.slug), eq(campaigns.status, "active")));
+        .where(and(eq(campaigns.slug, params.slug), inArray(campaigns.status, PUBLISHED_STATUSES)));
 
       if (!row) {
         set.status = 404;

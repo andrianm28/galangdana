@@ -283,6 +283,38 @@ describe("GET /campaigns/:slug", () => {
     const resp = await app.handle(new Request("http://localhost/campaigns/does-not-exist"));
     expect(resp.status).toBe(404);
   });
+
+  // A campaign that is paused or completed must keep its page. The public
+  // disbursement log has no status filter, so the money trail survives -- but
+  // this route used to require status='active', which 404'd the header, the
+  // story, the money block and the link to that log. A campaign vanishing at
+  // the moment it is stopped is the opposite of what a proof surface is for,
+  // and a completed campaign is evidence, not clutter.
+  //
+  // Unreviewed states stay hidden: draft, pending_review, needs_revision and
+  // rejected are not public and must still 404.
+  test("keeps the page for paused and completed campaigns, and reports the status", async () => {
+    for (const status of ["paused", "completed"] as const) {
+      const campaign = await createTestCampaign(TEST_TOKEN);
+      await db.update(campaigns).set({ status }).where(eq(campaigns.id, campaign.id));
+
+      const resp = await app.handle(new Request(`http://localhost/campaigns/${campaign.slug}`));
+      expect(resp.status).toBe(200);
+      const body = (await resp.json()) as { slug: string; status: string };
+      expect(body.slug).toBe(campaign.slug);
+      expect(body.status).toBe(status);
+    }
+  });
+
+  test("still 404s for campaigns that were never published", async () => {
+    for (const status of ["draft", "pending_review", "needs_revision", "rejected"] as const) {
+      const campaign = await createTestCampaign(TEST_TOKEN);
+      await db.update(campaigns).set({ status }).where(eq(campaigns.id, campaign.id));
+
+      const resp = await app.handle(new Request(`http://localhost/campaigns/${campaign.slug}`));
+      expect(resp.status).toBe(404);
+    }
+  });
 });
 
 describe("POST /campaigns", () => {

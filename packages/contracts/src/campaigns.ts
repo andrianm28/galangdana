@@ -37,6 +37,11 @@ export const CampaignSummarySchema = Type.Object({
   category: CampaignCategorySchema,
   campaigner: CampaignerSchema,
   model: Type.Union([Type.Literal("goal"), Type.Literal("program")]),
+  // Exposed so a consumer can tell a running campaign from one that has been
+  // paused or has completed. Only the publicly-visible states appear here:
+  // GET /campaigns/:slug serves active, paused and completed and 404s the rest,
+  // so draft/pending_review/needs_revision/rejected can never reach a client.
+  status: Type.Union([Type.Literal("active"), Type.Literal("paused"), Type.Literal("completed")]),
   goalAmount: Type.Union([MoneyJSONSchema, Type.Null()]),
   collectedAmount: MoneyJSONSchema,
   availableAmount: MoneyJSONSchema,
