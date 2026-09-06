@@ -47,6 +47,13 @@ export function isObservabilityActive(): boolean {
   return active;
 }
 
+// Only 5xx reaches Sentry. 4xx (bad input, unknown slugs, scanner
+// probes, throttled clients) is routine traffic with a mapped response
+// body -- reporting it would bury real server faults in noise.
+export function isReportableError(status: number): boolean {
+  return status >= 500;
+}
+
 // Forwards to Sentry when active, otherwise a safe no-op. Callers keep
 // their existing console logging; this only adds the remote report.
 export function captureApiError(err: unknown, context?: Record<string, unknown>): void {
