@@ -1,5 +1,6 @@
 import { cors } from "@elysiajs/cors";
 import { Elysia } from "elysia";
+import { initObservability, withRequestLogging } from "./lib/observability";
 import { withApiResponseMapping } from "./response-mapper";
 import { adminRoute } from "./routes/admin";
 import { authRoute } from "./routes/auth";
@@ -19,7 +20,16 @@ import { searchRoute } from "./routes/search";
 // codes, and real Response objects returned directly from handlers -- see
 // response-mapper.ts (shared with response-mapper.test.ts, so the two can
 // never silently drift apart).
-export const app = withApiResponseMapping(new Elysia())
+// withRequestLogging wraps (not .use()s -- see observability.ts for why a
+// mounted plugin's after-hooks never fire) so every route gets exactly one
+// JSON access-log line. Order matters: the logger's onError must be
+// registered BEFORE the response-mapper's, because Elysia stops the onError
+// pipeline at the first hook that returns a body -- the mapper returns one,
+// so a logger registered after it would never see error requests (verified
+// empirically: error requests produced zero log lines until this swap).
+// Sentry init is a no-op without SENTRY_DSN.
+const observabilityOn = initObservability();
+export const app = withApiResponseMapping(withRequestLogging(new Elysia()))
   // credentials: true + a specific origin (not `*`) is required for the
   // browser to actually attach the session cookie to a cross-origin
   // request -- verified directly against this repo's real elysia@1.1.26 +

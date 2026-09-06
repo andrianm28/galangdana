@@ -122,6 +122,54 @@ services:
       timeout: 5s
       retries: 10
 
+  glitchtip:
+    image: glitchtip/glitchtip:latest
+    # Self-hosted Sentry-protocol error tracking (the "hemat" choice: no SaaS
+    # account, data stays on this host). Reuses the existing postgres (own
+    # `glitchtip` database, created once via psql -- the container only
+    # auto-creates POSTGRES_DB on first volume init) and redis (db index 1,
+    # keeping the rate-limit keys on db 0 untouched). Like every other
+    # service here, published on 127.0.0.1 only; the API reaches it at
+    # localhost:8080 and humans via SSH tunnel, no nginx exposure needed.
+    environment:
+      DATABASE_URL: postgres://fundforindonesia:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/glitchtip # ggignore
+      REDIS_URL: redis://redis:6379/1
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?set GLITCHTIP_SECRET_KEY in .env}
+      PORT: "8080"
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # No wget/curl in this image (only python3) -- verified via exec.
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  glitchtip-worker:
+    image: glitchtip/glitchtip:latest
+    # Consumes the event queue ( accepted 200s are only queued by the web
+    # role above -- without this, envelopes return 200 but no issue ever
+    # appears). Same env as glitchtip; no ports published, needs nothing
+    # but postgres + redis.
+    environment:
+      SERVER_ROLE: worker
+      DATABASE_URL: postgres://fundforindonesia:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/glitchtip # ggignore
+      REDIS_URL: redis://redis:6379/1
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?set GLITCHTIP_SECRET_KEY in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
   miniodata:
