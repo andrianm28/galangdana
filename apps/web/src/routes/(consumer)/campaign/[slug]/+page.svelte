@@ -1,6 +1,7 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import SeoHead from "$lib/SeoHead.svelte";
+import { api } from "$lib/api-client";
 import { formatMoney, moneyFromJSON } from "@fundforindonesia/money";
 import { Badge, Button, Card, LedgerTicks } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
@@ -11,6 +12,55 @@ function donate() {
   goto(`/campaign/${data.campaign.slug}/donation-amount`);
 }
 const campaign = $derived(data.campaign);
+
+// Local prayer list, seeded from the load: a successful submit prepends
+// without a full reload (the load's list is the fallback on revisit).
+// Defaults keep older render tests (which only pass campaign data) green.
+let prayers = $state(data.prayers ?? []);
+let prayerCount = $state(data.prayerCount ?? 0);
+let prayerName = $state("");
+let prayerMessage = $state("");
+let prayerSending = $state(false);
+let prayerError: string | null = $state(null);
+
+async function submitPrayer(e: SubmitEvent) {
+  e.preventDefault();
+  if (!prayerMessage.trim()) {
+    prayerError = "Tulis doanya terlebih dahulu.";
+    return;
+  }
+  prayerError = null;
+  prayerSending = true;
+  // biome-ignore lint/suspicious/noExplicitAny: Eden merged-param-name cast, same as revise page
+  const { data: result, error: apiError } = await ((api as any)
+    .campaigns({
+      id: data.campaign.id,
+    })
+    .prayers.post({
+      name: prayerName.trim() || undefined,
+      message: prayerMessage.trim(),
+    }) as Promise<{ data: { id: string } | null; error: { status: number } | null }>);
+  prayerSending = false;
+  if (apiError || !result) {
+    prayerError =
+      apiError?.status === 429
+        ? "Terlalu banyak doa terkirim. Coba lagi nanti."
+        : "Gagal mengirim doa. Silakan coba lagi.";
+    return;
+  }
+  prayers = [
+    {
+      id: result.id,
+      displayName: prayerName.trim() || "Orang Baik",
+      message: prayerMessage.trim(),
+      createdAt: new Date().toISOString(),
+    },
+    ...prayers,
+  ];
+  prayerCount += 1;
+  prayerName = "";
+  prayerMessage = "";
+}
 
 const collected = $derived(moneyFromJSON(campaign.collectedAmount));
 const available = $derived(moneyFromJSON(campaign.availableAmount));
@@ -126,4 +176,65 @@ const daysLeft = $derived.by(() => {
       buktinya ada.
     </span>
   </a>
+
+  <section id="doa" aria-label="Doa untuk campaign ini" class="rounded-md border border-neutral-200 bg-white p-4">
+    <h2 class="font-sans text-base font-semibold text-neutral-900">
+      Doa ({prayerCount})
+    </h2>
+
+    <form
+      class="mt-3 space-y-2"
+      onsubmit={submitPrayer}
+    >
+      {#if prayerError}
+        <p class="font-sans text-sm text-error">{prayerError}</p>
+      {/if}
+      <div>
+        <label for="prayer-name" class="mb-1 block font-sans text-sm font-medium text-neutral-900">
+          Nama (opsional)
+        </label>
+        <input
+          id="prayer-name"
+          type="text"
+          maxlength={100}
+          bind:value={prayerName}
+          placeholder="Orang Baik"
+          class="w-full rounded-sm border border-neutral-200 px-3 py-2 font-sans text-sm"
+        />
+      </div>
+      <div>
+        <label for="prayer-message" class="mb-1 block font-sans text-sm font-medium text-neutral-900">
+          Doa Anda
+        </label>
+        <textarea
+          id="prayer-message"
+          rows="2"
+          maxlength={280}
+          bind:value={prayerMessage}
+          placeholder="Tulis doa terbaik Anda…"
+          class="w-full rounded-sm border border-neutral-200 px-3 py-2 font-sans text-sm"
+        ></textarea>
+      </div>
+      <Button type="submit" disabled={prayerSending}>Kirim Doa</Button>
+    </form>
+
+    {#if prayers.length > 0}
+      <ul class="mt-4 space-y-3">
+        {#each prayers as prayer (prayer.id)}
+          <li class="border-t border-neutral-100 pt-3">
+            <p class="font-sans text-sm text-neutral-900">{prayer.message}</p>
+            <p class="mt-1 font-sans text-xs text-neutral-500">
+              {prayer.displayName} · {new Date(prayer.createdAt).toLocaleDateString("id-ID", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            </p>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <p class="mt-3 font-sans text-sm text-neutral-500">Belum ada doa. Jadilah yang pertama.</p>
+    {/if}
+  </section>
 </div>

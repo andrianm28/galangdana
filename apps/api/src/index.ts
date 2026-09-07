@@ -12,6 +12,7 @@ import { disbursementsRoute } from "./routes/disbursements";
 import { donationsRoute } from "./routes/donations";
 import { healthRoute } from "./routes/health";
 import { helpRoute } from "./routes/help";
+import { prayersRoute } from "./routes/prayers";
 import { searchRoute } from "./routes/search";
 
 // Every response body is run through the BigInt-safe serializer, so no
@@ -50,7 +51,8 @@ export const app = withApiResponseMapping(withRequestLogging(new Elysia()))
   .use(helpRoute)
   .use(donationsRoute)
   .use(bankAccountsRoute)
-  .use(disbursementsRoute);
+  .use(disbursementsRoute)
+  .use(prayersRoute);
 
 export type App = typeof app;
 

@@ -20,4 +20,5 @@ export * from "./beneficiaries";
 export * from "./individual-verifications";
 export * from "./help-articles";
 export * from "./notifications-outbox";
+export * from "./prayers";
 export * from "./support-tickets";

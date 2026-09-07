@@ -308,3 +308,32 @@ export const MyCampaignsResponseSchema = Type.Object({
     }),
   ),
 });
+
+// Public prayer messages on a campaign. Written by anyone (no account
+// needed), published immediately; abuse is removed reactively, not queued.
+export const PrayerSchema = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  displayName: Type.String(),
+  message: Type.String(),
+  createdAt: Type.String({ format: "date-time" }),
+});
+export type PrayerResponse = Static<typeof PrayerSchema>;
+
+export const PrayerListQuerySchema = Type.Object({
+  limit: Type.Optional(Type.Number({ minimum: 1, maximum: 50 })),
+});
+export const PrayerListResponseSchema = Type.Object({
+  prayers: Type.Array(PrayerSchema),
+  totalCount: Type.Number(),
+});
+export type PrayerListResponse = Static<typeof PrayerListResponseSchema>;
+
+export const SubmitPrayerBodySchema = Type.Object({
+  name: Type.Optional(Type.String({ maxLength: 100 })),
+  message: Type.String({ minLength: 1, maxLength: 280 }),
+  donationId: Type.Optional(Type.String({ format: "uuid" })),
+});
+export const SubmitPrayerResponseSchema = Type.Object({
+  id: Type.String({ format: "uuid" }),
+});
+export type SubmitPrayerResponse = Static<typeof SubmitPrayerResponseSchema>;
