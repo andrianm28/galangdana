@@ -218,7 +218,7 @@ jobs:
           "
 
       # Task 6's apps/api/src/routes/campaigns.test.ts asserts against the
-      # real seed fixture data (8 campaigns, the "zakat" category, etc.) --
+      # real seed fixture data (8 campaigns, the "kemanusiaan" category, etc.) --
       # it needs that data to already exist. `bun test`'s file-execution
       # order is NOT the order these directories are listed in below (it
       # runs "apps/..." files before "packages/..." files, confirmed by

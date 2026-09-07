@@ -332,7 +332,7 @@ describe("GET /campaigns/:slug", () => {
 
   test("a program-model campaign has a null goalAmount/expiresAt and a nonzero availableAmount", async () => {
     const resp = await app.handle(
-      new Request("http://localhost/campaigns/program-amil-zakat-mitra"),
+      new Request("http://localhost/campaigns/pangan-keluarga-prasejahtera"),
     );
     const body = (await resp.json()) as {
       model: string;
