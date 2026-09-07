@@ -2,7 +2,7 @@
 import { goto } from "$app/navigation";
 import SeoHead from "$lib/SeoHead.svelte";
 import { formatMoney, moneyFromJSON } from "@fundforindonesia/money";
-import { Badge, Button, Card } from "@fundforindonesia/ui";
+import { Badge, Button, Card, LedgerTicks } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
@@ -45,7 +45,7 @@ const daysLeft = $derived.by(() => {
 </script>
 
 
-<div class="flex flex-col gap-4">
+<div class="flex flex-col gap-4 md:gap-6">
   <SeoHead
     title={shareTitle}
     description={shareDescription}
@@ -53,56 +53,63 @@ const daysLeft = $derived.by(() => {
     image={campaign.coverImageUrl}
     imageAlt={campaign.title}
   />
-  {#if campaign.coverImageUrl}
-    <img
-      src={campaign.coverImageUrl}
-      alt={campaign.title}
-      class="aspect-[4/3] w-full rounded-md object-cover"
-    />
-  {:else}
-    <div
-      class="flex aspect-[4/3] w-full items-center justify-center rounded-md bg-neutral-100 px-4 text-center"
-    >
-      <span class="font-sans text-sm text-neutral-500">{campaign.category.title}</span>
-    </div>
-  {/if}
 
-  <Badge variant="neutral">{campaign.category.title}</Badge>
-  <h1 class="font-sans text-xl font-bold text-neutral-900">{campaign.title}</h1>
-  <p class="font-sans text-sm text-neutral-600">
-    Digalang oleh <span class="font-medium">{campaign.campaigner.displayName}</span>
-    {#if campaign.campaigner.verified}
-      <span class="text-primary">&middot; Terverifikasi</span>
-    {/if}
-  </p>
-
-  <Card>
-    <div>
-      {#if campaign.model === "goal"}
-        <div
-          role="progressbar"
-          aria-valuenow={progressPercent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          class="h-2 w-full overflow-hidden rounded-full bg-neutral-100"
-        >
-          <div class="h-full rounded-full bg-primary" style="width: {progressPercent}%"></div>
-        </div>
-        <p class="mt-3 font-sans text-lg font-bold text-neutral-900">{formatMoney(collected)}</p>
-        <p class="font-sans text-sm text-neutral-600">Terkumpul dari {formatMoney(goal ?? collected)}</p>
-        {#if daysLeft !== null}
-          <p class="mt-2 font-sans text-sm text-neutral-600">{daysLeft} hari lagi</p>
-        {/if}
-      {:else}
-        <p class="font-sans text-lg font-bold text-neutral-900">{formatMoney(available)}</p>
-        <p class="font-sans text-sm text-neutral-600">Donasi tersedia</p>
-      {/if}
-      <p class="mt-2 font-sans text-sm text-neutral-600">{campaign.donationCount} donasi</p>
-      <div class="mt-4 flex">
-        <Button onclick={donate} size="lg">Donasi Sekarang</Button>
+  <div class="grid gap-4 md:grid-cols-[1.3fr_1fr] md:gap-6">
+    {#if campaign.coverImageUrl}
+      <img
+        src={campaign.coverImageUrl}
+        alt={campaign.title}
+        class="aspect-[4/3] w-full rounded-md object-cover md:aspect-[21/9]"
+      />
+    {:else}
+      <div
+        class="flex aspect-[4/3] w-full items-center justify-center rounded-md bg-neutral-100 px-4 text-center md:aspect-[21/9]"
+      >
+        <span class="font-sans text-sm text-neutral-500">{campaign.category.title}</span>
       </div>
-    </div>
-  </Card>
+    {/if}
+
+    <Card>
+      <div class="flex h-full flex-col">
+        <Badge variant="neutral">{campaign.category.title}</Badge>
+        <h1 class="mt-2 font-sans text-xl font-bold text-neutral-900">{campaign.title}</h1>
+        <p class="mt-1 font-sans text-sm text-neutral-600">
+          Digalang oleh <span class="font-medium">{campaign.campaigner.displayName}</span>
+          {#if campaign.campaigner.verified}
+            <span class="text-primary">&middot; Terverifikasi</span>
+          {/if}
+        </p>
+
+        <div class="mt-4">
+          {#if campaign.model === "goal"}
+            <div
+              role="progressbar"
+              aria-valuenow={progressPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              class="h-2 w-full overflow-hidden rounded-full bg-neutral-100"
+            >
+              <div class="h-full rounded-full bg-primary" style="width: {progressPercent}%"></div>
+            </div>
+            <LedgerTicks />
+            <p class="mt-3 font-sans text-lg font-bold text-neutral-900">{formatMoney(collected)}</p>
+            <p class="font-sans text-sm text-neutral-600">Terkumpul dari {formatMoney(goal ?? collected)}</p>
+            {#if daysLeft !== null}
+              <p class="mt-2 font-sans text-sm text-neutral-600">{daysLeft} hari lagi</p>
+            {/if}
+          {:else}
+            <p class="font-mono text-lg font-bold text-neutral-900">{formatMoney(available)}</p>
+            <p class="font-sans text-sm text-neutral-600">Donasi tersedia</p>
+          {/if}
+          <p class="mt-2 font-sans text-sm text-neutral-600">{campaign.donationCount} donasi</p>
+        </div>
+
+        <div class="mt-4 flex">
+          <Button onclick={donate} size="lg">Donasi Sekarang</Button>
+        </div>
+      </div>
+    </Card>
+  </div>
 
   <div class="font-sans text-neutral-900">
     <h2 class="mb-2 text-lg font-semibold">Cerita Campaign</h2>
