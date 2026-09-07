@@ -29,7 +29,7 @@ const GOAL_CAMPAIGN = {
 const PROGRAM_CAMPAIGN = {
   ...GOAL_CAMPAIGN,
   slug: "test-program-campaign",
-  title: "Program Zakat Berkelanjutan",
+  title: "Program Air Bersih Berkelanjutan",
   model: "program" as const,
   goalAmount: null,
   expiresAt: null,
@@ -49,7 +49,7 @@ describe("CampaignListCard", () => {
   // unbranched version would render a bogus 0% bar and "Sisa hari NaN".
   test("a program-model campaign shows no progress bar and no 'Sisa hari' line", () => {
     render(CampaignListCard, { props: { campaign: PROGRAM_CAMPAIGN } });
-    expect(screen.getByText("Program Zakat Berkelanjutan")).not.toBeNull();
+    expect(screen.getByText("Program Air Bersih Berkelanjutan")).not.toBeNull();
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.queryByText(/Sisa hari/)).toBeNull();
     expect(screen.getByText(/Donasi tersedia/)).not.toBeNull();
