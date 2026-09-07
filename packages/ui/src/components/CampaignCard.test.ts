@@ -86,4 +86,23 @@ describe("CampaignCard", () => {
     const link = container.querySelector("a");
     expect(link?.getAttribute("href")).toBe("/campaign/test-goal-campaign");
   });
+
+  test("a goal-model campaign shows the Ledger Line milestone ticks under the progress bar", () => {
+    const { container } = render(CampaignCard, { props: { campaign: GOAL_CAMPAIGN } });
+    expect(container.querySelectorAll('[data-testid="ledger-tick"]').length).toBe(3);
+  });
+
+  test("a program-model campaign shows no Ledger Line ticks (there is no goal to mark milestones against)", () => {
+    const { container } = render(CampaignCard, { props: { campaign: PROGRAM_CAMPAIGN } });
+    expect(container.querySelectorAll('[data-testid="ledger-tick"]').length).toBe(0);
+  });
+
+  test("a program-model campaign's available amount renders in the mono register", () => {
+    const { container } = render(CampaignCard, { props: { campaign: PROGRAM_CAMPAIGN } });
+    const amount = screen.getByText("Rp200.000.000");
+    expect(amount.className).toContain("font-mono");
+    // Never the general UI font for this figure -- it's a stated fact, not a
+    // headline, and the Record register is what marks that distinction.
+    expect(container.querySelector('[data-testid="ledger-tick"]')).toBeNull();
+  });
 });
