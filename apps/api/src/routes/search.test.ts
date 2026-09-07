@@ -29,4 +29,13 @@ describe("GET /search", () => {
     const resp = await app.handle(new Request("http://localhost/search"));
     expect(resp.status).toBe(422); // TypeBox validation failure on the required, minLength:1 `q` field
   });
+
+  // zakat/wakaf were cut from the product and their categories archived
+  // (isActive: false), not deleted -- this same unfiltered slug->id lookup
+  // pattern as GET /campaigns's category filter exists here too, so without
+  // filtering on isActive an archived category would still work via search.
+  test("404s when filtering by an archived category slug", async () => {
+    const resp = await app.handle(new Request("http://localhost/search?q=a&category=zakat"));
+    expect(resp.status).toBe(404);
+  });
 });

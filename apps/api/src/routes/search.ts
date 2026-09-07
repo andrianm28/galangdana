@@ -1,4 +1,8 @@
-import { SearchQuerySchema, SearchResponseSchema } from "@fundforindonesia/contracts";
+import {
+  CampaignErrorSchema,
+  SearchQuerySchema,
+  SearchResponseSchema,
+} from "@fundforindonesia/contracts";
 import { campaignCategories, campaigners, campaigns, db } from "@fundforindonesia/db";
 import { searchCampaigns } from "@fundforindonesia/search";
 import { and, eq, inArray } from "drizzle-orm";
@@ -7,14 +11,25 @@ import { toCampaignSummary } from "../lib/campaign-response";
 
 export const searchRoute = new Elysia().get(
   "/search",
-  async ({ query }) => {
+  async ({ query, set }) => {
     let categoryId: number | undefined;
     if (query.category) {
+      // Same isActive filter as GET /campaigns's slug->id lookup: an
+      // archived category (e.g. zakat/wakaf) must 404 below, not silently
+      // resolve to an id and search with it -- without this filter an
+      // archived slug would still work via search even though it's gone
+      // from /categories and from GET /campaigns.
       const [category] = await db
         .select()
         .from(campaignCategories)
-        .where(eq(campaignCategories.slug, query.category));
-      categoryId = category?.id;
+        .where(
+          and(eq(campaignCategories.slug, query.category), eq(campaignCategories.isActive, true)),
+        );
+      if (!category) {
+        set.status = 404;
+        return { error: "category_not_found" };
+      }
+      categoryId = category.id;
     }
 
     const hits = await searchCampaigns(query.q, { categoryId });
@@ -55,5 +70,8 @@ export const searchRoute = new Elysia().get(
     const results = await Promise.all(orderedRows.map(toCampaignSummary));
     return { results, query: query.q };
   },
-  { query: SearchQuerySchema, response: { 200: SearchResponseSchema } },
+  {
+    query: SearchQuerySchema,
+    response: { 200: SearchResponseSchema, 404: CampaignErrorSchema },
+  },
 );
