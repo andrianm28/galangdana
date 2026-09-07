@@ -101,7 +101,16 @@ const { data }: PageProps = $props();
   {/snippet}
 
   {#if data.categories.length > 0}
-    <div class="flex gap-2 overflow-x-auto md:flex-wrap">
+    <!--
+      Bleeds to the viewport edge below md, the same way the urgent carousel
+      does: the layout's main is px-4 sm:px-6, and a scrolling row that stops
+      at that padding reads as clipped rather than as scrollable. The negative
+      margin is cancelled at md, where the row wraps inside the container
+      instead of scrolling and would otherwise overhang it.
+    -->
+    <div
+      class="-mx-4 flex gap-2 overflow-x-auto px-4 sm:-mx-6 sm:px-6 md:mx-0 md:flex-wrap md:px-0"
+    >
       {#each data.categories as category (category.slug)}
         <CategoryChip href="/explore/{category.slug}" label={category.title} />
       {/each}
