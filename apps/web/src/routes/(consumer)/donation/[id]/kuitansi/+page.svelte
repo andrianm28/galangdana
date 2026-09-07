@@ -68,20 +68,20 @@ const donorName = $derived(donation.displayName?.trim() || "Sesama (tanpa nama)"
     <dl class="flex flex-col gap-3 py-5">
       <div class="flex flex-col gap-0.5">
         <dt class="font-sans text-xs uppercase tracking-wide text-neutral-500">Telah diterima dari</dt>
-        <dd class="font-sans text-base text-neutral-900">{donorName}</dd>
+        <dd class="font-serif text-base text-ink">{donorName}</dd>
       </div>
 
       <div class="flex flex-col gap-0.5">
         <dt class="font-sans text-xs uppercase tracking-wide text-neutral-500">Sejumlah</dt>
-        <dd class="font-sans text-2xl font-bold tabular-nums text-neutral-900">{amount}</dd>
-        <dd class="font-sans text-sm italic text-neutral-700">
+        <dd class="font-mono text-2xl font-bold tabular-nums text-ink">{amount}</dd>
+        <dd class="font-serif text-sm italic text-neutral-700">
           Terbilang: {inWords}
         </dd>
       </div>
 
       <div class="flex flex-col gap-0.5">
         <dt class="font-sans text-xs uppercase tracking-wide text-neutral-500">Untuk kampanye</dt>
-        <dd class="font-sans text-base text-neutral-900">{donation.campaignTitle}</dd>
+        <dd class="font-serif text-base text-ink">{donation.campaignTitle}</dd>
       </div>
 
       <div class="grid gap-3 sm:grid-cols-2">
@@ -120,6 +120,17 @@ const donorName = $derived(donation.displayName?.trim() || "Sesama (tanpa nama)"
       <p class="mt-3 font-sans text-xs text-neutral-500">
         Diterbitkan otomatis oleh sistem. Sah tanpa tanda tangan.
       </p>
+      <!--
+        The Ledger Line's third and last sanctioned appearance -- see
+        docs/design/2026-09-06-visual-redesign-plan.md's Signature section.
+        A plain hairline with a single node, not a repeating pattern: this
+        is a closing mark, not a connector between multiple entries the way
+        it is on pencairan-dana.
+      -->
+      <div class="relative mt-3 h-3 print:hidden" aria-hidden="true">
+        <div class="absolute inset-x-0 top-1.5 h-px bg-ledger opacity-50"></div>
+        <div class="absolute left-0 top-0.5 size-2 rounded-full bg-ledger"></div>
+      </div>
     </footer>
   </article>
 </div>
