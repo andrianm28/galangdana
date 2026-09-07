@@ -27,7 +27,10 @@ const progressPercent = $derived.by(() => {
 });
 </script>
 
-<a href="/campaign/{campaign.slug}" class="block">
+<a
+  href="/campaign/{campaign.slug}"
+  class="block transition-transform duration-100 active:scale-[0.98]"
+>
   <Card padded={false}>
     <div class="overflow-hidden rounded-t-md">
       {#if campaign.coverImageUrl}

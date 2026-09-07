@@ -13,3 +13,21 @@
 body {
   @apply bg-neutral-50 text-neutral-900 font-sans;
 }
+
+/* Reset transitions and scroll-behaviour only -- do NOT add animation-duration
+   or animation-iteration-count here. The boilerplate version of this snippet
+   that circulates everywhere resets those too, but this codebase has exactly
+   two legitimate loading-spinner animations that depend on animate-spin
+   continuing to iterate: Spinner.svelte and Button.svelte's loading state.
+   Freezing them under prefers-reduced-motion would make a spinning indicator
+   look hung instead of loading, which is worse than the motion it would be
+   "fixing". */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

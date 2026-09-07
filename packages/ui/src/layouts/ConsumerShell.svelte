@@ -100,7 +100,7 @@ const NAV = [
             <li>
               <a
                 href={item.href}
-                class="font-sans text-sm text-neutral-600 hover:text-primary-dark hover:underline"
+                class="font-sans text-sm text-neutral-600 transition-colors duration-150 hover:text-primary-dark hover:underline"
               >
                 {item.label}
               </a>
