@@ -127,10 +127,17 @@ export const campaignsRoute = new Elysia()
 
       const conditions = [eq(campaigns.status, "active")];
       if (query.category) {
+        // An archived category (isActive: false -- e.g. zakat/wakaf) falls
+        // into the same category_not_found branch as an unknown slug: it is
+        // gone from the product, not just hidden from /categories, so a
+        // filter naming it should 404 rather than silently return the
+        // (empty, but real) set of campaigns still FK'd to it.
         const [category] = await db
           .select()
           .from(campaignCategories)
-          .where(eq(campaignCategories.slug, query.category));
+          .where(
+            and(eq(campaignCategories.slug, query.category), eq(campaignCategories.isActive, true)),
+          );
         if (!category) {
           set.status = 404;
           return { error: "category_not_found" };

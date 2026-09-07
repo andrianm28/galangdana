@@ -34,6 +34,13 @@ export const campaignStatusEnum = pgEnum("campaign_status", [
   "rejected",
 ]);
 
+// Vestigial: all 608 production rows are "donation" and this column is read
+// nowhere in the codebase (verified by search -- the campaign's category and
+// model, not this type, drive every behavioral difference). The zakat/wakaf
+// values predate the product cut of those verticals; the enum is left
+// unnarrowed rather than migrated, since narrowing a pgEnum requires
+// recreating the type/column for no behavioral gain when nothing reads it.
+// Do not add new campaigns.type = "zakat" | "wakaf" rows.
 export const campaignTypeEnum = pgEnum("campaign_type", ["donation", "zakat", "wakaf"]);
 
 export const campaigns = pgTable(

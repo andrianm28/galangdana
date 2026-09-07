@@ -169,6 +169,13 @@
       "when": 1788719627158,
       "tag": "0023_sparkling_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788764008544,
+      "tag": "0024_robust_thunderbolt",
+      "breakpoints": true
     }
   ]
 }

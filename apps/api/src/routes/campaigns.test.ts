@@ -246,13 +246,26 @@ describe("GET /campaigns", () => {
   });
 
   test("filters by category slug", async () => {
-    const resp = await app.handle(new Request("http://localhost/campaigns?category=zakat"));
+    // Was category=zakat -- switched to rumah-ibadah (an ordinary,
+    // never-archived category with its own seeded campaign) rather than to
+    // whatever category the renamed zakat fixture ends up in, so this
+    // generic filter test doesn't depend on that fixture's specific story.
+    const resp = await app.handle(new Request("http://localhost/campaigns?category=rumah-ibadah"));
     expect(resp.status).toBe(200);
     const body = (await resp.json()) as { campaigns: Array<{ category: { slug: string } }> };
     expect(body.campaigns.length).toBeGreaterThan(0);
     for (const c of body.campaigns) {
-      expect(c.category.slug).toBe("zakat");
+      expect(c.category.slug).toBe("rumah-ibadah");
     }
+  });
+
+  // zakat/wakaf were cut from the product and their categories archived
+  // (isActive: false) rather than deleted, so an archived slug must 404 the
+  // same way an unknown one does -- not silently return the empty set of
+  // campaigns still FK'd to it.
+  test("404s when filtering by an archived category slug", async () => {
+    const resp = await app.handle(new Request("http://localhost/campaigns?category=zakat"));
+    expect(resp.status).toBe(404);
   });
 
   test("sort=newest orders by publishedAt descending", async () => {
