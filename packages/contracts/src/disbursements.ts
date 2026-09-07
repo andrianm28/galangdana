@@ -156,8 +156,30 @@ export const PublicDisbursementLogResponseSchema = Type.Object({
   disbursements: Type.Array(PublicDisbursementLogItemSchema),
 });
 
+export const PublicDisbursementFeedQuerySchema = Type.Object({
+  limit: Type.Optional(Type.Number({ minimum: 1, maximum: 50 })),
+});
+
+// Same as PublicDisbursementLogItemSchema (GET /campaigns/:slug/disbursements),
+// plus which campaign each row belongs to -- that endpoint never needed it
+// (the slug is already in the URL it's nested under), but this platform-wide
+// feed has no such context, and a row with an amount and a proof state but no
+// way to reach the campaign it came from would be a dead end for the reader.
+export const PublicDisbursementFeedItemSchema = Type.Composite([
+  PublicDisbursementLogItemSchema,
+  Type.Object({
+    campaignSlug: Type.String(),
+    campaignTitle: Type.String(),
+  }),
+]);
+
+export const PublicDisbursementFeedResponseSchema = Type.Object({
+  disbursements: Type.Array(PublicDisbursementFeedItemSchema),
+});
+
 export type AdminDisbursementDetailResponse = Static<typeof AdminDisbursementDetailSchema>;
 export type AdminDisbursementListResponse = Static<typeof AdminDisbursementListResponseSchema>;
 export type BankAccountListResponse = Static<typeof BankAccountListResponseSchema>;
 export type DisbursementDetailResponse = Static<typeof DisbursementDetailSchema>;
 export type PublicDisbursementLogResponse = Static<typeof PublicDisbursementLogResponseSchema>;
+export type PublicDisbursementFeedResponse = Static<typeof PublicDisbursementFeedResponseSchema>;

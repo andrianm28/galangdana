@@ -9,6 +9,8 @@ import {
   DisbursementErrorSchema,
   PresignDisbursementProofBodySchema,
   PresignDisbursementProofResponseSchema,
+  PublicDisbursementFeedQuerySchema,
+  PublicDisbursementFeedResponseSchema,
   RequestDisbursementOtpResponseSchema,
   SaveDisbursementBankAccountBodySchema,
   SaveDisbursementDetailBodySchema,
@@ -26,7 +28,7 @@ import {
 } from "@fundforindonesia/db";
 import { moneyToJSON } from "@fundforindonesia/money";
 import { MockPaymentProvider } from "@fundforindonesia/payments";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { requestOtp, verifyOtp } from "../auth/otp";
 import { checkAdmin } from "../lib/admin";
@@ -101,6 +103,15 @@ export async function computeWithdrawableAmount(
 
   return campaign.collectedAmount - totalFees - campaign.disbursedAmount - pending;
 }
+
+// Same published set as GET /campaigns/:slug (see campaigns.ts
+// PUBLISHED_STATUSES): the public feed below must not surface a disbursement
+// belonging to a campaign that has no public page of its own.
+const PUBLISHED_STATUSES: Array<"active" | "paused" | "completed"> = [
+  "active",
+  "paused",
+  "completed",
+];
 
 async function findOwnedCampaignForDisbursement(campaignId: string, userId: string) {
   const [campaigner] = await db
@@ -404,6 +415,58 @@ export const disbursementsRoute = new Elysia()
         409: DisbursementErrorSchema,
         422: DisbursementErrorSchema,
       },
+    },
+  )
+  .get(
+    "/disbursements/public",
+    async ({ query }) => {
+      const limit = Math.min(query.limit ?? 20, 50);
+      const rows = await db
+        .select({
+          type: disbursementRequests.type,
+          amount: disbursementRequests.amount,
+          currency: disbursementRequests.currency,
+          narrative: disbursementRequests.narrative,
+          approvedAt: disbursementRequests.approvedAt,
+          paidAt: disbursementRequests.paidAt,
+          proofObjectKey: disbursementRequests.proofObjectKey,
+          campaignSlug: campaigns.slug,
+          campaignTitle: campaigns.title,
+        })
+        .from(disbursementRequests)
+        .innerJoin(campaigns, eq(disbursementRequests.campaignId, campaigns.id))
+        .where(
+          and(
+            eq(disbursementRequests.status, "paid"),
+            inArray(campaigns.status, PUBLISHED_STATUSES),
+          ),
+        )
+        .orderBy(desc(disbursementRequests.paidAt))
+        .limit(limit);
+      return {
+        disbursements: rows.map((row) => ({
+          // biome-ignore lint/style/noNonNullAssertion: status "paid" implies these are set
+          type: row.type!,
+          // biome-ignore lint/style/noNonNullAssertion: status "paid" implies these are set
+          amount: moneyToJSON({ amount: row.amount!, currency: row.currency! }),
+          narrative: row.narrative ?? "",
+          approvedAt: row.approvedAt?.toISOString() ?? null,
+          // biome-ignore lint/style/noNonNullAssertion: status "paid" implies paidAt is set
+          paidAt: row.paidAt!.toISOString(),
+          // Same derivation as GET /campaigns/:slug/disbursements (see
+          // campaigns.ts's proofState line) -- duplicated locally rather than
+          // imported since this route must not depend on that file.
+          proofState: (row.proofObjectKey ? "ada_tertutup" : "belum_ada") as
+            | "ada_tertutup"
+            | "belum_ada",
+          campaignSlug: row.campaignSlug,
+          campaignTitle: row.campaignTitle,
+        })),
+      };
+    },
+    {
+      query: PublicDisbursementFeedQuerySchema,
+      response: { 200: PublicDisbursementFeedResponseSchema },
     },
   )
   .get(
