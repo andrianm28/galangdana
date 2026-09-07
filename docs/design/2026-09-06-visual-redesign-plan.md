@@ -57,6 +57,8 @@ One motif, used in exactly three places, always meaning the same thing — *this
 
 It never appears on navigation, buttons, or anything decorative. The discipline is the point: the moment it shows up on something that isn't backed by an actual record, it stops meaning anything.
 
+**Named exception, decided after launch review:** the campaign-card and hero milestone ticks (#1) are fixed at 25/50/75% for every campaign, not derived from that campaign's real disbursement history — a deliberate choice to keep them a promise about the platform's process ("we disburse in stages") rather than a report on this specific campaign, which the card's own payload has no data to make truthfully. The record-backed account of what actually happened stays one click away, on `pencairan-dana`.
+
 ## Self-review against genericness
 
 Checked against what a generic "trust-focused fintech" redesign would produce for any similar brief: a gold accent color and a serif-for-important-numbers pairing are common moves in that space. What keeps this grounded rather than templated is that neither is invented for the brief — both are lifted directly from copy and a page this exact codebase already ships (the kuitansi, and the "dua orang menyetujuinya" line), and both are used with a hard restriction (ledger color and Record register apply only to actual records, never generally) that a generic pass would not bother enforcing. If execution loosens that restriction — if the gold shows up on a "Donasi Sekarang" button because it looks nice there — the redesign has quietly become the generic version of itself.
