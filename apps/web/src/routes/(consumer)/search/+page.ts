@@ -11,13 +11,14 @@ export const load: PageLoad = async ({ url }) => {
     const { data, error: apiError } = await api.search.get({ query: { q } });
 
     // Same Eden Treaty error-checking pattern established in
-    // campaign/[slug]/+page.ts and explore/[category]/+page.ts (GET
-    // /search has no non-200 response schema, so `data` here is never
-    // typed with an `{ error }` shape -- checking `apiError`/`!data` is
-    // enough). Logged (not surfaced as a distinct UI state) so a genuine
-    // backend failure doesn't render silently identical to a legitimately
-    // empty search result.
-    if (apiError || !data) {
+    // campaign/[slug]/+page.ts and explore/[category]/+page.ts. The
+    // `"error" in data` arm is load-bearing now that GET /search declares a
+    // 404 (it returns one for an unknown OR archived category slug, matching
+    // GET /campaigns) -- without it, `data` is the union of the 200 and 404
+    // shapes and `data.results` is possibly undefined. Logged (not surfaced
+    // as a distinct UI state) so a genuine backend failure doesn't render
+    // silently identical to a legitimately empty search result.
+    if (apiError || !data || "error" in data) {
       console.error(`GET /search?q=${q} failed while loading the search page:`, apiError ?? data);
       return { query: q, results: [] };
     }
