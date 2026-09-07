@@ -29,7 +29,7 @@ const GOAL_CAMPAIGN = {
 const PROGRAM_CAMPAIGN = {
   ...GOAL_CAMPAIGN,
   slug: "test-program-campaign",
-  title: "Program Zakat Berkelanjutan",
+  title: "Program Air Bersih Berkelanjutan",
   model: "program" as const,
   goalAmount: null,
   expiresAt: null,
@@ -46,7 +46,7 @@ describe("CampaignCard", () => {
 
   test("a program-model campaign shows 'Donasi tersedia' and no progress bar", () => {
     render(CampaignCard, { props: { campaign: PROGRAM_CAMPAIGN } });
-    expect(screen.getByText("Program Zakat Berkelanjutan")).not.toBeNull();
+    expect(screen.getByText("Program Air Bersih Berkelanjutan")).not.toBeNull();
     expect(screen.getByText(/Donasi tersedia/)).not.toBeNull();
     expect(screen.queryByRole("progressbar")).toBeNull();
   });
@@ -104,5 +104,63 @@ describe("CampaignCard", () => {
     // Never the general UI font for this figure -- it's a stated fact, not a
     // headline, and the Record register is what marks that distinction.
     expect(container.querySelector('[data-testid="ledger-tick"]')).toBeNull();
+  });
+
+  test("renders the short description under the title", () => {
+    render(CampaignCard, { props: { campaign: GOAL_CAMPAIGN } });
+    expect(screen.getByText("Ratusan keluarga membutuhkan bantuan")).not.toBeNull();
+  });
+
+  test("shows a verified check with an accessible name when the campaigner is verified", () => {
+    render(CampaignCard, { props: { campaign: GOAL_CAMPAIGN } });
+    expect(screen.getByRole("img", { name: "Terverifikasi" })).not.toBeNull();
+  });
+
+  test("shows no verified check when the campaigner is not verified", () => {
+    render(CampaignCard, {
+      props: {
+        campaign: {
+          ...GOAL_CAMPAIGN,
+          campaigner: { ...GOAL_CAMPAIGN.campaigner, verified: false },
+        },
+      },
+    });
+    expect(screen.queryByRole("img", { name: "Terverifikasi" })).toBeNull();
+  });
+
+  test("shows an ORG badge for a yayasan campaigner", () => {
+    render(CampaignCard, { props: { campaign: GOAL_CAMPAIGN } });
+    expect(screen.getByText("ORG")).not.toBeNull();
+  });
+
+  test("shows an ORG badge for a platform campaigner (not only yayasan)", () => {
+    render(CampaignCard, {
+      props: {
+        campaign: {
+          ...GOAL_CAMPAIGN,
+          campaigner: { ...GOAL_CAMPAIGN.campaigner, type: "platform" as const },
+        },
+      },
+    });
+    expect(screen.getByText("ORG")).not.toBeNull();
+  });
+
+  test("shows no ORG badge for an individual campaigner", () => {
+    render(CampaignCard, {
+      props: {
+        campaign: {
+          ...GOAL_CAMPAIGN,
+          campaigner: { ...GOAL_CAMPAIGN.campaigner, type: "individual" as const },
+        },
+      },
+    });
+    expect(screen.queryByText("ORG")).toBeNull();
+  });
+
+  test("emphasizes the collected amount with the primary color and bold weight", () => {
+    render(CampaignCard, { props: { campaign: GOAL_CAMPAIGN } });
+    const amount = screen.getByText("Rp45.000.000");
+    expect(amount.className).toContain("text-primary");
+    expect(amount.className).toContain("font-bold");
   });
 });

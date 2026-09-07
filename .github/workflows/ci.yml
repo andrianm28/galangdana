@@ -281,14 +281,19 @@ jobs:
         run: bun run scripts/check-links.ts
         env:
           CHECK_LINKS_BASE_URL: http://localhost:5173
-          # /explore/bencana-alam is included because the homepage has no
-          # link to any /explore/[category] page yet (a separately-tracked,
-          # deliberately-deferred gap, not fixed here) -- without an extra
-          # seed path here, the crawler starting from "/" would never reach
-          # that route at all. bencana-alam is one of the seeded categories
-          # with a real seeded campaign in it (packages/db/src/seed/
-          # categories.seed.ts + campaigns.seed.ts), so this exercises a
-          # real, non-empty /explore/[category] page.
+          # /search?q=banjir stays seeded because nothing links to a query
+          # string -- the crawler reaches bare /search from the header, but
+          # never /search with a q, so the results-bearing branch of that
+          # page would otherwise go uncrawled.
+          #
+          # /explore/bencana-alam is now reachable organically: the homepage
+          # category row and the /explore index both link every
+          # /explore/{slug}. It is kept as a seed anyway so the check keeps
+          # covering a known-non-empty category page even if the chip row is
+          # ever made conditional or the categories endpoint degrades to its
+          # empty fallback (in which case the crawler would silently stop
+          # visiting /explore/[category] at all, and the coverage loss would
+          # look like a pass).
           CHECK_LINKS_EXTRA_ROUTES: /search?q=banjir,/explore/bencana-alam
 
   deploy:

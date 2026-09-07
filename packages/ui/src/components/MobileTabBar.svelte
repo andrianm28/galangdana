@@ -30,9 +30,13 @@ const TABS = [
       href={tab.href}
       aria-label={tab.ariaLabel}
       aria-current={pathname === tab.href ? "page" : undefined}
-      class="flex flex-1 flex-col items-center gap-0.5 px-1 py-2 font-sans text-[11px] text-neutral-600 transition-colors duration-150 aria-[current=page]:text-primary-dark"
+      class="group flex flex-1 flex-col items-center gap-0.5 px-1 py-2 transition-transform duration-100 active:scale-[0.98]"
     >
-      {tab.label}
+      <span
+        class="font-sans text-[11px] text-neutral-600 transition-colors duration-150 group-aria-[current=page]:text-primary-dark"
+      >
+        {tab.label}
+      </span>
     </a>
   {/each}
 </nav>
