@@ -45,8 +45,8 @@ const currency = $derived(data.disbursements[0]?.amount.currency ?? "IDR");
   </div>
 
   {#if data.disbursements.length === 0}
-    <div class="rounded-md border border-neutral-200 bg-white p-6">
-      <p class="font-sans text-sm font-medium text-neutral-900">Belum ada dana yang dicairkan.</p>
+    <div class="rounded-md border border-neutral-200 bg-paper p-6">
+      <p class="font-serif text-base text-ink">Belum ada dana yang dicairkan.</p>
       <p class="mt-1 font-sans text-sm text-neutral-600">
         Dana baru bisa cair setelah penggalang mengajukan rinciannya, melampirkan bukti, dan dua
         orang berbeda dari tim kami menyetujuinya. Begitu ada pencairan, seluruh riwayatnya muncul
@@ -70,52 +70,54 @@ const currency = $derived(data.disbursements[0]?.amount.currency ?? "IDR");
         docs/design/2026-09-06-visual-redesign-plan.md's Signature section --
         this is the second of its three sanctioned appearances.
       -->
-      <ol class="relative flex flex-col gap-6 pl-6">
+      <div class="relative">
         <div
           class="absolute inset-y-1 left-[5px] w-px"
           style="background-image: repeating-linear-gradient(to bottom, var(--color-ledger) 0 4px, transparent 4px 8px)"
           aria-hidden="true"
         ></div>
-        {#each data.disbursements as item (item.paidAt)}
-          <li class="relative">
-            <span
-              class="absolute -left-6 top-0.5 size-2.5 rounded-full border-2 border-ledger bg-white"
-              aria-hidden="true"
-            ></span>
-            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <span class="font-serif text-base text-ink">
-                {TYPE_LABELS[item.type] ?? item.type}
-              </span>
-              <span class="font-mono text-base font-semibold text-ink tabular-nums">
-                {formatMoney(moneyFromJSON(item.amount))}
-              </span>
-            </div>
-
-            {#if item.narrative}
-              <p class="mt-2 font-sans text-sm text-neutral-700">{item.narrative}</p>
-            {/if}
-
-            <dl class="mt-3 flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs text-neutral-500">
-              {#if item.approvedAt}
-                <div class="flex gap-1">
-                  <dt>Disetujui</dt>
-                  <dd class="text-neutral-700">{formatDate(item.approvedAt)}</dd>
-                </div>
-              {/if}
-              <div class="flex gap-1">
-                <dt>Cair</dt>
-                <dd class="text-neutral-700">{formatDate(item.paidAt)}</dd>
+        <ol class="flex flex-col gap-6 pl-6">
+          {#each data.disbursements as item (item.paidAt)}
+            <li class="relative">
+              <span
+                class="absolute -left-6 top-0.5 size-2.5 rounded-full border-2 border-ledger bg-white"
+                aria-hidden="true"
+              ></span>
+              <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <span class="font-serif text-base text-ink">
+                  {TYPE_LABELS[item.type] ?? item.type}
+                </span>
+                <span class="font-mono text-base font-semibold text-ink tabular-nums">
+                  {formatMoney(moneyFromJSON(item.amount))}
+                </span>
               </div>
-            </dl>
 
-            <p class="mt-3">
-              <Badge variant={item.proofState === "ada_tertutup" ? "ledger" : "neutral"}>
-                {PROOF_LABELS[item.proofState] ?? item.proofState}
-              </Badge>
-            </p>
-          </li>
-        {/each}
-      </ol>
+              {#if item.narrative}
+                <p class="mt-2 font-sans text-sm text-neutral-700">{item.narrative}</p>
+              {/if}
+
+              <dl class="mt-3 flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs text-neutral-500">
+                {#if item.approvedAt}
+                  <div class="flex gap-1">
+                    <dt>Disetujui</dt>
+                    <dd class="text-neutral-700">{formatDate(item.approvedAt)}</dd>
+                  </div>
+                {/if}
+                <div class="flex gap-1">
+                  <dt>Cair</dt>
+                  <dd class="text-neutral-700">{formatDate(item.paidAt)}</dd>
+                </div>
+              </dl>
+
+              <p class="mt-3">
+                <Badge variant={item.proofState === "ada_tertutup" ? "ledger" : "neutral"}>
+                  {PROOF_LABELS[item.proofState] ?? item.proofState}
+                </Badge>
+              </p>
+            </li>
+          {/each}
+        </ol>
+      </div>
     </div>
 
     <p class="font-sans text-xs text-neutral-500">
