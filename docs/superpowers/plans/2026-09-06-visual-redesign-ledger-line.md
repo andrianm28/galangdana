@@ -991,12 +991,14 @@ Expected: all green.
 Run:
 
 ```bash
-grep -rn "color-ledger\|bg-ledger\|text-ledger\|border-ledger\|font-serif" \
+grep -rn "color-ledger\|bg-ledger\|text-ledger\|border-ledger\|font-serif\|bg-paper\|text-ink" \
   packages/ui/src packages/ui/src/layouts apps/web/src \
-  --include=*.svelte | grep -vE "LedgerTicks\.svelte|campaign/\[slug\]/\+page\.svelte|pencairan-dana/\+page\.svelte|kuitansi/\+page\.svelte"
+  --include=*.svelte | grep -vE "LedgerTicks\.svelte|Badge\.svelte|campaign/\[slug\]/\+page\.svelte|pencairan-dana/\+page\.svelte|kuitansi/\+page\.svelte"
 ```
 
 Expected: no output. Any match is a Global Constraint violation — the Ledger Line escaped its four sanctioned surfaces — and must be reverted before this task closes.
+
+(The final whole-branch review widened this grep to include `bg-paper`/`text-ink`, which the original pattern omitted, and added `Badge.svelte` to the exclusion list — that file's one hit is the `"ledger"` variant's own definition, an opt-in mechanism consumed only by `pencairan-dana`, not an appearance of the motif itself. `font-mono` is deliberately NOT in this grep: it has legitimate pre-existing sites unrelated to this redesign — the donation status page's VA number, `ErrorPage`'s HTTP status code — that would make the pattern useless as a leakage check without a much longer exclusion list than this task can maintain.)
 
 - [ ] **Step 3: Manual visual pass**
 
