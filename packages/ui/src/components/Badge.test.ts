@@ -18,7 +18,9 @@ describe("Badge", () => {
   });
 
   test("applies the ledger variant's classes, for a proof-state claim only", () => {
-    render(Badge, { props: { variant: "ledger", children: textSnippet("Bukti ada, belum bisa dibuka") } });
+    render(Badge, {
+      props: { variant: "ledger", children: textSnippet("Bukti ada, belum bisa dibuka") },
+    });
     const badge = screen.getByText("Bukti ada, belum bisa dibuka");
     expect(badge.className).toContain("text-ledger");
   });

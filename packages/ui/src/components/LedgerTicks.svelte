@@ -1,3 +1,6 @@
+<script lang="ts">
+</script>
+
 <!--
   Ledger Line milestone ticks -- see docs/design/2026-09-06-visual-redesign-plan.md's
   Signature section. Fixed at 25/50/75%: these mark where a disbursement
