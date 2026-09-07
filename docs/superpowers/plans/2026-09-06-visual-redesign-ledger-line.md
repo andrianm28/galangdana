@@ -700,7 +700,9 @@ git commit -m "feat(web): apply the Record register and closing Ledger Line to t
 - Modify: `apps/web/src/routes/(admin)/+layout.svelte`
 
 **Interfaces:**
-- Produces: `AdminShell` reads `$app/state`'s `page` itself (same pattern already used in the campaigner wizard's `+layout.svelte`) to compute both the active nav item and, when no explicit `title` prop is given, a per-route title. `AdminShell`'s existing `title` prop stays supported (an explicit title always wins), so `+layout.svelte` can stop hardcoding `"Dashboard"` by simply no longer passing a `title` at all.
+- Produces: `AdminShell` gains a `pathname?: string` prop (defaulting to `""`) used to compute both the active nav item and, when no explicit `title` prop is given, a per-route title. `AdminShell`'s existing `title` prop stays supported (an explicit title always wins). The CALLER supplies `pathname` — `AdminShell` does not import `$app/state` itself.
+
+**Note:** this task's shape (a `pathname` prop rather than `AdminShell` reading `$app/state` directly) is a correction made after Task 7 was first dispatched and blocked — see the SDD ledger's ruling. `packages/ui` is a plain Svelte component package with no `@sveltejs/kit` dependency and no `sveltekit()` Vite plugin (confirmed: its `package.json` lists only `svelte` + `@sveltejs/vite-plugin-svelte`, and `vite.config.ts` only registers `svelte()`). `$app/state` is a SvelteKit virtual module that only resolves inside an app whose Vite config includes the `sveltekit()` plugin — `apps/web` has it, `packages/ui` does not, so `AdminShell.svelte` cannot import `$app/state` itself, in tests or in a real build. A component in `packages/ui` that needs routing state takes it as a prop from whichever SvelteKit app renders it; this is a real architectural fact about this monorepo's package boundary, not a test-tooling gap to route around.
 
 Today `apps/web/src/routes/(admin)/+layout.svelte` passes `title="Dashboard"` unconditionally, so every admin page's header reads "Dashboard" regardless of which page is open — and the sidebar has no links at all, so every admin route is reached by typed URL. Fixing the title is a direct, minimal consequence of adding real nav (a nav with an always-wrong active page would be worse than no nav), not a separate feature.
 
@@ -710,39 +712,27 @@ Replace `packages/ui/src/layouts/AdminShell.test.ts` in full with:
 
 ```ts
 import { cleanup, render, screen } from "@testing-library/svelte";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
+import AdminShell from "./AdminShell.svelte";
 
-const pathname = vi.hoisted(() => ({ value: "/dashboard" }));
-vi.mock("$app/state", () => ({
-  get page() {
-    return { url: { pathname: pathname.value } };
-  },
-}));
-
-afterEach(() => {
-  cleanup();
-  pathname.value = "/dashboard";
-});
+afterEach(() => cleanup());
 
 describe("AdminShell", () => {
-  test("renders a sidebar with the FundForIndonesia wordmark, a title, and the page content", async () => {
-    const AdminShell = (await import("./AdminShell.svelte")).default;
+  test("renders a sidebar with the FundForIndonesia wordmark, a title, and the page content", () => {
     render(AdminShell, { props: { title: "Dashboard", children: textSnippet("Panel content") } });
     expect(screen.getByText("FundForIndonesia")).not.toBeNull();
     expect(screen.getByText("Dashboard")).not.toBeNull();
     expect(screen.getByText("Panel content")).not.toBeNull();
   });
 
-  test("does not constrain content width the way ConsumerShell does", async () => {
-    const AdminShell = (await import("./AdminShell.svelte")).default;
+  test("does not constrain content width the way ConsumerShell does", () => {
     const { container } = render(AdminShell, { props: { children: textSnippet("x") } });
     const main = container.querySelector("main");
     expect(main?.className).not.toContain("max-w-md");
   });
 
-  test("renders navigation to every route (admin)/ actually has an index page for", async () => {
-    const AdminShell = (await import("./AdminShell.svelte")).default;
-    render(AdminShell, { props: { children: textSnippet("x") } });
+  test("renders navigation to every route (admin)/ actually has an index page for", () => {
+    render(AdminShell, { props: { pathname: "/dashboard", children: textSnippet("x") } });
     // Deliberately excludes /campaigns/[id]: there is no /campaigns index
     // page, only campaign detail reached from the Dashboard's own queue --
     // a nav entry for it would 404 on click.
@@ -758,28 +748,32 @@ describe("AdminShell", () => {
     }
   });
 
-  test("marks the current route's nav item active, and no other", async () => {
-    pathname.value = "/disbursements";
-    const AdminShell = (await import("./AdminShell.svelte")).default;
-    render(AdminShell, { props: { children: textSnippet("x") } });
+  test("marks the current route's nav item active, and no other", () => {
+    render(AdminShell, { props: { pathname: "/disbursements", children: textSnippet("x") } });
     expect(screen.getByRole("link", { name: "Pencairan" }).getAttribute("aria-current")).toBe(
       "page",
     );
     expect(screen.getByRole("link", { name: "Dashboard" }).getAttribute("aria-current")).toBeNull();
   });
 
-  test("derives the header title from the route when no explicit title is given", async () => {
-    pathname.value = "/help-articles";
-    const AdminShell = (await import("./AdminShell.svelte")).default;
-    render(AdminShell, { props: { children: textSnippet("x") } });
+  test("derives the header title from the route when no explicit title is given", () => {
+    render(AdminShell, { props: { pathname: "/help-articles", children: textSnippet("x") } });
     expect(screen.getByRole("heading", { name: "Artikel Bantuan" })).not.toBeNull();
   });
 
-  test("an explicit title prop still wins over the route-derived one", async () => {
-    pathname.value = "/dashboard";
-    const AdminShell = (await import("./AdminShell.svelte")).default;
-    render(AdminShell, { props: { title: "Tinjau Kampanye", children: textSnippet("x") } });
+  test("an explicit title prop still wins over the route-derived one", () => {
+    render(AdminShell, {
+      props: { title: "Tinjau Kampanye", pathname: "/dashboard", children: textSnippet("x") },
+    });
     expect(screen.getByRole("heading", { name: "Tinjau Kampanye" })).not.toBeNull();
+  });
+
+  test("with no pathname given, no nav item is marked active and no title is derived", () => {
+    render(AdminShell, { props: { children: textSnippet("x") } });
+    for (const label of ["Dashboard", "Pencairan", "Artikel Bantuan", "Tiket Dukungan"]) {
+      expect(screen.getByRole("link", { name: label }).getAttribute("aria-current")).toBeNull();
+    }
+    expect(screen.queryByRole("heading")).toBeNull();
   });
 });
 
@@ -793,7 +787,7 @@ function textSnippet(text: string) {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `bun run --cwd packages/ui test`
-Expected: FAIL — `AdminShell` has no nav, no route-derived title, and doesn't import `$app/state` yet.
+Expected: FAIL — `AdminShell` has no `pathname` prop, no nav, and no route-derived title yet.
 
 - [ ] **Step 3: Implement**
 
@@ -801,15 +795,24 @@ Replace `packages/ui/src/layouts/AdminShell.svelte` in full with:
 
 ```svelte
 <script lang="ts">
-import { page } from "$app/state";
 import type { Snippet } from "svelte";
 
 interface Props {
   title?: string;
+  /**
+   * The current route path, e.g. `$app/state`'s `page.url.pathname`.
+   * AdminShell lives in packages/ui, a plain Svelte component package with
+   * no SvelteKit dependency of its own (no @sveltejs/kit, no sveltekit()
+   * Vite plugin) -- it cannot import `$app/state` itself, since that
+   * virtual module only resolves inside an app whose Vite config includes
+   * SvelteKit's own plugin. The caller (an app that DOES have it) reads
+   * the path and passes it down.
+   */
+  pathname?: string;
   children: Snippet;
 }
 
-const { title, children }: Props = $props();
+const { title, pathname = "", children }: Props = $props();
 
 // Only routes (admin)/ actually has an index page for. There is no
 // /campaigns index route -- campaign review is reached from Dashboard's own
@@ -827,8 +830,8 @@ const NAV: Array<{ href: string; label: string }> = [
 // of route. Falling back to a route-derived title here -- rather than
 // requiring every caller to pass the right one -- means the header can
 // never drift out of sync with the sidebar's own active-item logic below,
-// since both read the same page.url.pathname.
-const routeTitle = $derived(NAV.find((item) => page.url.pathname.startsWith(item.href))?.label);
+// since both read the same `pathname`.
+const routeTitle = $derived(NAV.find((item) => pathname.startsWith(item.href))?.label);
 const resolvedTitle = $derived(title ?? routeTitle);
 </script>
 
@@ -838,7 +841,7 @@ const resolvedTitle = $derived(title ?? routeTitle);
     <nav aria-label="Navigasi admin" class="mt-6">
       <ul class="flex flex-col gap-1">
         {#each NAV as item (item.href)}
-          {@const active = page.url.pathname.startsWith(item.href)}
+          {@const active = pathname.startsWith(item.href)}
           <li>
             <a
               href={item.href}
@@ -867,30 +870,31 @@ const resolvedTitle = $derived(title ?? routeTitle);
 </div>
 ```
 
-- [ ] **Step 4: Stop hardcoding the title**
+- [ ] **Step 4: Stop hardcoding the title, and pass the real path down**
 
-In `apps/web/src/routes/(admin)/+layout.svelte`, replace:
+In `apps/web/src/routes/(admin)/+layout.svelte`, replace the whole file with:
 
 ```svelte
-<AdminShell title="Dashboard">
+<script lang="ts">
+import { page } from "$app/state";
+import { AdminShell } from "@fundforindonesia/ui";
+
+const { children } = $props();
+</script>
+
+<AdminShell pathname={page.url.pathname}>
   {@render children()}
 </AdminShell>
 ```
 
-with:
-
-```svelte
-<AdminShell>
-  {@render children()}
-</AdminShell>
-```
+(`+layout.svelte` lives in `apps/web`, which has SvelteKit's Vite plugin, so `$app/state` resolves here without issue — this is the one place in this task that reads it.)
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `bun run --cwd packages/ui test`
 Expected: PASS.
 
-Run also: `bun run lint && bun run typecheck && bun run test:web` (the `apps/web` admin route tests, if any exist for `(admin)/+layout.svelte`, must still pass with no explicit `title`).
+Run also: `bun run lint && bun run typecheck && bun run test:web` (the `apps/web` admin route tests, if any exist for `(admin)/+layout.svelte`, must still pass).
 
 - [ ] **Step 6: Commit**
 
