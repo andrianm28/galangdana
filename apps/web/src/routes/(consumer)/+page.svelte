@@ -1,6 +1,13 @@
 <script lang="ts">
 import SeoHead from "$lib/SeoHead.svelte";
-import { ActionTile, CampaignCard } from "@fundforindonesia/ui";
+import {
+  ActionTile,
+  CampaignCard,
+  CampaignListCard,
+  CardCarousel,
+  CategoryChip,
+  SectionHeader,
+} from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
@@ -93,13 +100,46 @@ const { data }: PageProps = $props();
     </svg>
   {/snippet}
 
-  {#if data.campaigns.length > 0}
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {#each data.campaigns as campaign (campaign.slug)}
-        <CampaignCard {campaign} />
+  {#if data.categories.length > 0}
+    <div class="flex gap-2 overflow-x-auto md:flex-wrap">
+      {#each data.categories as category (category.slug)}
+        <CategoryChip href="/explore/{category.slug}" label={category.title} />
       {/each}
     </div>
-  {:else}
-    <p class="font-sans text-neutral-600">Belum ada campaign yang bisa ditampilkan saat ini.</p>
   {/if}
+
+  <div>
+    <SectionHeader title="Penggalangan Dana Mendesak" href="/explore?sort=urgent" />
+    {#if data.urgentCampaigns.length > 0}
+      <div class="-mx-4 mt-4 px-4 sm:-mx-6 sm:px-6">
+        <CardCarousel label="Penggalangan Dana Mendesak">
+          {#each data.urgentCampaigns as campaign (campaign.slug)}
+            <div class="w-64 shrink-0">
+              <CampaignCard {campaign} />
+            </div>
+          {/each}
+        </CardCarousel>
+      </div>
+    {:else}
+      <p class="mt-4 font-sans text-neutral-600">Belum ada campaign mendesak saat ini.</p>
+    {/if}
+  </div>
+
+  <div>
+    <SectionHeader title="Terbaru" href="/explore" />
+    {#if data.latestCampaigns.length > 0}
+      <div class="mt-4 flex flex-col gap-4 md:hidden">
+        {#each data.latestCampaigns as campaign (campaign.slug)}
+          <CampaignListCard {campaign} />
+        {/each}
+      </div>
+      <div class="mt-4 hidden gap-4 md:grid md:grid-cols-2 lg:grid-cols-3">
+        {#each data.latestCampaigns as campaign (campaign.slug)}
+          <CampaignCard {campaign} />
+        {/each}
+      </div>
+    {:else}
+      <p class="mt-4 font-sans text-neutral-600">Belum ada campaign yang bisa ditampilkan saat ini.</p>
+    {/if}
+  </div>
 </div>
