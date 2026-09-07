@@ -1864,3 +1864,137 @@ describe("Admin payout execution reconciles the withdrawable-balance formula aga
     );
   });
 });
+
+describe("GET /disbursements/public", () => {
+  test("returns paid disbursements newest-first, with the campaign each one belongs to", async () => {
+    const campaign = await createTestCampaign(testCampaignerId);
+    const now = new Date();
+
+    const inserted = await db
+      .insert(disbursementRequests)
+      .values([
+        {
+          id: crypto.randomUUID(),
+          campaignId: campaign.id,
+          type: "partial",
+          amount: 1_000_000n,
+          currency: "IDR",
+          narrative: "Feed row older",
+          status: "paid",
+          proofObjectKey: "disbursements/proof/example.jpg",
+          approvedAt: new Date(now.getTime() - 86_400_000),
+          paidAt: new Date(now.getTime() - 1000),
+        },
+        {
+          id: crypto.randomUUID(),
+          campaignId: campaign.id,
+          type: "final",
+          amount: 500_000n,
+          currency: "IDR",
+          narrative: "Feed row newer",
+          status: "paid",
+          proofObjectKey: null,
+          approvedAt: null,
+          paidAt: now,
+        },
+      ])
+      .returning();
+    disbursementIds.push(...inserted.map((row) => row.id));
+
+    const resp = await app.handle(new Request("http://localhost/disbursements/public"));
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      disbursements: Array<{
+        narrative: string;
+        proofState: string;
+        campaignSlug: string;
+        campaignTitle: string;
+      }>;
+    };
+
+    const rows = body.disbursements.filter((d) => d.campaignSlug === campaign.slug);
+    expect(rows).toHaveLength(2);
+    // Newest paidAt first.
+    expect(rows[0]?.narrative).toBe("Feed row newer");
+    expect(rows[1]?.narrative).toBe("Feed row older");
+    // Every row carries which campaign it belongs to, and its proof state,
+    // exactly like the per-campaign log at GET /campaigns/:slug/disbursements.
+    expect(rows[0]?.campaignTitle).toBe(campaign.title);
+    expect(rows[0]?.proofState).toBe("belum_ada");
+    expect(rows[1]?.proofState).toBe("ada_tertutup");
+  });
+
+  test("respects an explicit limit and rejects a value above the schema's maximum of 50", async () => {
+    const campaign = await createTestCampaign(testCampaignerId);
+    const now = new Date();
+
+    const inserted = await db
+      .insert(disbursementRequests)
+      .values(
+        [0, 1, 2].map((i) => ({
+          id: crypto.randomUUID(),
+          campaignId: campaign.id,
+          type: "partial" as const,
+          amount: 100_000n,
+          currency: "IDR" as const,
+          narrative: `Limit test ${i}`,
+          status: "paid" as const,
+          paidAt: new Date(now.getTime() - i * 1000),
+        })),
+      )
+      .returning();
+    disbursementIds.push(...inserted.map((row) => row.id));
+
+    const limitedResp = await app.handle(
+      new Request("http://localhost/disbursements/public?limit=2"),
+    );
+    expect(limitedResp.status).toBe(200);
+    const limitedBody = (await limitedResp.json()) as { disbursements: Array<unknown> };
+    expect(limitedBody.disbursements).toHaveLength(2);
+
+    const overResp = await app.handle(
+      new Request("http://localhost/disbursements/public?limit=51"),
+    );
+    expect(overResp.status).toBe(422);
+  });
+
+  test("excludes disbursements that are not paid, and paid disbursements on a non-published (draft) campaign", async () => {
+    const activeCampaign = await createTestCampaign(testCampaignerId, "active");
+    const draftCampaign = await createTestCampaign(testCampaignerId, "draft");
+    const now = new Date();
+
+    const inserted = await db
+      .insert(disbursementRequests)
+      .values([
+        {
+          id: crypto.randomUUID(),
+          campaignId: activeCampaign.id,
+          type: "partial",
+          amount: 100_000n,
+          currency: "IDR",
+          narrative: "Not yet paid on active campaign",
+          status: "approved",
+          paidAt: null,
+        },
+        {
+          id: crypto.randomUUID(),
+          campaignId: draftCampaign.id,
+          type: "partial",
+          amount: 100_000n,
+          currency: "IDR",
+          narrative: "Paid on a draft (unpublished) campaign",
+          status: "paid",
+          paidAt: now,
+        },
+      ])
+      .returning();
+    disbursementIds.push(...inserted.map((row) => row.id));
+
+    const resp = await app.handle(new Request("http://localhost/disbursements/public?limit=50"));
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { disbursements: Array<{ narrative: string }> };
+    const narratives = body.disbursements.map((d) => d.narrative);
+    expect(narratives).not.toContain("Not yet paid on active campaign");
+    expect(narratives).not.toContain("Paid on a draft (unpublished) campaign");
+  });
+});
