@@ -72,24 +72,26 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
     disbursedAmount: 0n,
     donationCount: 340,
   },
-  // Zakat is a regulated function: only a licensed amil -- BAZNAS or a LAZ
-  // holding a ministerial licence under UU 23/2011 -- may collect and
-  // distribute it. FundForIndonesia holds no such licence, so this fixture is
-  // attributed to a partner institution and worded so the platform is the
-  // CHANNEL, not the collector. The previous version had a campaigner of type
-  // "platform" (FundForIndonesia itself) saying it "menghimpun zakat ... kepada
-  // delapan asnaf", which is a claim of amil standing the organisation cannot
-  // make. Do not reintroduce platform-attributed zakat or wakaf fixtures --
-  // seed data is what the public site actually renders.
+  // These two entries used to be a zakat fixture ("program-amil-zakat-mitra",
+  // category "zakat") and a wakaf fixture ("wakaf-produktif-sumur-bor-desa-
+  // kering", category "wakaf"). The stakeholder cut zakat/wakaf from the
+  // product entirely, so both were renamed away from those categories/slugs
+  // and given new, non-zakat/wakaf stories -- see the isActive: false archival
+  // of those categories in categories.seed.ts. The zakat entry in particular
+  // used to say (correctly, at the time) that a licensed amil partner --
+  // never FundForIndonesia itself -- collected and distributed the funds,
+  // "kepada delapan asnaf". Do not reintroduce a zakat- or wakaf-attributed
+  // fixture: neither the category nor the amil/asnaf framing exists on this
+  // platform anymore, and seed data is what the public site actually renders.
   {
-    slug: "program-amil-zakat-mitra",
-    title: "Dana Zakat Yayasan Amanah Ummah",
+    slug: "pangan-keluarga-prasejahtera",
+    title: "Bantuan Pangan untuk Keluarga Prasejahtera",
     shortDescription:
-      "Tunaikan zakat Anda melalui Yayasan Amanah Ummah, amil mitra yang menghimpun dan menyalurkannya kepada mustahik.",
+      "Salurkan bantuan pangan rutin melalui Yayasan Amanah Ummah untuk keluarga prasejahtera yang membutuhkan.",
     story:
-      "Zakat pada program ini dihimpun dan disalurkan oleh Yayasan Amanah Ummah sebagai amil, kepada delapan asnaf yang telah diverifikasi. FundForIndonesia berperan sebagai kanal penyaluran, bukan sebagai amil: dana diteruskan kepada lembaga tersebut, dan pencairannya tercatat di halaman ini. Karena sifatnya berkelanjutan, program ini tidak memiliki target atau tenggat waktu -- dana yang tersedia langsung disalurkan sesuai kebutuhan mustahik.",
-    coverMediaUrl: "campaigns/covers/program-amil-zakat-mitra.15f20114.jpg",
-    categorySlug: "zakat",
+      "Program ini menghimpun dan menyalurkan bantuan pangan pokok secara rutin bagi keluarga prasejahtera, melalui Yayasan Amanah Ummah sebagai mitra penyalur di lapangan. FundForIndonesia berperan sebagai kanal penggalangan, dan pencairannya tercatat di halaman ini. Karena sifatnya berkelanjutan, program ini tidak memiliki target atau tenggat waktu -- dana yang tersedia langsung disalurkan sesuai kebutuhan penerima manfaat.",
+    coverMediaUrl: "campaigns/covers/pangan-keluarga-prasejahtera.0d8e4ea8.jpg",
+    categorySlug: "kemanusiaan",
     campaignerName: "Yayasan Amanah Ummah",
     model: "program",
     goalAmount: null,
@@ -99,14 +101,13 @@ export const CAMPAIGN_SEED_DATA: CampaignSeedRow[] = [
     donationCount: 6210,
   },
   {
-    slug: "wakaf-produktif-sumur-bor-desa-kering",
-    title: "Wakaf Produktif: Sumur Bor untuk Desa yang Kekeringan",
-    shortDescription:
-      "Bangun sumur bor wakaf untuk desa yang setiap musim kemarau kesulitan air bersih.",
+    slug: "sumur-bor-desa-kering",
+    title: "Sumur Bor untuk Desa yang Kekeringan",
+    shortDescription: "Bangun sumur bor untuk desa yang setiap musim kemarau kesulitan air bersih.",
     story:
-      "Setiap musim kemarau, warga desa ini harus berjalan berkilo-kilometer untuk mendapatkan air bersih. Wakaf sumur bor ini akan memberikan akses air bersih jangka panjang bagi ratusan keluarga, dan hasilnya dapat dirasakan turun-temurun.",
-    coverMediaUrl: "campaigns/covers/wakaf-sumur-bor.aa962d7e.jpg",
-    categorySlug: "wakaf",
+      "Setiap musim kemarau, warga desa ini harus berjalan berkilo-kilometer untuk mendapatkan air bersih. Sumur bor ini akan memberikan akses air bersih jangka panjang bagi ratusan keluarga, dan hasilnya dapat dirasakan turun-temurun.",
+    coverMediaUrl: "campaigns/covers/sumur-bor-desa-kering.2a7960dd.jpg",
+    categorySlug: "infrastruktur",
     campaignerName: "Yayasan Bina Umat Sejahtera",
     model: "goal",
     goalAmount: 120_000_000n,

@@ -5,10 +5,12 @@ export const CAMPAIGNER_SEED_DATA: NewCampaigner[] = [
   { type: "individual", displayName: "Rina Wijaya" },
   { type: "yayasan", displayName: "Yayasan Peduli Sesama" },
   { type: "yayasan", displayName: "Yayasan Bina Umat Sejahtera" },
-  // Zakat is collected by a licensed amil (BAZNAS or a LAZ), not by a
-  // platform. This fixture exists so the zakat campaign has a campaigner that
-  // is a partner institution rather than FundForIndonesia itself -- see the
-  // note on the zakat fixture in campaigns.seed.ts.
+  // Originally created so the platform's zakat fixture had a campaigner that
+  // was a partner institution (a licensed amil) rather than FundForIndonesia
+  // itself. That campaign was renamed away from zakat when the product cut
+  // zakat/wakaf entirely -- see the comment above the "pangan-keluarga-
+  // prasejahtera" entry in campaigns.seed.ts -- but this campaigner is kept
+  // as-is since it's still that campaign's (unchanged) campaigner.
   { type: "yayasan", displayName: "Yayasan Amanah Ummah" },
   { type: "platform", displayName: "FundForIndonesia Program Mitra" },
 ];

@@ -146,6 +146,9 @@ export {
   PresignDisbursementProofBodySchema,
   PresignDisbursementProofResponseSchema,
   DisbursementProofStateSchema,
+  PublicDisbursementFeedItemSchema,
+  PublicDisbursementFeedQuerySchema,
+  PublicDisbursementFeedResponseSchema,
   PublicDisbursementLogItemSchema,
   PublicDisbursementLogResponseSchema,
   RequestDisbursementOtpResponseSchema,
@@ -159,5 +162,6 @@ export type {
   AdminDisbursementListResponse,
   BankAccountListResponse,
   DisbursementDetailResponse,
+  PublicDisbursementFeedResponse,
   PublicDisbursementLogResponse,
 } from "./disbursements";

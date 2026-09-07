@@ -1,30 +1,9 @@
 <script lang="ts">
-import { type MoneyJSON, formatMoney, moneyFromJSON } from "@fundforindonesia/money";
+import { formatMoney, moneyFromJSON } from "@fundforindonesia/money";
+import type { CampaignSummaryLike } from "../types";
 import Badge from "./Badge.svelte";
 import Card from "./Card.svelte";
 import LedgerTicks from "./LedgerTicks.svelte";
-
-interface CampaignSummaryLike {
-  slug: string;
-  title: string;
-  shortDescription: string;
-  coverImageUrl: string | null;
-  category: { id: number; slug: string; title: string };
-  campaigner: {
-    id: string;
-    type: "individual" | "yayasan" | "platform";
-    displayName: string;
-    avatarUrl: string | null;
-    verified: boolean;
-  };
-  model: "goal" | "program";
-  goalAmount: MoneyJSON | null;
-  collectedAmount: MoneyJSON;
-  availableAmount: MoneyJSON;
-  donationCount: number;
-  expiresAt: string | null;
-  publishedAt: string;
-}
 
 interface Props {
   campaign: CampaignSummaryLike;
