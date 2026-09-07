@@ -19,14 +19,15 @@ const currentIndex = $derived(stepOrder.indexOf(page.url.pathname.split("/").pop
 
 <div class="mx-auto max-w-md px-4 py-6">
   <div class="mb-6">
-    <div class="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
-      <div
-        class="h-full rounded-full bg-primary transition-all"
-        style="width: {((currentIndex + 1) / stepOrder.length) * 100}%"
-      ></div>
+    <div class="flex gap-1">
+      {#each stepOrder as step, i (step)}
+        <div
+          class="h-1.5 flex-1 rounded-full {i <= currentIndex ? 'bg-primary' : 'bg-neutral-100'}"
+        ></div>
+      {/each}
     </div>
-    <p class="mt-2 font-sans text-xs text-neutral-600">
-      Langkah {currentIndex + 1} dari {stepOrder.length}
+    <p class="mt-2 font-mono text-xs text-neutral-600">
+      Langkah {String(currentIndex + 1).padStart(2, "0")} / {String(stepOrder.length).padStart(2, "0")}
     </p>
   </div>
 
