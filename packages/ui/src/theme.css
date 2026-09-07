@@ -12,6 +12,15 @@
   --color-accent-light: #fbeae0;
   --color-accent-dark: #b85a30;
 
+  /* Record register: for a claim backed by an actual record only --
+     campaign progress ticks, the disbursement ledger, the kuitansi. See
+     docs/design/2026-09-06-visual-redesign-plan.md's Signature section.
+     Never used as a general UI color -- not a button, not a hover state,
+     not a nav highlight. */
+  --color-ink: #1c1a15;
+  --color-paper: #fdfbf8;
+  --color-ledger: #b8862e;
+
   /* Cleared before redefining: Tailwind v4's @theme MERGES with its own
      built-in `neutral` scale rather than replacing it, so any step this
      file doesn't define (300/500/700/950) would otherwise silently fall
@@ -38,6 +47,14 @@
   --color-info: #3e7ca6;
 
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* Record register. Retargets Tailwind's default `font-serif`/`font-mono`
+     utilities -- every existing `font-mono` usage in the app (the donation
+     id on the kuitansi, tabular amounts) now renders in JetBrains Mono
+     instead of the generic monospace stack, which is intended: those are
+     exactly the numbers/ids this register exists for. */
+  --font-serif: "Newsreader", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
   /* Rounded, not sharp -- the "warm & trustworthy" personality's most
      visible signal after color. sm for buttons/inputs/badges, md for

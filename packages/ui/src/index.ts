@@ -8,5 +8,6 @@ export { default as Card } from "./components/Card.svelte";
 export { default as ConsumerShell } from "./layouts/ConsumerShell.svelte";
 export { default as FormField } from "./components/FormField.svelte";
 export { default as Label } from "./components/Label.svelte";
+export { default as LedgerTicks } from "./components/LedgerTicks.svelte";
 export { default as Spinner } from "./components/Spinner.svelte";
 export { default as TextInput } from "./components/TextInput.svelte";

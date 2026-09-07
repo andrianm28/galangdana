@@ -1,0 +1,369 @@
+<title>Ledger Line</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --primary: #2F7A5F;
+  --primary-dark: #1F5A44;
+  --primary-light: #E8F3EE;
+  --accent: #D97748;
+  --accent-dark: #B85A30;
+
+  --ink: #1C1A15;
+  --paper: #FDFBF8;
+  --ledger: #B8862E;
+  --ledger-soft: #F3E8D2;
+
+  --ground: #FAF9F7;
+  --surface: #FFFFFF;
+  --n200: #E5E1D8;
+  --n400: #A69C8D;
+  --n600: #6B6355;
+  --n900: #252017;
+  --rule: #E5E1D8;
+
+  --error: #C4463A;
+
+  --sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --serif: "Newsreader", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #17160F;
+    --surface: #1E1C15;
+    --paper: #201E17;
+    --ink: #F2EEE4;
+    --n200: #322F26;
+    --n400: #837A69;
+    --n600: #B4AB99;
+    --n900: #F0EBE0;
+    --rule: #322F26;
+    --primary-light: #16261F;
+    --ledger-soft: #2A2213;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #17160F;
+  --surface: #1E1C15;
+  --paper: #201E17;
+  --ink: #F2EEE4;
+  --n200: #322F26;
+  --n400: #837A69;
+  --n600: #B4AB99;
+  --n900: #F0EBE0;
+  --rule: #322F26;
+  --primary-light: #16261F;
+  --ledger-soft: #2A2213;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--ground);
+  color: var(--n900);
+  font-family: var(--sans);
+  margin: 0;
+  padding: 0 20px 100px;
+  font-size: 16px;
+  line-height: 1.55;
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+
+.intro {
+  padding: 56px 0 36px;
+  border-bottom: 2px solid var(--n900);
+  margin-bottom: 48px;
+}
+.kicker {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ledger);
+  margin: 0 0 14px;
+}
+.intro h1 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(34px, 5vw, 50px);
+  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+  color: var(--ink);
+}
+.intro p { max-width: 62ch; color: var(--n600); font-size: 17px; margin: 0; }
+
+h2.panel-title {
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--n600);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 10px;
+  margin: 64px 0 24px;
+}
+h2.panel-title:first-of-type { margin-top: 0; }
+
+/* ---- homepage cards ---- */
+.card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.ccard {
+  background: var(--surface);
+  border: 1px solid var(--n200);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.ccard .cover {
+  height: 150px;
+  background: linear-gradient(135deg, var(--primary-light), var(--n200));
+  position: relative;
+}
+.ccard .cover span {
+  position: absolute; inset: auto 14px 12px auto;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  color: var(--primary-dark); background: rgba(255,255,255,0.75);
+  padding: 3px 7px; border-radius: 4px;
+}
+.ccard-body { padding: 16px; }
+.badge {
+  display: inline-block; font-size: 11.5px; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px;
+  background: var(--primary-light); color: var(--primary-dark);
+  margin-bottom: 10px;
+}
+.ccard h3 { font-size: 16px; font-weight: 700; margin: 0 0 4px; color: var(--ink); line-height: 1.35; }
+.ccard .by { font-size: 13px; color: var(--n600); margin: 0 0 14px; }
+
+.progress-track { position: relative; height: 7px; background: var(--n200); border-radius: 999px; margin-bottom: 6px; }
+.progress-fill { position: absolute; inset: 0; width: var(--pct); background: var(--primary); border-radius: 999px; }
+.ledger-ticks { position: relative; height: 10px; margin-bottom: 10px; }
+.ledger-ticks .line { position: absolute; top: 4px; left: 0; right: 0; height: 1px; background: var(--n200); }
+.ledger-ticks .tick {
+  position: absolute; top: 0; width: 2px; height: 9px; background: var(--ledger);
+  border-radius: 1px;
+}
+.ledger-ticks .tick::after {
+  content: ""; position: absolute; top: -3px; left: -1.5px; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--ledger);
+}
+.sum-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13.5px; }
+.sum-row .amt { font-family: var(--mono); font-weight: 600; color: var(--ink); font-size: 14px; }
+.sum-row .goal { color: var(--n600); }
+
+/* ---- hero ---- */
+.hero {
+  display: grid; grid-template-columns: 1.3fr 1fr; gap: 0;
+  border: 1px solid var(--n200); border-radius: 14px; overflow: hidden;
+  background: var(--surface);
+}
+.hero .cover {
+  aspect-ratio: 21/9; background: linear-gradient(135deg,#e8dfc9,#cdbf9c);
+  position: relative; display:flex; align-items:flex-end;
+}
+.hero .cover .tag {
+  margin: 18px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em;
+  color: #6b5a33; background: rgba(255,255,255,0.8); padding: 4px 8px; border-radius: 4px;
+}
+.hero .info { padding: 26px 28px; display: flex; flex-direction: column; gap: 14px; }
+.hero .cat { font-size: 12px; color: var(--n600); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+.hero h3 { font-family: var(--sans); font-size: 22px; font-weight: 800; color: var(--ink); margin: 0; line-height: 1.25; }
+.hero .digalang { font-size: 13.5px; color: var(--n600); }
+.hero .stat-num { font-family: var(--mono); font-size: 26px; font-weight: 600; color: var(--ink); }
+.hero .stat-label { font-size: 12.5px; color: var(--n600); }
+.cta {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--primary); color: white; font-weight: 700; font-size: 15px;
+  padding: 12px 20px; border-radius: 8px; border: none; cursor: pointer; margin-top: 4px;
+}
+
+/* ---- ledger / disbursement timeline ---- */
+.ledger-panel {
+  background: var(--paper); border: 1px solid var(--rule); border-radius: 12px;
+  padding: 28px 30px;
+}
+.ledger-head { font-family: var(--serif); font-size: 20px; font-weight: 600; color: var(--ink); margin: 0 0 4px; }
+.ledger-sub { font-size: 14px; color: var(--n600); margin: 0 0 26px; max-width: 60ch; }
+.timeline { position: relative; padding-left: 26px; }
+.timeline::before {
+  content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 1px;
+  background: repeating-linear-gradient(to bottom, var(--ledger) 0 4px, transparent 4px 8px);
+}
+.tl-item { position: relative; padding-bottom: 26px; }
+.tl-item:last-child { padding-bottom: 0; }
+.tl-item::before {
+  content: ""; position: absolute; left: -26px; top: 3px; width: 11px; height: 11px;
+  border-radius: 50%; background: var(--surface); border: 2px solid var(--ledger);
+}
+.tl-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.tl-type { font-family: var(--serif); font-size: 16px; color: var(--ink); }
+.tl-amt { font-family: var(--mono); font-weight: 600; color: var(--ink); }
+.tl-meta { font-size: 13px; color: var(--n600); margin-top: 3px; }
+.tl-proof {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+  margin-top: 6px; color: var(--primary-dark); background: var(--primary-light);
+  padding: 3px 8px; border-radius: 999px;
+}
+
+/* ---- kuitansi excerpt ---- */
+.receipt {
+  background: var(--surface); border: 1px solid var(--n200); border-radius: 10px;
+  padding: 26px 30px; max-width: 480px;
+}
+.receipt .eyebrow { font-family: var(--sans); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--n600); }
+.receipt .brand { font-family: var(--sans); font-weight: 800; font-size: 15px; margin-top: 2px; color: var(--ink); }
+.receipt hr { border: none; border-top: 1px solid var(--rule); margin: 16px 0; }
+.receipt dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--n600); margin-bottom: 2px; }
+.receipt dd { margin: 0 0 14px; font-size: 15px; color: var(--ink); }
+.receipt .amt { font-family: var(--mono); font-size: 24px; font-weight: 700; }
+.receipt .words { font-family: var(--serif); font-style: italic; font-size: 14px; color: var(--n600); }
+.receipt .close-note { font-size: 13px; color: var(--n600); margin-top: 4px; }
+.ledger-rule { position: relative; height: 14px; margin-top: 14px; }
+.ledger-rule::before { content:""; position:absolute; left:0; right:0; top:6px; height:1px; background: var(--ledger); opacity: 0.5; }
+.ledger-rule::after { content:""; position:absolute; left:0; top:2px; width:8px; height:8px; border-radius:50%; background: var(--ledger); }
+
+/* ---- admin nav ---- */
+.admin-demo { display: flex; border: 1px solid var(--n200); border-radius: 12px; overflow: hidden; height: 300px; }
+.admin-side { width: 220px; background: var(--surface); border-right: 1px solid var(--n200); padding: 20px 14px; }
+.admin-side .brand { font-family: var(--sans); font-weight: 800; color: var(--primary-dark); padding: 0 8px 18px; font-size: 15px; }
+.admin-link { display: flex; justify-content: space-between; align-items: center; padding: 9px 10px; border-radius: 7px; font-size: 14px; color: var(--n600); margin-bottom: 2px; }
+.admin-link.active { background: var(--primary-light); color: var(--primary-dark); font-weight: 700; }
+.admin-link .count { font-family: var(--mono); font-size: 12px; background: var(--ledger-soft); color: var(--ledger); padding: 1px 7px; border-radius: 999px; }
+.admin-main { flex: 1; background: var(--ground); padding: 20px 24px; font-size: 13px; color: var(--n600); }
+.admin-main .row { display:flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--rule); font-family: var(--mono); font-size: 12.5px; }
+
+.notes { margin-top: 60px; padding: 22px 24px; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; font-size: 14px; color: var(--n600); }
+.notes strong { color: var(--ink); }
+
+@media (max-width: 860px) {
+  .card-grid { grid-template-columns: 1fr; }
+  .hero { grid-template-columns: 1fr; }
+  .admin-demo { flex-direction: column; height: auto; }
+  .admin-side { width: auto; }
+}
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <p class="kicker">Redesign visual — proof of concept</p>
+    <h1>The Ledger Line</h1>
+    <p>Satu motif, tiga tempat, satu arti: klaim ini punya rekaman. Warna dan tipografi merek yang ada dipertahankan; yang baru adalah register kedua — serif + mono — dipakai hanya saat sesuatu sedang dinyatakan sebagai fakta tercatat, bukan sekadar ditampilkan.</p>
+  </div>
+
+  <h2 class="panel-title">01 · Kartu kampanye — beranda</h2>
+  <div class="card-grid">
+    <div class="ccard">
+      <div class="cover"><span>CONTOH · DATA DEMO</span></div>
+      <div class="ccard-body">
+        <span class="badge">Balita &amp; Anak Sakit</span>
+        <h3>Uluran Tangan untuk Aldi, Balita Penderita Kelainan Jantung Bawaan</h3>
+        <p class="by">Rina Wijaya</p>
+        <div class="progress-track"><div class="progress-fill" style="--pct: 30%"></div></div>
+        <div class="ledger-ticks">
+          <div class="line"></div>
+          <div class="tick" style="left: 25%"></div>
+          <div class="tick" style="left: 50%"></div>
+          <div class="tick" style="left: 75%"></div>
+        </div>
+        <div class="sum-row"><span class="amt">Rp74.800.000</span><span class="goal">dari Rp250.000.000</span></div>
+      </div>
+    </div>
+    <div class="ccard">
+      <div class="cover"><span>CONTOH · DATA DEMO</span></div>
+      <div class="ccard-body">
+        <span class="badge">Zakat</span>
+        <h3>Dana Zakat Yayasan Amanah Ummah</h3>
+        <p class="by">Yayasan Amanah Ummah</p>
+        <p style="font-size:12px;color:var(--n600);margin:0 0 8px">Model program — tanpa target, tanpa tenggat</p>
+        <div class="sum-row"><span class="amt">Rp170.400.000</span><span class="goal">donasi tersedia</span></div>
+      </div>
+    </div>
+    <div class="ccard">
+      <div class="cover"><span>CONTOH · DATA DEMO</span></div>
+      <div class="ccard-body">
+        <span class="badge">Rumah Ibadah</span>
+        <h3>Renovasi Musala Al-Ikhlas yang Rusak Parah</h3>
+        <p class="by">Budi Santoso</p>
+        <div class="progress-track"><div class="progress-fill" style="--pct: 89%"></div></div>
+        <div class="ledger-ticks">
+          <div class="line"></div>
+          <div class="tick" style="left: 25%"></div>
+          <div class="tick" style="left: 50%"></div>
+          <div class="tick" style="left: 75%"></div>
+        </div>
+        <div class="sum-row"><span class="amt">Rp71.200.000</span><span class="goal">dari Rp80.000.000</span></div>
+      </div>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--n600);margin-top:14px">Garis putus emas di bawah progress bar menandai ambang pencairan bertahap — bukan hiasan, melainkan janji bahwa dana keluar per tahap, bukan sekaligus.</p>
+
+  <h2 class="panel-title">02 · Hero halaman kampanye — desktop</h2>
+  <div class="hero">
+    <div class="cover"><span class="tag">Gambar contoh — bukan foto penerima manfaat</span></div>
+    <div class="info">
+      <span class="cat">Bencana Alam</span>
+      <h3>Bantu Korban Banjir Bandang di Kalimantan Selatan</h3>
+      <p class="digalang">Digalang oleh Yayasan Peduli Sesama</p>
+      <div>
+        <div class="stat-num">Rp312.500.000</div>
+        <div class="stat-label">terkumpul dari Rp500.000.000 · 45 hari lagi</div>
+      </div>
+      <button class="cta">Donasi Sekarang</button>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--n600);margin-top:14px">Rasio 21:9, bukan gambar penuh tak terbatas tinggi — judul, jumlah, dan tombol donasi tidak lagi terdorong di bawah lipatan pada layar desktop.</p>
+
+  <h2 class="panel-title">03 · Jejak dana — register rekaman</h2>
+  <div class="ledger-panel">
+    <p class="ledger-head">Jejak dana</p>
+    <p class="ledger-sub">Setiap rupiah yang keluar dari kampanye ini, beserta tanggal dan dokumennya.</p>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-row"><span class="tl-type">Pencairan sebagian</span><span class="tl-amt">Rp15.000.000</span></div>
+        <div class="tl-meta">Disetujui 2 September 2026 · Dibayarkan 3 September 2026</div>
+        <span class="tl-proof">Bukti ada, belum bisa dibuka publik</span>
+      </div>
+      <div class="tl-item">
+        <div class="tl-row"><span class="tl-type">Pencairan sebagian</span><span class="tl-amt">Rp22.000.000</span></div>
+        <div class="tl-meta">Disetujui 18 Agustus 2026 · Dibayarkan 19 Agustus 2026</div>
+        <span class="tl-proof">Bukti ada, belum bisa dibuka publik</span>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="panel-title">04 · Kuitansi — penutup bergaris emas</h2>
+  <div class="receipt">
+    <span class="eyebrow">Kuitansi Donasi</span>
+    <p class="brand">fundforindonesia.org</p>
+    <hr>
+    <dt>Sejumlah</dt>
+    <dd><span class="amt">Rp250.000</span><br><span class="words">Terbilang: dua ratus lima puluh ribu rupiah</span></dd>
+    <dt>Untuk kampanye</dt>
+    <dd>Uluran Tangan untuk Aldi</dd>
+    <p class="close-note">Diterbitkan otomatis oleh sistem. Sah tanpa tanda tangan.</p>
+    <div class="ledger-rule"></div>
+  </div>
+
+  <h2 class="panel-title">05 · AdminShell — navigasi yang sekarang tidak ada</h2>
+  <div class="admin-demo">
+    <div class="admin-side">
+      <div class="brand">FundForIndonesia</div>
+      <div class="admin-link active">Dashboard <span class="count">3</span></div>
+      <div class="admin-link">Campaigns</div>
+      <div class="admin-link">Disbursements <span class="count">2</span></div>
+      <div class="admin-link">Help Articles</div>
+      <div class="admin-link">Support Tickets</div>
+    </div>
+    <div class="admin-main">
+      <div class="row"><span>uluran-tangan-untuk-aldi</span><span>pending_review</span></div>
+      <div class="row"><span>renovasi-musala-al-ikhlas</span><span>pending_review</span></div>
+      <div class="row"><span>program-amil-zakat-mitra</span><span>pending_review</span></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <strong>Aturan ketat pada motif Ledger Line dan register serif/mono:</strong> keduanya hanya boleh muncul pada klaim yang benar-benar punya rekaman di baliknya — kartu progres, jejak dana, kuitansi, catatan persetujuan admin. Begitu warna atau tipe ini dipakai pada tombol biasa atau navigasi karena "terlihat bagus," sistemnya sudah kehilangan maknanya.
+  </div>
+</div>

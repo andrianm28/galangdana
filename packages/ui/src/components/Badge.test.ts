@@ -16,6 +16,14 @@ describe("Badge", () => {
     const badge = screen.getByText("Verified");
     expect(badge.className).toContain("bg-primary-light");
   });
+
+  test("applies the ledger variant's classes, for a proof-state claim only", () => {
+    render(Badge, {
+      props: { variant: "ledger", children: textSnippet("Bukti ada, belum bisa dibuka") },
+    });
+    const badge = screen.getByText("Bukti ada, belum bisa dibuka");
+    expect(badge.className).toContain("text-ledger");
+  });
 });
 
 function textSnippet(text: string) {

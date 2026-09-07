@@ -2,6 +2,7 @@
 import { type MoneyJSON, formatMoney, moneyFromJSON } from "@fundforindonesia/money";
 import Badge from "./Badge.svelte";
 import Card from "./Card.svelte";
+import LedgerTicks from "./LedgerTicks.svelte";
 
 interface CampaignSummaryLike {
   slug: string;
@@ -78,12 +79,13 @@ const progressPercent = $derived.by(() => {
           >
             <div class="h-full rounded-full bg-primary" style="width: {progressPercent}%"></div>
           </div>
+          <LedgerTicks />
           <p class="mt-2 font-sans text-sm font-semibold text-neutral-900">{formatMoney(collected)}</p>
           <p class="font-sans text-xs text-neutral-600">Terkumpul dari {formatMoney(goal ?? collected)}</p>
         </div>
       {:else}
         <div class="mt-3">
-          <p class="font-sans text-sm font-semibold text-neutral-900">{formatMoney(available)}</p>
+          <p class="font-mono text-sm font-semibold text-neutral-900">{formatMoney(available)}</p>
           <p class="font-sans text-xs text-neutral-600">Donasi tersedia</p>
         </div>
       {/if}
