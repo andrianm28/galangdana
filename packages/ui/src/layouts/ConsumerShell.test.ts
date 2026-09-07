@@ -31,10 +31,14 @@ describe("ConsumerShell", () => {
     expect(nav).not.toBeNull();
     // Kept in step with the routes under apps/web/src/routes/(consumer). The CI
     // link check crawls these for real and fails on a non-200, so this list
-    // must not grow beyond pages that have actually been built.
+    // must not grow beyond pages that have actually been built. "Galang Dana"
+    // is included now that /create/info exists -- MobileTabBar's link to it
+    // uses a distinct accessible name ("Galang Dana (navigasi bawah)"), so
+    // this bare query still resolves to exactly one element.
     const expected = [
       ["Beranda", "/"],
       ["Cari", "/search"],
+      ["Galang Dana", "/create/info"],
       ["Bantuan", "/help"],
       ["Kontak", "/contact"],
     ];
@@ -50,6 +54,30 @@ describe("ConsumerShell", () => {
     expect(link.getAttribute("href")).toBe("https://yayasanindonesiaemas.com/");
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  // Below md the header's link list is replaced by a search affordance -- an
+  // honest <a>, not a non-functional <input>, since this shell has no
+  // client-side search.
+  test("renders a search affordance linking to /search", () => {
+    render(ConsumerShell, { props: { children: textSnippet("x") } });
+    const link = screen.getByRole("link", { name: "Cari campaign" });
+    expect(link.getAttribute("href")).toBe("/search");
+  });
+
+  // MobileTabBar is mounted inside the shell and given the current pathname
+  // so it can mark the active tab. Its links carry aria-labels distinct from
+  // the desktop nav's (see MobileTabBar.svelte), which is what keeps every
+  // getByRole("link", { name }) query above resolving to a single element
+  // even though happy-dom renders both nav sets regardless of md:hidden.
+  test("renders the bottom tab bar with the active tab marked from pathname", () => {
+    render(ConsumerShell, { props: { children: textSnippet("x"), pathname: "/explore" } });
+    const tabBar = screen.getByRole("navigation", { name: "Navigasi bawah" });
+    expect(tabBar).not.toBeNull();
+    const active = screen.getByRole("link", { name: "Jelajah (navigasi bawah)" });
+    expect(active.getAttribute("aria-current")).toBe("page");
+    const inactive = screen.getByRole("link", { name: "Beranda (navigasi bawah)" });
+    expect(inactive.getAttribute("aria-current")).toBeNull();
   });
 });
 
