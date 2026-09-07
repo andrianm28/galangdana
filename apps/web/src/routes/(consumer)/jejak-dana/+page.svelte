@@ -31,7 +31,7 @@ function formatDate(iso: string): string {
 <div class="mx-auto max-w-2xl px-4 py-12">
   <h1 class="mb-4 font-sans text-2xl font-bold text-neutral-900">Jejak Dana</h1>
 
-  <p class="font-sans text-neutral-700">
+  <p class="font-sans text-neutral-600">
     Dana yang terkumpul di fundforindonesia.org tidak langsung bisa dicairkan. Penggalang
     mengajukan rinciannya, melampirkan bukti pengeluaran, dan dua orang berbeda dari tim kami
     harus menyetujuinya sebelum uang benar-benar keluar. Setiap kampanye punya buku pencairannya
@@ -69,20 +69,20 @@ function formatDate(iso: string): string {
               </p>
 
               {#if item.narrative}
-                <p class="mt-2 font-sans text-sm text-neutral-700">{item.narrative}</p>
+                <p class="mt-2 font-sans text-sm text-neutral-600">{item.narrative}</p>
               {/if}
 
               <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <dl class="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-neutral-500">
+                <dl class="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-neutral-600">
                   {#if item.approvedAt}
                     <div class="flex gap-1">
                       <dt>Disetujui</dt>
-                      <dd class="text-neutral-700">{formatDate(item.approvedAt)}</dd>
+                      <dd class="text-neutral-600">{formatDate(item.approvedAt)}</dd>
                     </div>
                   {/if}
                   <div class="flex gap-1">
                     <dt>Cair</dt>
-                    <dd class="text-neutral-700">{formatDate(item.paidAt)}</dd>
+                    <dd class="text-neutral-600">{formatDate(item.paidAt)}</dd>
                   </div>
                 </dl>
                 <Badge variant={item.proofState === "ada_tertutup" ? "ledger" : "neutral"}>
