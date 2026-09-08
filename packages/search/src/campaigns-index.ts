@@ -1,6 +1,12 @@
 import { getMeilisearchClient } from "./client";
 
-export const CAMPAIGNS_INDEX_NAME = "campaigns";
+// Overridable because Meilisearch has no database concept -- indexes are global
+// to the instance, so the only way to keep a test run out of the index the live
+// site searches is to point it at a different index name. campaigns-index.test.ts
+// calls syncCampaignsIndex and pruneCampaignsIndex for real against whatever this
+// names. `.env.test` sets it to "campaigns_test", and test-setup.ts refuses to
+// start a run where it is unset or not a _test index.
+export const CAMPAIGNS_INDEX_NAME = process.env.CAMPAIGNS_INDEX_NAME ?? "campaigns";
 
 export interface CampaignSearchDocument {
   id: string;
