@@ -165,4 +165,27 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # SUPERSEDED by fetch-pexels-covers.py, which now produces the committed
+    # covers. Running this would silently overwrite all eight photographs with
+    # placeholder cards under NEW content hashes, leaving campaigns.seed.ts
+    # pointing at filenames that no longer exist -- every cover on the homepage
+    # would 404, and the fix would need another migration to carry the hashes
+    # across (see 0026). Guarded rather than deleted: the reasoning in the
+    # docstring above is why the covers are not arbitrary stock photography, and
+    # it is still the rule that governs what may be put here.
+    import sys
+
+    if "--i-mean-it" not in sys.argv:
+        sys.exit(
+            "generate-cover-placeholders.py is superseded by "
+            "fetch-pexels-covers.py, which produces the covers currently "
+            "committed and seeded.\n\n"
+            "Running this would replace all eight photographs with placeholder "
+            "cards under new content hashes and break every coverMediaUrl in "
+            "campaigns.seed.ts.\n\n"
+            "If you genuinely want placeholders back, re-run with --i-mean-it, "
+            "then update campaigns.seed.ts with the printed literals, re-run "
+            "upload-cover-images.ts, and add a migration carrying the new "
+            "cover_media_url values to already-seeded databases."
+        )
     main()
