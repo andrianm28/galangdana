@@ -15,7 +15,9 @@
     "typecheck": "bun run --filter='*' typecheck",
     "db:generate": "bun run --cwd packages/db drizzle-kit generate",
     "db:migrate": "bun run --cwd packages/db db:migrate",
-    "db:seed": "bun run --cwd packages/db db:seed"
+    "db:seed": "bun run --cwd packages/db db:seed",
+    "test:db:create": "bun run packages/db/src/test-db.ts create",
+    "test:db:prepare": "bun run packages/db/src/test-db.ts prepare"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

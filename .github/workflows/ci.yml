@@ -14,7 +14,11 @@ jobs:
         env:
           POSTGRES_USER: fundforindonesia
           POSTGRES_PASSWORD: fundforindonesia
-          POSTGRES_DB: fundforindonesia
+          # _test so that test-setup.ts's redirect is a no-op here. CI is
+          # deliberately NOT exempted from that guard: an exemption is exactly
+          # the hole that lets a local run inherit the wrong target, and the
+          # rule is easier to trust when it holds identically everywhere.
+          POSTGRES_DB: fundforindonesia_test
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U fundforindonesia"
@@ -76,8 +80,18 @@ jobs:
       # container above, bound to the default 5432 with no collision — the
       # 55434 port only exists to dodge an unrelated container on the shared
       # dev machine this plan is executed on (see Task 2's port note).
-      DATABASE_URL: postgres://fundforindonesia:fundforindonesia@localhost:5432/fundforindonesia
-      REDIS_URL: redis://localhost:6379
+      # Database name ends in _test, and the Redis db index is not 0, so
+      # test-setup.ts (preloaded into every `bun test` via bunfig.toml) leaves
+      # both untouched. Every step in this job -- migrate, seed, reindex, the
+      # API server the link check crawls -- therefore agrees with what the
+      # tests read, instead of the tests being silently redirected somewhere
+      # the earlier steps never populated.
+      DATABASE_URL: postgres://fundforindonesia:fundforindonesia@localhost:5432/fundforindonesia_test
+      REDIS_URL: redis://localhost:6379/15
+      # Meilisearch indexes are global to the instance, so isolation is by name
+      # rather than by database. The reindex step below populates this index and
+      # the search tests read it.
+      CAMPAIGNS_INDEX_NAME: campaigns_test
       # packages/search's tests hit a real Meilisearch instance (no mocking,
       # matching this codebase's established "tests use real infrastructure"
       # pattern) -- these two match packages/search/src/client.ts's hardcoded
