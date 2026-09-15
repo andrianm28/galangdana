@@ -3,3 +3,7 @@ peer = true
 
 [test]
 root = "."
+# Aborts the run unless every backing service names a test-scoped target.
+# `bun test` writes real rows, and this repo's dev and production share one
+# database -- see test-setup.ts for what that cost before the guard existed.
+preload = ["./test-setup.ts"]
