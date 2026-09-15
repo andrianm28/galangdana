@@ -10,8 +10,15 @@
    apps/web's styling depends on packages/ui's source tree. */
 @source "../../../packages/ui/src";
 
+/* #f7f7f7, not bg-neutral-50 (#f9fafb). Measured off kitabisa.com, whose page
+   canvas is rgb(247,247,247): a hair darker than the card surfaces, which is
+   what makes white cards read as lifted rather than as flush with the page. A
+   plain grey value, not part of anyone's brand -- and every text token in
+   theme.css is verified >= 4.5:1 against exactly this value, not just against
+   white. Changing it means re-checking those. */
 body {
-  @apply bg-neutral-50 text-neutral-900 font-sans;
+  background-color: #f7f7f7;
+  @apply text-neutral-900 font-sans;
 }
 
 /* Reset transitions and scroll-behaviour only -- do NOT add animation-duration

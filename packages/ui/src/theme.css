@@ -1,71 +1,101 @@
 @theme {
-  /* Brand: warm & trustworthy. A muted green/teal primary (giving,
-     growth, calm) paired with a warm terracotta accent for calls to
-     action (donate buttons, primary CTAs) that need to stand out against
-     the calmer brand color. Neutral scale is warm-tinted (toward beige),
-     not cold blue-gray, to stay consistent with the rest of the palette. */
-  --color-primary: #2f7a5f;
-  --color-primary-light: #e8f3ee;
-  --color-primary-dark: #1f5a44;
+  /* Brand: a Kitabisa-family blue, in TWO TIERS. Read this before using either.
 
+     The product owner asked for FFI to read as familiar to a donor arriving
+     from Kitabisa. Kitabisa's own primary measures rgb(16,168,229) / #10A8E5 --
+     and that colour fails WCAG AA outright: 2.71:1 on white, and 2.71:1 for
+     white text on a fill of it. Their own primary button label sits below the
+     threshold. Copying the hex would have taken this palette from accessible
+     (the previous green measured 5.16:1) to inaccessible, for body text AND for
+     every button label.
+
+     So the blue is split by JOB, not by shade preference:
+
+       --color-primary        text, links, icons, borders, progress fills, and
+                              any fill carrying a white label. 5.70:1 on white,
+                              5.32:1 on the canvas. White on it: 5.70:1.
+       --color-primary-bright large display type, illustration accents, and
+                              decorative fields. 3.19:1 -- clears the 3:1 bar
+                              for large text and UI shapes, and NOTHING ELSE.
+                              Never body text. Never a white label on top of it.
+
+     Deliberately NOT #10A8E5. Adjacent, same family, our own value -- borrowing
+     the shape of a competitor's visual language is fine; taking their exact
+     get-up is not, and FFI competes in the same market. */
+  --color-primary: #0a6e96;
+  --color-primary-bright: #0e9ad4;
+  --color-primary-light: #e3f2fa;
+  --color-primary-dark: #054f6d;
+
+  /* Warm counterweight, kept from the previous palette. Two usages, both
+     donate-CTA. Retained rather than retired: an all-blue page has nothing to
+     push against, and this is the one hue that makes a donate button read as
+     the action rather than as more chrome. */
   --color-accent: #d97748;
   --color-accent-light: #fbeae0;
   --color-accent-dark: #b85a30;
 
-  /* Record register: for a claim backed by an actual record only --
-     campaign progress ticks, the disbursement ledger, the kuitansi. See
-     docs/design/2026-09-06-visual-redesign-plan.md's Signature section.
-     Never used as a general UI color -- not a button, not a hover state,
-     not a nav highlight. */
+  /* Record register: for a claim backed by an actual record only -- campaign
+     progress ticks, the disbursement ledger, the kuitansi. Never a general UI
+     colour -- not a button, not a hover state, not a nav highlight.
+
+     Kept deliberately while the rest of the identity moved to blue. This is
+     what marks the thing FFI has and Kitabisa does not (jejak dana), so it is
+     the one element on the page that should NOT look like a competitor.
+     Darkened from #b8862e to clear 4.5:1 on the new, lighter canvas. */
   --color-ink: #1c1a15;
   --color-paper: #fdfbf8;
-  --color-ledger: #b8862e;
+  --color-ledger: #8a6516;
 
   /* Cleared before redefining: Tailwind v4's @theme MERGES with its own
-     built-in `neutral` scale rather than replacing it, so any step this
-     file doesn't define (300/500/700/950) would otherwise silently fall
-     back to Tailwind's cold, zero-chroma default gray -- clashing with
-     the warm-tinted steps actually defined below, with no build warning.
-     Verified: after this reset, an undefined step (e.g. neutral-500)
-     compiles to nothing rather than a wrong color.
+     built-in `neutral` scale rather than replacing it, so any step this file
+     doesn't define would otherwise silently fall back to Tailwind's own
+     default gray, with no build warning.
 
-     The scale is now COMPLETE (50..900). It deliberately was not: 300/500/700
-     were left undefined, so every `neutral-300`, `neutral-500` and
-     `neutral-700` in the codebase compiled to no rule at all and the element
-     inherited its colour from an ancestor. 70 occurrences were live that way,
-     36 of them across 18 consumer-facing files -- text silently rendering in
-     the wrong colour on public pages. Confirmed in the deployed stylesheet:
-     `.text-neutral-400` and `.text-neutral-600` were emitted, `.text-neutral-500`
-     and `.text-neutral-700` were absent entirely.
+     The scale is COMPLETE (50..900), and must stay that way. It previously was
+     not: 300/500/700 were undefined, so every use of them compiled to no rule
+     at all and the element inherited its colour from an ancestor -- 70
+     occurrences live, 36 across 18 consumer-facing files. That fails silently:
+     no build warning, no visual error, just text in the wrong colour, which is
+     why it survived so long.
 
-     Leave no step undefined. An undefined step fails silently -- no build
-     warning, no visual error, just inherited colour -- which is exactly why it
-     survived this long. */
+     Retuned from warm beige to a cool grey to sit with the blue primary; a
+     beige-tinted neutral under a blue brand reads as two palettes sharing a
+     page. Canvas is #f7f7f7 via neutral-50's neighbour below -- see body in
+     apps/web/src/app.css.
+
+     Every step at 500 and above is verified >= 4.5:1 on BOTH white and the
+     canvas, because all of them are used for text. 400 and below are surfaces
+     and borders only. */
   --color-neutral-*: initial;
-  --color-neutral-50: #faf9f7;
-  --color-neutral-100: #f3f1ed;
-  --color-neutral-200: #e5e1d8;
-  --color-neutral-300: #c6beb2;
-  --color-neutral-400: #a69c8d;
-  /* Not the 400..600 midpoint (#888071). That measures 3.91:1 on white and
-     fails WCAG AA for body text, and most of this step's 40 usages are
-     secondary text. Pulled toward 600 until it clears 4.5:1 on white AND on
-     the neutral-50 canvas (4.74 / 4.50). Slightly compresses the top of the
-     ramp; legible text is worth more than even spacing. */
-  --color-neutral-500: #7b7264;
-  --color-neutral-600: #6b6355;
-  --color-neutral-700: #544d40;
-  --color-neutral-800: #3d372c;
-  --color-neutral-900: #252017;
+  --color-neutral-50: #f9fafb;
+  --color-neutral-100: #f2f4f6;
+  --color-neutral-200: #e4e7eb;
+  --color-neutral-300: #cbd2d9;
+  --color-neutral-400: #9aa5b1;
+  /* Not #6b7684, the even step: that measures 4.62:1 on white but only 4.31:1
+     on the canvas, and secondary text sits on the canvas far more often than on
+     pure white. Darkened until it clears on both (4.82 / 4.50). */
+  --color-neutral-500: #687380;
+  --color-neutral-600: #56616d;
+  --color-neutral-700: #3e4c59;
+  --color-neutral-800: #2c3640;
+  --color-neutral-900: #1f2933;
 
-  /* success reuses the brand primary -- giving and "this worked" share
-     the same color family in a donation product. warning/error/info are
-     the only colors outside the warm family, kept deliberately close to
-     conventional meanings so they read correctly at a glance. */
-  --color-success: #2f7a5f;
-  --color-warning: #d9a441;
-  --color-error: #c4463a;
-  --color-info: #3e7ca6;
+  /* success is now a REAL green, not the brand colour. It used to alias the
+     green primary, on the reasoning that giving and "this worked" share a
+     family. With a blue primary that reasoning inverts: reusing it would make
+     every success message read as a brand flourish, and a blue tick is not what
+     anyone means by "done". warning/error keep conventional meanings.
+
+     info deliberately equals primary. Rather than invent a sixth hue that
+     differs from the brand blue by a few degrees -- which reads as a mistake,
+     not a distinction -- Alert distinguishes info by its icon and tint, not by
+     hue. All six usages are Alert styling. */
+  --color-success: #1f7a4d;
+  --color-warning: #8a5a00;
+  --color-error: #b3261e;
+  --color-info: #0a6e96;
 
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
@@ -77,9 +107,9 @@
   --font-serif: "Newsreader", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
-  /* Rounded, not sharp -- the "warm & trustworthy" personality's most
-     visible signal after color. sm for buttons/inputs/badges, md for
-     cards, lg for larger surfaces like modals.
+  /* Rounded, not sharp -- the personality's most visible signal after colour.
+     sm for buttons/inputs/badges, md for cards, lg for larger surfaces like
+     modals.
      Cleared before redefining for the same reason as neutral above:
      Tailwind's own default radius scale (xl: 0.75rem, 2xl: 1rem, 3xl:
      1.5rem) would otherwise survive alongside this file's sm/md/lg,
