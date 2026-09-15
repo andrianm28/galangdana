@@ -34,12 +34,19 @@ describe("ActionTile", () => {
     expect(svg?.closest('[aria-hidden="true"]')).not.toBeNull();
   });
 
-  test("gives the icon holder a circular bg-primary-light treatment", () => {
+  // The holder is white-on-ring, NOT bg-primary-light as it originally was.
+  // The tile icons are two-tone -- a primary-light fill inside a primary
+  // outline -- so on a primary-light holder the icon's own fill vanished into
+  // the background and only the outline read. This asserts the new intent
+  // rather than just dropping the old assertion: the holder must stay a circle,
+  // and must NOT reintroduce the tint that swallowed the icons.
+  test("gives the icon holder a circular white treatment, not the primary tint", () => {
     const { container } = render(ActionTile, {
       props: { href: "/create/info", label: "Galang Dana", icon: svgIconSnippet() },
     });
     const holder = container.querySelector('[aria-hidden="true"]');
-    expect(holder?.className).toContain("bg-primary-light");
     expect(holder?.className).toContain("rounded-full");
+    expect(holder?.className).toContain("bg-white");
+    expect(holder?.className).not.toContain("bg-primary-light");
   });
 });
