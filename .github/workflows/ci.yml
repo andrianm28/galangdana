@@ -170,12 +170,21 @@ jobs:
       # actively-maintained image with its actual `server /data` command --
       # the container is reachable at localhost:9000 exactly like a
       # services: container would be, since this job has no `container:` key.
+      #
+      # Pulled from quay.io, not Docker Hub, and pinned to a digest-backed
+      # release rather than :latest. `minio/minio:latest` on Docker Hub started
+      # refusing anonymous pulls -- "pull access denied ... repository does not
+      # exist or may require 'docker login'" -- which broke this job on master
+      # without any change to it. quay.io is MinIO's other official registry and
+      # still serves it anonymously. Pinning as well as moving, so the next
+      # upstream change to whatever ":latest" means cannot break CI a second
+      # time for reasons unrelated to the commit that happens to trigger it.
       - name: Start MinIO
         run: |
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=fundforindonesia \
             -e MINIO_ROOT_PASSWORD=fundforindonesia-dev-secret \
-            minio/minio:latest server /data
+            quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z.hotfix.c630804a1 server /data
 
       - name: Wait for MinIO
         run: |
@@ -224,7 +233,7 @@ jobs:
         # evidentiary uploads (medical records, ID cards) and must stay
         # non-public.
         run: |
-          docker run --rm --network host --entrypoint sh minio/mc -c "
+          docker run --rm --network host --entrypoint sh quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z -c "
             mc alias set local http://localhost:9000 fundforindonesia fundforindonesia-dev-secret &&
             mc mb --ignore-existing local/campaign-media &&
             mc anonymous set download local/campaign-media &&
