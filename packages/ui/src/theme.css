@@ -97,7 +97,19 @@
   --color-error: #b3261e;
   --color-info: #0a6e96;
 
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Rubik, which is what kitabisa.com actually uses (measured: its computed
+     body font-family is "Rubik, Rubik Fallback, ui-sans-serif, ..."). After
+     colour, the typeface is the single highest-signal change -- it is what
+     makes a page *read* as familiar before any layout registers.
+
+     No licensing question: Rubik is SIL Open Font License, free for commercial
+     use. Unlike Kitabisa's illustrations and logo, the typeface is not theirs
+     to withhold -- it is a public typeface they also chose.
+
+     Replaces Plus Jakarta Sans. Rubik's metrics differ (taller x-height,
+     wider), so line-clamp cut-off points and any fixed-height assumption may
+     need retuning -- see the density pass. */
+  --font-sans: "Rubik", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   /* Record register. Retargets Tailwind's default `font-serif`/`font-mono`
      utilities -- every existing `font-mono` usage in the app (the donation
