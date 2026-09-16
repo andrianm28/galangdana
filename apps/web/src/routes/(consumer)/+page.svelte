@@ -33,70 +33,133 @@ const { data }: PageProps = $props();
     <ActionTile href="/csr" label="Kolaborasi CSR" icon={kolaborasiCsrIcon} />
   </div>
 
+  <!--
+    Motif amplop. The product owner asked for imagery that is deliberately NOT
+    Kitabisa's ("Gambar2 nya jgn sama mgkn bs dibuat model Icon nya amplop"),
+    and amplop is the Indonesian gesture of giving -- it carries no reference to
+    Kitabisa's illustrated-character language while still being warmer than a
+    plain line icon.
+
+    Flat, two-tone, rounded. Amplop binds three of the four into one family.
+    Each icon has exactly ONE warm-accent element -- the heart, the arrow, the
+    check, the small amplop -- so there is a single focal point at 56px rather
+    than four colours competing.
+
+    Colours come from theme tokens via utility classes, not hardcoded hex, so
+    the set follows the palette instead of drifting from it. currentColor is not
+    usable here: these are two-tone, and inherit only carries one colour.
+  -->
   {#snippet donasiIcon()}
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class="size-6"
-    >
+    <!-- amplop with a heart rising out of it -->
+    <svg viewBox="0 0 48 48" fill="none" class="size-8">
+      <rect x="6" y="18" width="36" height="24" rx="5" class="fill-primary-light" />
       <path
-        d="M12 20.25c-.3 0-.59-.09-.84-.26C7.86 17.57 3.75 14.28 3.75 9.98c0-2.9 2.24-5.23 5-5.23 1.61 0 3.04.79 3.95 2.02.91-1.23 2.34-2.02 3.95-2.02 2.76 0 5 2.33 5 5.23 0 4.3-4.11 7.59-7.41 10.01-.25.17-.54.26-.84.26Z"
+        d="M6 23.5 22.1 33.4a3.6 3.6 0 0 0 3.8 0L42 23.5"
+        class="stroke-primary"
+        stroke-width="2.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <rect
+        x="6"
+        y="18"
+        width="36"
+        height="24"
+        rx="5"
+        class="stroke-primary"
+        stroke-width="2.6"
+      />
+      <path
+        d="M24 5.8c2.4-2.6 6.4-2.6 8.5.2 2 2.7 1.4 6.2-1.2 8.5L24 21l-7.3-6.5c-2.6-2.3-3.2-5.8-1.2-8.5 2.1-2.8 6.1-2.8 8.5-.2Z"
+        class="fill-accent"
       />
     </svg>
   {/snippet}
 
   {#snippet galangDanaIcon()}
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class="size-6"
-    >
-      <path
-        d="M3.75 9.75v4.5a1.5 1.5 0 0 0 1.5 1.5h1.5l7.5 4.5V5.25l-7.5 4.5h-1.5a1.5 1.5 0 0 0-1.5 1.5Z"
+    <!-- amplop with an upward arrow: raising, not giving -->
+    <svg viewBox="0 0 48 48" fill="none" class="size-8">
+      <rect
+        x="6"
+        y="20"
+        width="36"
+        height="22"
+        rx="5"
+        class="fill-primary-light stroke-primary"
+        stroke-width="2.6"
       />
-      <path d="M19.5 9a3.75 3.75 0 0 1 0 6" />
+      <path
+        d="M6 24.5 22.1 34a3.6 3.6 0 0 0 3.8 0L42 24.5"
+        class="stroke-primary"
+        stroke-width="2.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path d="M24 17V5" class="stroke-accent" stroke-width="3.2" stroke-linecap="round" />
+      <path
+        d="m18.4 10.4 5.6-5.6 5.6 5.6"
+        class="stroke-accent"
+        stroke-width="3.2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
     </svg>
   {/snippet}
 
   {#snippet jejakDanaIcon()}
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class="size-6"
-    >
+    <!-- kuitansi with a check: a claim that has a record behind it -->
+    <svg viewBox="0 0 48 48" fill="none" class="size-8">
       <path
-        d="M6.75 3.75h6.19a1.5 1.5 0 0 1 1.06.44l3.31 3.31a1.5 1.5 0 0 1 .44 1.06V18.75a1.5 1.5 0 0 1-1.5 1.5H6.75a1.5 1.5 0 0 1-1.5-1.5V5.25a1.5 1.5 0 0 1 1.5-1.5Z"
+        d="M10 7h20l8 8v22a4 4 0 0 1-4 4H14a4 4 0 0 1-4-4V11a4 4 0 0 1 4-4Z"
+        class="fill-primary-light stroke-primary"
+        stroke-width="2.6"
+        stroke-linejoin="round"
       />
-      <path d="M13.5 3.75V7.5a1.5 1.5 0 0 0 1.5 1.5h3.75" />
-      <path d="M9 13.5l2 2 4-4.5" />
+      <path
+        d="M29 7v7a3 3 0 0 0 3 3h6"
+        class="stroke-primary"
+        stroke-width="2.6"
+        stroke-linejoin="round"
+      />
+      <path
+        d="m17 29 4.5 4.5L31 24"
+        class="stroke-accent"
+        stroke-width="3.2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <circle cx="17" cy="20" r="1.6" class="fill-primary" />
+      <circle cx="23" cy="20" r="1.6" class="fill-primary" />
+      <circle cx="29" cy="20" r="1.6" class="fill-primary" />
     </svg>
   {/snippet}
 
   {#snippet kolaborasiCsrIcon()}
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class="size-6"
-    >
-      <path d="M4.5 21V6.75L12 3l7.5 3.75V21" />
-      <path d="M9 21v-6h6v6" />
-      <path d="M9 9.75h.008M12 9.75h.008M15 9.75h.008" />
+    <!--
+      Briefcase with a small amplop, not the building this started as: at 56px a
+      narrow building read as a door or a book. A briefcase says "corporate"
+      instantly and survives being shrunk, and the amplop keeps it in the family.
+    -->
+    <svg viewBox="0 0 48 48" fill="none" class="size-8">
+      <path d="M18 12V9a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v3" class="stroke-primary" stroke-width="2.6" stroke-linecap="round" />
+      <rect
+        x="5"
+        y="12"
+        width="38"
+        height="26"
+        rx="4"
+        class="fill-primary-light stroke-primary"
+        stroke-width="2.6"
+      />
+      <path d="M5 22h38" class="stroke-primary" stroke-width="2.4" />
+      <rect x="26" y="26" width="17" height="13" rx="3" class="fill-white stroke-accent" stroke-width="2.6" />
+      <path
+        d="m26 28.7 7.4 4.7a2 2 0 0 0 2.2 0L43 28.7"
+        class="stroke-accent"
+        stroke-width="2.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
     </svg>
   {/snippet}
 
