@@ -1626,4 +1626,44 @@ describe("POST /campaigns/:id/cover/presign + /confirm", () => {
     );
     expect(live.status).toBe(200);
   });
+
+  describe("model filter", () => {
+    test("returns only program-model campaigns when model=program", async () => {
+      const resp = await app.handle(new Request("http://localhost/campaigns?model=program"));
+      expect(resp.status).toBe(200);
+      const body = (await resp.json()) as {
+        campaigns: Array<{ model: string }>;
+        totalCount: number;
+      };
+      expect(body.campaigns.length).toBeGreaterThan(0);
+      for (const c of body.campaigns) expect(c.model).toBe("program");
+      // totalCount must describe the FILTERED set, not every active campaign --
+      // the whole reason this is a SQL filter rather than a client-side trim.
+      expect(body.totalCount).toBe(body.campaigns.length);
+    });
+
+    test("returns only goal-model campaigns when model=goal", async () => {
+      const resp = await app.handle(new Request("http://localhost/campaigns?model=goal"));
+      expect(resp.status).toBe(200);
+      const body = (await resp.json()) as { campaigns: Array<{ model: string }> };
+      expect(body.campaigns.length).toBeGreaterThan(0);
+      for (const c of body.campaigns) expect(c.model).toBe("goal");
+    });
+
+    test("the two models partition the unfiltered set", async () => {
+      const read = async (qs: string) => {
+        const r = await app.handle(new Request(`http://localhost/campaigns${qs}&limit=50`));
+        return ((await r.json()) as { totalCount: number }).totalCount;
+      };
+      const all = await read("?");
+      const goal = await read("?model=goal");
+      const program = await read("?model=program");
+      expect(goal + program).toBe(all);
+    });
+
+    test("rejects an unknown model value", async () => {
+      const resp = await app.handle(new Request("http://localhost/campaigns?model=zakat"));
+      expect(resp.status).toBe(422);
+    });
+  });
 });

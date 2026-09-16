@@ -6,10 +6,18 @@ import type { PageLoad } from "./$types";
 // Promise.all rejects on the first rejection, so the self-contained-promise
 // shape (rather than one shared try/catch around all three calls) is what
 // makes the degradation independent.
-async function loadCampaignFeed(sort: "urgent" | "newest") {
+async function loadCampaignFeed(sort: "urgent" | "newest", model?: "goal" | "program") {
+  const label = model ? `sort=${sort}&model=${model}` : `sort=${sort}`;
   try {
+    // `model` is spread in conditionally rather than passed as
+    // `model: model ?? undefined`. Verified against this repo's Eden
+    // Treaty/Elysia versions in explore/[category]/+page.ts: an explicit
+    // `undefined` property value is serialised as the literal string
+    // "undefined" on the wire, which then fails the query schema's
+    // enum-literal validation with a 422. Omitting the key entirely is the
+    // only form that reaches the server as genuinely absent.
     const { data, error: apiError } = await api.campaigns.get({
-      query: { sort, limit: 8 },
+      query: { sort, limit: 8, ...(model ? { model } : {}) },
     });
 
     // Same Eden Treaty error-checking pattern established in
@@ -21,16 +29,13 @@ async function loadCampaignFeed(sort: "urgent" | "newest") {
     // genuine backend failure doesn't render silently identical to a
     // legitimately empty campaign feed.
     if (apiError || !data || "error" in data) {
-      console.error(
-        `GET /campaigns?sort=${sort} failed while loading the homepage:`,
-        apiError ?? data,
-      );
+      console.error(`GET /campaigns?${label} failed while loading the homepage:`, apiError ?? data);
       return [];
     }
 
     return data.campaigns;
   } catch (err) {
-    console.error(`GET /campaigns?sort=${sort} threw while loading the homepage:`, err);
+    console.error(`GET /campaigns?${label} threw while loading the homepage:`, err);
     return [];
   }
 }
@@ -57,11 +62,16 @@ async function loadCategories() {
 }
 
 export const load: PageLoad = async () => {
-  const [urgentCampaigns, latestCampaigns, categories] = await Promise.all([
+  const [urgentCampaigns, latestCampaigns, programCampaigns, categories] = await Promise.all([
     loadCampaignFeed("urgent"),
     loadCampaignFeed("newest"),
+    // Ported from kibi-clone's OngoingPrograms ("Program Donasi
+    // Berkelanjutan"). Needs the model filter added to GET /campaigns in this
+    // same change -- a program has no goal and no deadline, so it cannot be
+    // selected out of a mixed feed without the server knowing.
+    loadCampaignFeed("newest", "program"),
     loadCategories(),
   ]);
 
-  return { urgentCampaigns, latestCampaigns, categories };
+  return { urgentCampaigns, latestCampaigns, programCampaigns, categories };
 };
