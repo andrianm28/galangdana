@@ -8,6 +8,7 @@ export { default as CampaignCard } from "./components/CampaignCard.svelte";
 export { default as CampaignListCard } from "./components/CampaignListCard.svelte";
 export { default as Card } from "./components/Card.svelte";
 export { default as CardCarousel } from "./components/CardCarousel.svelte";
+export { default as HeroCarousel } from "./components/HeroCarousel.svelte";
 export { default as CategoryChip } from "./components/CategoryChip.svelte";
 export { default as ConsumerShell } from "./layouts/ConsumerShell.svelte";
 export { default as FormField } from "./components/FormField.svelte";
