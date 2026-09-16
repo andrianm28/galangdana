@@ -27,13 +27,34 @@
      back to Tailwind's cold, zero-chroma default gray -- clashing with
      the warm-tinted steps actually defined below, with no build warning.
      Verified: after this reset, an undefined step (e.g. neutral-500)
-     compiles to nothing rather than a wrong color. */
+     compiles to nothing rather than a wrong color.
+
+     The scale is now COMPLETE (50..900). It deliberately was not: 300/500/700
+     were left undefined, so every `neutral-300`, `neutral-500` and
+     `neutral-700` in the codebase compiled to no rule at all and the element
+     inherited its colour from an ancestor. 70 occurrences were live that way,
+     36 of them across 18 consumer-facing files -- text silently rendering in
+     the wrong colour on public pages. Confirmed in the deployed stylesheet:
+     `.text-neutral-400` and `.text-neutral-600` were emitted, `.text-neutral-500`
+     and `.text-neutral-700` were absent entirely.
+
+     Leave no step undefined. An undefined step fails silently -- no build
+     warning, no visual error, just inherited colour -- which is exactly why it
+     survived this long. */
   --color-neutral-*: initial;
   --color-neutral-50: #faf9f7;
   --color-neutral-100: #f3f1ed;
   --color-neutral-200: #e5e1d8;
+  --color-neutral-300: #c6beb2;
   --color-neutral-400: #a69c8d;
+  /* Not the 400..600 midpoint (#888071). That measures 3.91:1 on white and
+     fails WCAG AA for body text, and most of this step's 40 usages are
+     secondary text. Pulled toward 600 until it clears 4.5:1 on white AND on
+     the neutral-50 canvas (4.74 / 4.50). Slightly compresses the top of the
+     ramp; legible text is worth more than even spacing. */
+  --color-neutral-500: #7b7264;
   --color-neutral-600: #6b6355;
+  --color-neutral-700: #544d40;
   --color-neutral-800: #3d372c;
   --color-neutral-900: #252017;
 
