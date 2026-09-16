@@ -41,7 +41,12 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # quay.io, not Docker Hub: minio/minio:latest there started refusing
+    # anonymous pulls ("pull access denied ... may require 'docker login'").
+    # The running container here predates that and keeps working, so this only
+    # bites on a fresh machine or after a `docker compose pull` -- it broke CI
+    # first. Pinned rather than :latest so both stay on the same build.
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z.hotfix.c630804a1
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: fundforindonesia
