@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { campaigns } from "./campaigns";
 import { donations } from "./donations";
 
@@ -16,6 +16,18 @@ export const prayers = pgTable("prayers", {
   donationId: uuid("donation_id").references(() => donations.id, { onDelete: "set null" }),
   name: text("name"),
   message: text("message").notNull(),
+  // "Amiin" acknowledgements, ported from kibi-clone's PrayerWall. A plain
+  // counter rather than a join table: there is no account required to write a
+  // prayer, so there is no identity to attribute an acknowledgement to, and a
+  // per-visitor uniqueness constraint would need one. Incremented server-side
+  // with SQL rather than read-modify-write, so concurrent taps cannot lose
+  // each other.
+  //
+  // Consequence, stated rather than hidden: nothing stops the same person
+  // tapping twice from two tabs. This is a warmth signal, not a vote, and the
+  // endpoint is rate-limited -- treating it as a tally worth defending would
+  // mean requiring accounts, which is the opposite of what prayers are for.
+  amiinCount: integer("amiin_count").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

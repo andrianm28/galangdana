@@ -282,9 +282,23 @@ describe("GET /campaigns", () => {
       campaigns: Array<{ model: string; expiresAt: string | null }>;
     };
     const goalCampaigns = body.campaigns.filter((c) => c.model === "goal");
-    const deadlines = goalCampaigns.map((c) => new Date(c.expiresAt as string).getTime());
-    const sorted = [...deadlines].sort((a, b) => a - b);
-    expect(deadlines).toEqual(sorted);
+
+    // expiresAt is nullable even for goal campaigns -- other test files create
+    // active goal fixtures without a deadline, and the schema allows it. The
+    // route sorts those NULLS LAST deliberately, so mapping null to 0 and
+    // comparing against a plain ascending sort asserts the OPPOSITE of the
+    // intended order and fails the moment any dateless goal campaign exists.
+    // Check the two halves separately instead.
+    const dated = goalCampaigns.filter((c) => c.expiresAt !== null);
+    const deadlines = dated.map((c) => new Date(c.expiresAt as string).getTime());
+    expect(deadlines).toEqual([...deadlines].sort((a, b) => a - b));
+
+    // ...and every dateless goal campaign comes after every dated one.
+    const lastDated = goalCampaigns.map((c) => c.expiresAt !== null).lastIndexOf(true);
+    const firstDateless = goalCampaigns.map((c) => c.expiresAt === null).indexOf(true);
+    if (lastDated !== -1 && firstDateless !== -1) {
+      expect(lastDated).toBeLessThan(firstDateless);
+    }
 
     const lastGoalIndex = body.campaigns.map((c) => c.model).lastIndexOf("goal");
     const firstProgramIndex = body.campaigns.map((c) => c.model).indexOf("program");

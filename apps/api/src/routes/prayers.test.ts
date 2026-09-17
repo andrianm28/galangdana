@@ -31,6 +31,11 @@ async function seedActiveCampaign(slugSuffix: string, status: "active" | "draft"
       currency: "IDR",
       model: "goal",
       goalAmount: 1000000n,
+      // Dated on purpose. These are goal campaigns, and a goal campaign with
+      // no deadline is both odd on its own terms and visible to every other
+      // test file through the shared database -- it broke the urgent-sort
+      // assertion in campaigns.test.ts.
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       status,
       publishedAt: new Date(),
     })
@@ -226,5 +231,81 @@ describe("DELETE /admin/prayers/:id", () => {
       authed("http://localhost/admin/prayers/00000000-0000-0000-0000-000000000000", USER_TOKEN),
     );
     expect(denied.status).toBe(403);
+  });
+});
+
+describe("GET /prayers/public", () => {
+  test("returns prayers from across campaigns, each naming its campaign", async () => {
+    const campaign = await seedActiveCampaign("wall-feed");
+    await db
+      .insert(prayers)
+      .values({ campaignId: campaign.id, name: "Budi", message: "Semoga lekas sembuh" });
+
+    const resp = await app.handle(new Request("http://localhost/prayers/public"));
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      prayers: Array<{
+        message: string;
+        campaignSlug: string;
+        campaignTitle: string;
+        amiinCount: number;
+      }>;
+      totalCount: number;
+    };
+    const mine = body.prayers.find((p) => p.message === "Semoga lekas sembuh");
+    expect(mine).toBeDefined();
+    expect(mine?.campaignSlug).toBe(campaign.slug);
+    expect(mine?.campaignTitle).toBe(campaign.title);
+    expect(mine?.amiinCount).toBe(0);
+    expect(body.totalCount).toBeGreaterThan(0);
+  });
+
+  test("respects limit", async () => {
+    const campaign = await seedActiveCampaign("wall-limit");
+    await db.insert(prayers).values([
+      { campaignId: campaign.id, message: "satu" },
+      { campaignId: campaign.id, message: "dua" },
+      { campaignId: campaign.id, message: "tiga" },
+    ]);
+    const resp = await app.handle(new Request("http://localhost/prayers/public?limit=2"));
+    const body = (await resp.json()) as { prayers: unknown[] };
+    expect(body.prayers).toHaveLength(2);
+  });
+});
+
+describe("POST /prayers/:id/amiin", () => {
+  test("increments the count and returns the authoritative value", async () => {
+    const campaign = await seedActiveCampaign("amiin");
+    const [prayer] = await db
+      .insert(prayers)
+      .values({ campaignId: campaign.id, message: "Aamiin" })
+      .returning({ id: prayers.id });
+
+    const first = await app.handle(
+      new Request(`http://localhost/prayers/${prayer?.id}/amiin`, { method: "POST" }),
+    );
+    expect(first.status).toBe(200);
+    expect((await first.json()) as { amiinCount: number }).toMatchObject({ amiinCount: 1 });
+
+    const second = await app.handle(
+      new Request(`http://localhost/prayers/${prayer?.id}/amiin`, { method: "POST" }),
+    );
+    expect((await second.json()) as { amiinCount: number }).toMatchObject({ amiinCount: 2 });
+  });
+
+  test("404s for an unknown prayer id", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/prayers/00000000-0000-4000-8000-000000000000/amiin", {
+        method: "POST",
+      }),
+    );
+    expect(resp.status).toBe(404);
+  });
+
+  test("422s for a non-uuid id rather than treating it as a miss", async () => {
+    const resp = await app.handle(
+      new Request("http://localhost/prayers/not-a-uuid/amiin", { method: "POST" }),
+    );
+    expect(resp.status).toBe(422);
   });
 });

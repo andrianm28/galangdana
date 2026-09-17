@@ -1,0 +1,11 @@
+-- "Amiin" acknowledgements on prayers, for the homepage prayer wall ported
+-- from kibi-clone.
+--
+-- NOT NULL DEFAULT 0 rather than nullable: every prayer has a count, and zero
+-- is a real value ("nobody has said amiin yet"), not an absence. A nullable
+-- column would push a `?? 0` into every read and every aggregate.
+--
+-- Postgres 11+ adds a NOT NULL column with a constant default without
+-- rewriting the table, so this is safe on a populated prayers table -- which
+-- matters here because dev and production share one database.
+ALTER TABLE "prayers" ADD COLUMN "amiin_count" integer DEFAULT 0 NOT NULL;

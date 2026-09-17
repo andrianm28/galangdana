@@ -323,6 +323,11 @@ export const PrayerSchema = Type.Object({
   id: Type.String({ format: "uuid" }),
   displayName: Type.String(),
   message: Type.String(),
+  // Added with the prayer wall ported from kibi-clone. Present on the
+  // per-campaign shape too, not just the public feed: the campaign page's own
+  // prayer list shows the same acknowledgements, and two schemas that differ
+  // only by this field would drift.
+  amiinCount: Type.Number(),
   createdAt: Type.String({ format: "date-time" }),
 });
 export type PrayerResponse = Static<typeof PrayerSchema>;
@@ -345,3 +350,34 @@ export const SubmitPrayerResponseSchema = Type.Object({
   id: Type.String({ format: "uuid" }),
 });
 export type SubmitPrayerResponse = Static<typeof SubmitPrayerResponseSchema>;
+
+// --- public prayer wall -----------------------------------------------------
+//
+// The homepage variant of kibi-clone's PrayerWall shows prayers from across
+// every published campaign, each linking back to the campaign it was written
+// for. PrayerSchema alone cannot express that: it has no campaign identifier,
+// exactly like PublicDisbursementLogItemSchema did before /disbursements/public
+// needed one. Extending rather than reusing, for the same reason.
+export const PublicPrayerItemSchema = Type.Composite([
+  PrayerSchema,
+  Type.Object({
+    campaignSlug: Type.String(),
+    campaignTitle: Type.String(),
+  }),
+]);
+export type PublicPrayerItem = Static<typeof PublicPrayerItemSchema>;
+
+export const PublicPrayerListQuerySchema = Type.Object({
+  limit: Type.Optional(Type.Number({ minimum: 1, maximum: 50 })),
+});
+export const PublicPrayerListResponseSchema = Type.Object({
+  prayers: Type.Array(PublicPrayerItemSchema),
+  totalCount: Type.Number(),
+});
+export type PublicPrayerListResponse = Static<typeof PublicPrayerListResponseSchema>;
+
+export const AmiinResponseSchema = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  amiinCount: Type.Number(),
+});
+export type AmiinResponse = Static<typeof AmiinResponseSchema>;
