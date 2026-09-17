@@ -6,11 +6,40 @@ import {
   CampaignListCard,
   CardCarousel,
   CategoryChip,
+  HeroCarousel,
   SectionHeader,
 } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
+
+// Three fixed slides, each pointing at a real FundForIndonesia page.
+//
+// kibi-clone's hero rotates promotional banners, and Kitabisa's own hero is an
+// app-download funnel ("Asisten Kebaikan di Aplikasi Kitabisa" -> "Download
+// Sekarang"). FFI has no app, so cloning that shape literally would put a
+// prominent CTA in front of something that does not exist. These carry the same
+// structure and behaviour with destinations that are actually there.
+//
+// Jejak Dana leads deliberately: it is the one thing this platform has that the
+// competitor does not, so it is what the first slide should be about.
+const HERO_SLIDES = [
+  {
+    image: "/hero/jejak-dana.jpg",
+    headline: "Setiap pencairan ada buktinya",
+    cta: { label: "Lihat jejak dana", href: "/jejak-dana" },
+  },
+  {
+    image: "/hero/galang-dana.jpg",
+    headline: "Mulai galang dana untuk yang membutuhkan",
+    cta: { label: "Galang dana", href: "/create/info" },
+  },
+  {
+    image: "/hero/csr.jpg",
+    headline: "Salurkan program CSR perusahaan Anda",
+    cta: { label: "Kolaborasi CSR", href: "/csr" },
+  },
+];
 </script>
 
 
@@ -19,6 +48,15 @@ const { data }: PageProps = $props();
     title="FundForIndonesia"
     description="Galang dan salurkan donasi, dengan jejak dana yang bisa diperiksa."
   />
+  <!--
+    Edge-to-edge below sm, matching the carousel and chip row: a hero inset by
+    the layout's own padding reads as a card, not as a banner. Cancelled at sm,
+    where the container stops being the full viewport width.
+  -->
+  <div class="-mx-4 sm:mx-0">
+    <HeroCarousel slides={HERO_SLIDES} label="Sorotan FundForIndonesia" />
+  </div>
+
   <div>
     <h1 class="font-sans text-2xl font-bold text-neutral-900">Galang kebaikan bersama</h1>
     <p class="mt-1 font-sans text-neutral-600">
