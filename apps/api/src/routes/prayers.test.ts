@@ -31,6 +31,11 @@ async function seedActiveCampaign(slugSuffix: string, status: "active" | "draft"
       currency: "IDR",
       model: "goal",
       goalAmount: 1000000n,
+      // Dated on purpose. These are goal campaigns, and a goal campaign with
+      // no deadline is both odd on its own terms and visible to every other
+      // test file through the shared database -- it broke the urgent-sort
+      // assertion in campaigns.test.ts.
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       status,
       publishedAt: new Date(),
     })
