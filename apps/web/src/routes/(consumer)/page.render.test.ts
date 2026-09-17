@@ -12,6 +12,7 @@ function renderHomepage(data: Partial<PageData> = {}) {
         urgentCampaigns: [],
         latestCampaigns: [],
         programCampaigns: [],
+        prayers: [],
         categories: [],
         ...data,
       },
@@ -147,5 +148,34 @@ describe("(consumer) homepage ongoing programs", () => {
     // "this platform has no ongoing programmes", which is true, whereas an
     // empty box reads as something failing to load.
     expect(screen.queryByText("Program Donasi Berkelanjutan")).toBeNull();
+  });
+});
+
+describe("(consumer) homepage prayer wall", () => {
+  const PRAYER = {
+    id: "p1",
+    displayName: "Budi",
+    message: "Semoga lekas sembuh",
+    amiinCount: 2,
+    createdAt: "2026-09-01T10:00:00.000Z",
+    campaignSlug: "bantu-aldi",
+    campaignTitle: "Bantu Aldi Sembuh",
+  };
+
+  test("renders the wall and links each prayer to its campaign", () => {
+    renderHomepage({ prayers: [PRAYER] });
+    expect(screen.getByText("Doa-doa #OrangBaik")).not.toBeNull();
+    expect(screen.getByText("Semoga lekas sembuh")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "Bantu Aldi Sembuh" }).getAttribute("href")).toBe(
+      "/campaign/bantu-aldi",
+    );
+  });
+
+  test("omits the section entirely when there are no prayers", () => {
+    // An empty prayer wall on a homepage reads as a dead feature. On a campaign
+    // page the empty state is right, because the invitation to write the first
+    // one has somewhere to go.
+    renderHomepage({ prayers: [] });
+    expect(screen.queryByText("Doa-doa #OrangBaik")).toBeNull();
   });
 });

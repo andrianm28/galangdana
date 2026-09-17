@@ -16,7 +16,26 @@ export default defineConfig(({ mode }) => ({
   // bundled in and crashes every real SSR request with "ReferenceError:
   // window is not defined" (confirmed by actually invoking the built
   // server's request handler, not just checking that the build exits 0).
-  resolve: mode === "test" ? { conditions: ["browser"] } : undefined,
+  // The $env/dynamic/public alias is test-only for the same reason the browser
+  // condition is: under vitest the SvelteKit plugin does not materialise that
+  // virtual module, so importing it throws "Cannot read properties of undefined
+  // (reading 'env')" at module scope -- failing the whole test FILE, not one
+  // test. It surfaced when a COMPONENT first imported $lib/api-client (the
+  // homepage's amiin handler); a +page.ts is imported dynamically inside tests
+  // that stub fetch, but a component is imported at module scope by its render
+  // test. Never applied outside test mode, where the real module must win.
+  resolve:
+    mode === "test"
+      ? {
+          conditions: ["browser"],
+          alias: {
+            "$env/dynamic/public": new URL(
+              "./src/lib/test-stubs/env-dynamic-public.ts",
+              import.meta.url,
+            ).pathname,
+          },
+        }
+      : undefined,
   test: {
     include: ["src/**/*.test.ts"],
     environment: "node",

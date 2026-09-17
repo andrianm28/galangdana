@@ -15,6 +15,7 @@ export { default as FormField } from "./components/FormField.svelte";
 export { default as Label } from "./components/Label.svelte";
 export { default as LedgerTicks } from "./components/LedgerTicks.svelte";
 export { default as MobileTabBar } from "./components/MobileTabBar.svelte";
+export { default as PrayerWall } from "./components/PrayerWall.svelte";
 export { default as SectionHeader } from "./components/SectionHeader.svelte";
 export { default as Spinner } from "./components/Spinner.svelte";
 export { default as TextInput } from "./components/TextInput.svelte";

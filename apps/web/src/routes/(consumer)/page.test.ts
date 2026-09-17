@@ -33,6 +33,11 @@ describe("home page load", () => {
         if (url.includes("/campaigns?") && url.includes("sort=newest")) {
           return campaignsResponse("newest");
         }
+        if (url.includes("/prayers/public")) {
+          return new Response(JSON.stringify({ prayers: [], totalCount: 0 }), {
+            headers: { "content-type": "application/json" },
+          });
+        }
         if (url.includes("/categories")) {
           return categoriesResponse();
         }
@@ -85,6 +90,11 @@ describe("home page load", () => {
         }
         if (url.includes("/campaigns?") && url.includes("sort=newest")) {
           return campaignsResponse("newest");
+        }
+        if (url.includes("/prayers/public")) {
+          return new Response(JSON.stringify({ prayers: [], totalCount: 0 }), {
+            headers: { "content-type": "application/json" },
+          });
         }
         if (url.includes("/categories")) {
           return categoriesResponse();

@@ -1,5 +1,6 @@
 <script lang="ts">
 import SeoHead from "$lib/SeoHead.svelte";
+import { api } from "$lib/api-client";
 import {
   ActionTile,
   CampaignCard,
@@ -7,11 +8,28 @@ import {
   CardCarousel,
   CategoryChip,
   HeroCarousel,
+  PrayerWall,
   SectionHeader,
 } from "@fundforindonesia/ui";
 import type { PageProps } from "./$types";
 
 const { data }: PageProps = $props();
+
+// Sends the amiin and hands PrayerWall the server's authoritative count.
+// PrayerWall takes this as a prop rather than calling the API itself: it lives
+// in packages/ui, which has no SvelteKit and no Eden dependency -- the same
+// constraint that makes ConsumerShell take `pathname` as a prop.
+//
+// Throws on failure on purpose. That is the signal PrayerWall reverts its
+// optimistic bump on; swallowing the error here would leave the count showing
+// an increment the server never recorded.
+async function sendAmiin(id: string): Promise<number> {
+  const { data: result, error: apiError } = await api.prayers({ id }).amiin.post();
+  if (apiError || !result || "error" in result) {
+    throw new Error(`amiin failed for ${id}`);
+  }
+  return result.amiinCount;
+}
 
 // Three fixed slides, each pointing at a real FundForIndonesia page.
 //
@@ -276,6 +294,24 @@ const HERO_SLIDES = [
             </div>
           {/each}
         </CardCarousel>
+      </div>
+    </div>
+  {/if}
+
+  <!--
+    "Doa-doa #OrangBaik", ported from kibi-clone's PrayerWall homepage variant.
+    Last on the page, where the source puts it: it is something to linger on
+    after the campaigns, not a thing to act on.
+
+    Rendered only when there are prayers. An empty prayer wall on a homepage
+    reads as a dead feature; on a campaign page the empty state is right,
+    because there the invitation to write the first one has somewhere to go.
+  -->
+  {#if data.prayers.length > 0}
+    <div>
+      <SectionHeader title="Doa-doa #OrangBaik" />
+      <div class="mt-4">
+        <PrayerWall prayers={data.prayers} onAmiin={sendAmiin} />
       </div>
     </div>
   {/if}

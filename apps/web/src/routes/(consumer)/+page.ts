@@ -40,6 +40,25 @@ async function loadCampaignFeed(sort: "urgent" | "newest", model?: "goal" | "pro
   }
 }
 
+// Homepage prayer wall, ported from kibi-clone. Its own fallback like every
+// other feed here, so a prayers outage cannot blank the campaign sections.
+async function loadPrayers() {
+  try {
+    const { data, error: apiError } = await api.prayers.public.get({ query: { limit: 6 } });
+
+    // GET /prayers/public declares only a 200, so this takes the two-arm
+    // narrowing, not the `"error" in data` arm that GET /campaigns needs.
+    if (apiError || !data) {
+      console.error("GET /prayers/public failed while loading the homepage:", apiError);
+      return [];
+    }
+    return data.prayers;
+  } catch (err) {
+    console.error("GET /prayers/public threw while loading the homepage:", err);
+    return [];
+  }
+}
+
 async function loadCategories() {
   try {
     const { data, error: apiError } = await api.categories.get();
@@ -62,16 +81,18 @@ async function loadCategories() {
 }
 
 export const load: PageLoad = async () => {
-  const [urgentCampaigns, latestCampaigns, programCampaigns, categories] = await Promise.all([
-    loadCampaignFeed("urgent"),
-    loadCampaignFeed("newest"),
-    // Ported from kibi-clone's OngoingPrograms ("Program Donasi
-    // Berkelanjutan"). Needs the model filter added to GET /campaigns in this
-    // same change -- a program has no goal and no deadline, so it cannot be
-    // selected out of a mixed feed without the server knowing.
-    loadCampaignFeed("newest", "program"),
-    loadCategories(),
-  ]);
+  const [urgentCampaigns, latestCampaigns, programCampaigns, prayers, categories] =
+    await Promise.all([
+      loadCampaignFeed("urgent"),
+      loadCampaignFeed("newest"),
+      // Ported from kibi-clone's OngoingPrograms ("Program Donasi
+      // Berkelanjutan"). Needs the model filter added to GET /campaigns in this
+      // same change -- a program has no goal and no deadline, so it cannot be
+      // selected out of a mixed feed without the server knowing.
+      loadCampaignFeed("newest", "program"),
+      loadPrayers(),
+      loadCategories(),
+    ]);
 
-  return { urgentCampaigns, latestCampaigns, programCampaigns, categories };
+  return { urgentCampaigns, latestCampaigns, programCampaigns, prayers, categories };
 };
