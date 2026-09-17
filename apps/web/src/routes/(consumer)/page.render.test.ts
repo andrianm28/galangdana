@@ -8,7 +8,13 @@ function renderHomepage(data: Partial<PageData> = {}) {
   return render(Page, {
     props: {
       params: {},
-      data: { urgentCampaigns: [], latestCampaigns: [], categories: [], ...data },
+      data: {
+        urgentCampaigns: [],
+        latestCampaigns: [],
+        programCampaigns: [],
+        categories: [],
+        ...data,
+      },
     },
   });
 }
@@ -86,6 +92,11 @@ describe("(consumer) homepage urgent campaign carousel", () => {
     expect(screen.getByText("Test Campaign")).not.toBeNull();
   });
 
+  test("marks the urgent rail with a DARURAT badge", () => {
+    renderHomepage({ urgentCampaigns: [SAMPLE_CAMPAIGN] });
+    expect(screen.getByText("DARURAT")).not.toBeNull();
+  });
+
   test("shows an empty-state message when there are no urgent campaigns", () => {
     renderHomepage({ urgentCampaigns: [] });
     expect(screen.getByText(/Belum ada campaign mendesak/)).not.toBeNull();
@@ -112,5 +123,29 @@ describe("(consumer) homepage action grid", () => {
     for (const { label, href } of TILES) {
       expect(screen.getByRole("link", { name: label }).getAttribute("href")).toBe(href);
     }
+  });
+});
+
+describe("(consumer) homepage ongoing programs", () => {
+  test("renders the ongoing-programs rail when there are program campaigns", () => {
+    const program = {
+      ...SAMPLE_CAMPAIGN,
+      slug: "program-1",
+      title: "Program Berkelanjutan",
+      model: "program" as const,
+      goalAmount: null,
+      expiresAt: null,
+    };
+    renderHomepage({ programCampaigns: [program] });
+    expect(screen.getByText("Program Donasi Berkelanjutan")).not.toBeNull();
+    expect(screen.getAllByText("Program Berkelanjutan").length).toBeGreaterThan(0);
+  });
+
+  test("omits the ongoing-programs section entirely when there are none", () => {
+    renderHomepage({ programCampaigns: [] });
+    // Omitted rather than shown with an empty state: an absent rail reads as
+    // "this platform has no ongoing programmes", which is true, whereas an
+    // empty box reads as something failing to load.
+    expect(screen.queryByText("Program Donasi Berkelanjutan")).toBeNull();
   });
 });

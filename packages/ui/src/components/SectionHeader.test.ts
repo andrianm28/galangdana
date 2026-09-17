@@ -29,4 +29,28 @@ describe("SectionHeader", () => {
     expect(link.getAttribute("href")).toBe("/category");
     expect(screen.queryByText(/^Lihat semua/)).toBeNull();
   });
+
+  test("renders no badge when badge is not given", () => {
+    render(SectionHeader, { props: { title: "Terbaru" } });
+    expect(screen.queryByText("DARURAT")).toBeNull();
+  });
+
+  test("renders the badge beside the title when given", () => {
+    render(SectionHeader, { props: { title: "Penggalangan Dana Mendesak", badge: "DARURAT" } });
+    const badge = screen.getByText("DARURAT");
+    expect(badge).not.toBeNull();
+    // bg-error, not a decorative red: white on it measures 6.54:1, which is
+    // what makes a 10px bold label legible rather than merely visible.
+    expect(badge.className).toContain("bg-error");
+    expect(badge.className).toContain("text-white");
+  });
+
+  test("keeps the badge next to the title, not next to the link", () => {
+    const { container } = render(SectionHeader, {
+      props: { title: "Mendesak", badge: "DARURAT", href: "/explore" },
+    });
+    const heading = container.querySelector("h2");
+    const badge = screen.getByText("DARURAT");
+    expect(heading?.parentElement).toBe(badge.parentElement);
+  });
 });

@@ -69,6 +69,14 @@ export const CampaignListQuerySchema = Type.Object({
     Type.Union([Type.Literal("individual"), Type.Literal("yayasan"), Type.Literal("platform")]),
   ),
   sort: Type.Optional(Type.Union([Type.Literal("urgent"), Type.Literal("newest")])),
+  // Added for the homepage's "Program Donasi Berkelanjutan" rail, which needs
+  // program-model campaigns only. The distinction is not cosmetic: a program
+  // has no goalAmount and no expiresAt, so the two models render different
+  // cards and sort differently under `sort=urgent` (programs have no deadline
+  // and fall last). Without this filter the rail could only be built by
+  // over-fetching and discarding on the client, which gets the page counts
+  // wrong and wastes the query.
+  model: Type.Optional(Type.Union([Type.Literal("goal"), Type.Literal("program")])),
   page: Type.Optional(Type.Number({ minimum: 1 })),
   limit: Type.Optional(Type.Number({ minimum: 1, maximum: 50 })),
 });

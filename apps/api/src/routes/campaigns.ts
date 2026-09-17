@@ -147,6 +147,13 @@ export const campaignsRoute = new Elysia()
       if (query.campaignerType) {
         conditions.push(eq(campaigners.type, query.campaignerType));
       }
+      // Filtered in SQL rather than trimmed on the client so `totalCount` and
+      // `totalPages` describe the filtered set. The alternative -- fetch both
+      // models and discard one -- reports page counts for rows the caller can
+      // never see.
+      if (query.model) {
+        conditions.push(eq(campaigns.model, query.model));
+      }
 
       // "urgent": goal-model campaigns with the soonest deadline first;
       // program-model campaigns (expiresAt is always NULL for them) sort

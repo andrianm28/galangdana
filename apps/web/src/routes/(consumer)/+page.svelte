@@ -219,7 +219,7 @@ const HERO_SLIDES = [
   {/if}
 
   <div>
-    <SectionHeader title="Penggalangan Dana Mendesak" href="/explore?sort=urgent" />
+    <SectionHeader title="Penggalangan Dana Mendesak" badge="DARURAT" href="/explore?sort=urgent" />
     {#if data.urgentCampaigns.length > 0}
       <div class="-mx-4 mt-4 px-4 sm:-mx-6 sm:px-6">
         <CardCarousel label="Penggalangan Dana Mendesak">
@@ -252,4 +252,31 @@ const HERO_SLIDES = [
       <p class="mt-4 font-sans text-neutral-600">Belum ada campaign yang bisa ditampilkan saat ini.</p>
     {/if}
   </div>
+
+  <!--
+    "Program Donasi Berkelanjutan", ported from kibi-clone's OngoingPrograms.
+
+    A horizontal rail rather than the grid used for "Terbaru": these are
+    open-ended programmes, not a browsable catalogue, and a rail says "a few
+    ongoing things" where a grid says "here is everything". Same shape the
+    source uses.
+
+    Program campaigns have no goal and no deadline, so CampaignCard's program
+    branch renders "Donasi tersedia" instead of a progress bar -- which is the
+    honest presentation and the reason both branches exist.
+  -->
+  {#if data.programCampaigns.length > 0}
+    <div>
+      <SectionHeader title="Program Donasi Berkelanjutan" href="/explore" />
+      <div class="-mx-4 mt-4 px-4 sm:-mx-6 sm:px-6">
+        <CardCarousel label="Program donasi berkelanjutan">
+          {#each data.programCampaigns as campaign (campaign.slug)}
+            <div class="w-64 shrink-0">
+              <CampaignCard {campaign} />
+            </div>
+          {/each}
+        </CardCarousel>
+      </div>
+    </div>
+  {/if}
 </div>
